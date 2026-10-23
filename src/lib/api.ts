@@ -11,6 +11,7 @@ export type Strictness = 'loose' | 'balanced' | 'strict';
 export type Reason =
   | { kind: 'blur' }
   | { kind: 'softFocus' }
+  | { kind: 'subjectSoft' }
   | { kind: 'dark' }
   | { kind: 'bright' }
   | { kind: 'duplicate'; of: number }
@@ -36,6 +37,10 @@ export interface Face {
   rightEye: number;
   /** 0–1; null when the face is turned too far to tell. */
   smile?: number | null;
+  /** Face sharpness (Laplacian variance); null when the face is too small. */
+  sharpness?: number | null;
+  /** Face width in source pixels. */
+  px?: number;
 }
 
 /** Mirrors `faces::EAR_CLOSED` / `EAR_SEALED` and `Face::eyes_closed`. */
@@ -108,6 +113,8 @@ export interface SessionSummary {
   maybe: number;
   rejects: number;
   covers: string[];
+  /** Folder reachable right now (an external drive may be unplugged). */
+  available: boolean;
 }
 
 export interface FolderSummary {
@@ -187,8 +194,11 @@ export const api = {
   openSession: (id: string) => invoke<Session>('open_session', { id }),
   /** Forgets the session; the photos and any exported files stay. */
   deleteSession: (id: string) => invoke<void>('delete_session', { id }),
+  /** Points a session at the folder it was moved to (photos matched by name). */
+  relinkSession: (id: string, path: string) => invoke<Session>('relink_session', { id, path }),
   setStatus: (ids: number[], status: Status) => invoke<void>('set_status', { ids, status }),
   setRating: (ids: number[], rating: number) => invoke<void>('set_rating', { ids, rating }),
+  setMarks: (marks: { id: number; status: Status; rating: number }[]) => invoke<void>('set_marks', { marks }),
   previewImage: (root: string, id: number) => invoke<string>('preview_image', { root, id }),
   fullResSupported: () => invoke<boolean>('full_res_supported'),
   fullResImage: (root: string, id: number) =>

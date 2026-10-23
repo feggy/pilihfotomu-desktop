@@ -38,6 +38,15 @@ pub const EAR_SEALED: f32 = 0.03;
 /// Smile score from which a face counts as smiling. Calibrated on the same
 /// session: neutral faces scored ≤ 0.27, faint smiles ≥ 0.5.
 pub const SMILE: f32 = 0.45;
+/// Faces narrower than this (source px) get a sharpness reading at all.
+pub const SHARP_MIN_PX: f32 = 100.0;
+/// On its own, a face's sharpness only means "out of focus" when the face
+/// is big and the reading very low: on the Galvin session smooth, downcast
+/// but sharp faces read 14–40 at 100–130 px, the one missed-focus face 24 at
+/// 177 px, faces ≥ 150 px otherwise ≥ 39. Within a burst, frames compare
+/// against each other instead (`cull`), which is far more reliable.
+pub const SOFT_ALONE_MIN_PX: f32 = 150.0;
+pub const FACE_SOFT: f32 = 30.0;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -55,6 +64,13 @@ pub struct Face {
     /// Older saved sessions don't have it.
     #[serde(default)]
     pub smile: Option<f32>,
+    /// Laplacian variance of the face's middle at a fixed size
+    /// (`analyze::face_variance`); None when the face is too small to judge.
+    #[serde(default)]
+    pub sharpness: Option<f32>,
+    /// Width of the face in source pixels.
+    #[serde(default)]
+    pub px: f32,
 }
 
 impl Face {
@@ -62,6 +78,11 @@ impl Face {
     /// face turned away — not the blink photographers cull for.
     pub fn eyes_closed(&self) -> bool {
         self.left_eye.max(self.right_eye) < EAR_CLOSED && self.left_eye.min(self.right_eye) < EAR_SEALED
+    }
+
+    /// The subject itself is out of focus (even if something else is sharp).
+    pub fn soft(&self) -> bool {
+        self.px >= SOFT_ALONE_MIN_PX && self.sharpness.is_some_and(|v| v < FACE_SOFT)
     }
 
     pub fn smiling(&self) -> bool {
@@ -105,13 +126,27 @@ pub fn ready() -> Result<(), String> {
 pub fn analyze(img: &RgbImage) -> Result<Vec<Face>, String> {
     let m = models()?;
     let (w, h) = (img.width() as f32, img.height() as f32);
+    let gray = image::DynamicImage::ImageRgb8(img.clone()).to_luma8();
     let mut out = Vec::new();
     for d in detect(&m.detector, img).map_err(|e| e.to_string())? {
         if d.w.max(d.h) < MIN_FACE_PX {
             continue;
         }
         let Ok((left_eye, right_eye, smile)) = eyes(&m.mesh, img, &d) else { continue };
-        out.push(Face { x: d.x / w, y: d.y / h, w: d.w / w, h: d.h / h, score: d.score, left_eye, right_eye, smile });
+        let sharpness =
+            (d.w >= SHARP_MIN_PX).then(|| crate::analyze::face_variance(&gray, d.x / w, d.y / h, d.w / w, d.h / h));
+        out.push(Face {
+            x: d.x / w,
+            y: d.y / h,
+            w: d.w / w,
+            h: d.h / h,
+            score: d.score,
+            left_eye,
+            right_eye,
+            smile,
+            sharpness,
+            px: d.w,
+        });
     }
     Ok(out)
 }
@@ -286,6 +321,8 @@ pub fn debug(img: &RgbImage) -> Result<Vec<DebugFace>, String> {
             left_eye: ear(&pts, LEFT_EYE),
             right_eye: ear(&pts, RIGHT_EYE),
             smile: smile(&pts),
+            sharpness: None,
+            px: d.w,
         };
         out.push((face, crop, pts));
     }
@@ -316,7 +353,18 @@ mod tests {
 
     #[test]
     fn closed_needs_both_eyes() {
-        let f = |l, r| Face { x: 0.0, y: 0.0, w: 0.1, h: 0.1, score: 0.9, left_eye: l, right_eye: r, smile: None };
+        let f = |l, r| Face {
+            x: 0.0,
+            y: 0.0,
+            w: 0.1,
+            h: 0.1,
+            score: 0.9,
+            left_eye: l,
+            right_eye: r,
+            smile: None,
+            sharpness: None,
+            px: 100.0,
+        };
         assert!(f(0.01, 0.04).eyes_closed());
         assert!(!f(0.04, 0.045).eyes_closed(), "narrow but not sealed");
         assert!(!f(0.08, 0.1).eyes_closed(), "sipit is open");

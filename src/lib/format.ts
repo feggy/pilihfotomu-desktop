@@ -6,6 +6,7 @@ import {
   Focus,
   Moon,
   ScanEye,
+  UserRound,
   Sun,
   type LucideIcon,
 } from 'lucide-react';
@@ -54,9 +55,9 @@ export const shotDate = (takenAt: number | null) =>
       );
 
 export const STATUS: Record<Status, { label: string; one: string; color: string; key: string }> = {
-  pick: { label: 'Picks', one: 'Pick', color: 'var(--color-pick)', key: 'P' },
-  maybe: { label: 'Maybe', one: 'Maybe', color: 'var(--color-maybe)', key: 'U' },
-  reject: { label: 'Rejects', one: 'Reject', color: 'var(--color-reject)', key: 'X' },
+  pick: { label: 'Dipilih', one: 'Pilih', color: 'var(--color-pick)', key: 'P' },
+  maybe: { label: 'Dicek', one: 'Cek', color: 'var(--color-maybe)', key: 'U' },
+  reject: { label: 'Dilewati', one: 'Lewati', color: 'var(--color-reject)', key: 'X' },
 };
 
 export type ReasonKind = Reason['kind'];
@@ -64,10 +65,11 @@ export type ReasonKind = Reason['kind'];
 export const REASON: Record<ReasonKind, { label: string; icon: LucideIcon; tone: Status | 'gold' }> = {
   blur: { label: 'Blur', icon: Focus, tone: 'reject' },
   softFocus: { label: 'Kurang tajam', icon: ScanEye, tone: 'maybe' },
+  subjectSoft: { label: 'Subjek kurang tajam', icon: UserRound, tone: 'maybe' },
   dark: { label: 'Terlalu gelap', icon: Moon, tone: 'maybe' },
   bright: { label: 'Terlalu terang', icon: Sun, tone: 'maybe' },
   duplicate: { label: 'Duplikat', icon: Copy, tone: 'reject' },
-  eyesClosed: { label: 'Mungkin terpejam', icon: EyeOff, tone: 'maybe' },
+  eyesClosed: { label: 'Terdeteksi terpejam', icon: EyeOff, tone: 'maybe' },
   bestInGroup: { label: 'Terbaik di grup', icon: Crown, tone: 'gold' },
 };
 
@@ -82,7 +84,7 @@ export function smileSummary(p: PhotoEntry): { label: string; tone: Status | 'go
   if (!read.length) return null;
   const n = read.filter(smiling).length;
   if (read.length === 1) return n ? { label: 'Tersenyum', tone: 'gold' } : { label: 'Netral', tone: 'pick' };
-  return { label: n ? `${n} dari ${read.length} wajah tersenyum` : 'Semua netral', tone: n ? 'gold' : 'pick' };
+  return { label: n ? `${n} dari ${read.length} tersenyum` : 'Semua netral', tone: n ? 'gold' : 'pick' };
 }
 
 /** Photo has someone smiling (for the sidebar filter). */
@@ -93,6 +95,6 @@ export function eyeSummary(p: PhotoEntry): { label: string; tone: Status } | nul
   if (!p.faces?.length) return null;
   const closed = p.faces.filter(eyesClosed).length;
   return closed
-    ? { label: `${closed} dari ${p.faces.length} wajah mungkin terpejam`, tone: 'maybe' }
-    : { label: `${p.faces.length} wajah, mata terbuka`, tone: 'pick' };
+    ? { label: `${closed} dari ${p.faces.length} terpejam`, tone: 'maybe' }
+    : { label: p.faces.length === 1 ? 'Terbuka' : `${p.faces.length} wajah terbuka`, tone: 'pick' };
 }

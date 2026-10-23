@@ -84,7 +84,7 @@ export async function installMock() {
       switch (cmd) {
         case 'list_sessions':
           return [
-            { ...session, total: N, picks: 38, maybe: 19, rejects: 39, covers: [0, 8, 12].map((i) => session.photos[i].thumb) },
+            { ...session, total: N, picks: 38, maybe: 19, rejects: 39, covers: [0, 8, 12].map((i) => session.photos[i].thumb), available: true },
           ];
         case 'open_session':
           return session;

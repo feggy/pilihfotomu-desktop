@@ -18,7 +18,7 @@ pub const JPEG_EXTS: &[&str] = &["jpg", "jpeg"];
 
 /// Folders the app writes into itself (copy-to-folder output). Scanning them
 /// again would count every pick twice.
-pub const SKIP_DIRS: &[&str] = &["picks", "pilihan klien"];
+pub const SKIP_DIRS: &[&str] = &["picks", "dipilih", "dipilih jpg", "picks jpg", "pilihan klien", "pilihan klien jpg"];
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]

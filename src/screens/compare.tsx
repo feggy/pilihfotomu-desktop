@@ -10,7 +10,8 @@ import { useApp } from '../store';
 
 const STATUS_OF: Partial<Record<Action, Status>> = { pick: 'pick', maybe: 'maybe', reject: 'reject' };
 
-export function Compare({ group }: { group: number }) {
+/** A burst group (with group-to-group stepping), or any photos chosen by hand. */
+export function Compare({ group, ids }: { group?: number; ids?: number[] }) {
   const session = useApp((s) => s.session)!;
   const selectedId = useApp((s) => s.selectedId);
   const select = useApp((s) => s.select);
@@ -23,11 +24,15 @@ export function Compare({ group }: { group: number }) {
     () => [...new Set(session.photos.map((p) => p.group).filter((g): g is number => g != null))].sort((a, b) => a - b),
     [session.photos],
   );
-  const members = session.photos.filter((p) => p.group === group).sort((a, b) => (a.takenAt ?? 0) - (b.takenAt ?? 0));
-  const at = groups.indexOf(group);
+  const manual = !!ids?.length;
+  const members = manual
+    ? ids!.map((id) => session.photos.find((p) => p.id === id)!).filter(Boolean)
+    : session.photos.filter((p) => p.group === group).sort((a, b) => (a.takenAt ?? 0) - (b.takenAt ?? 0));
+  const at = group == null ? -1 : groups.indexOf(group);
   const active = members.find((p) => p.id === selectedId) ?? members[0];
 
   const jump = (d: number) => {
+    if (manual) return;
     const g = groups[at + d];
     if (g == null) return;
     const first = session.photos.find((p) => p.group === g);
@@ -46,7 +51,7 @@ export function Compare({ group }: { group: number }) {
       if (mark && active) return void setStatus([active.id], mark);
       if (k === 'arrowright') return select(members[Math.min(members.length - 1, members.indexOf(active) + 1)].id);
       if (k === 'arrowleft') return select(members[Math.max(0, members.indexOf(active) - 1)].id);
-      if (k === 'enter') return jump(1);
+      if (k === 'enter' && !manual) return jump(1);
       if (k === 'escape') go({ name: 'review' });
     };
     window.addEventListener('keydown', onKey);
@@ -67,11 +72,15 @@ export function Compare({ group }: { group: number }) {
         <div className="flex items-center gap-3.5">
           <IconButton icon={ArrowLeft} label="Kembali ke review" onClick={() => go({ name: 'review' })} />
           <div className="flex flex-col gap-0.5">
-            <span className="text-[15px] font-semibold">Grup burst · {members.length} foto</span>
-            <span className="text-xs text-faint">{t0 && t1 ? `${t0} – ${t1}` : 'Foto berurutan yang mirip'}</span>
+            <span className="text-[15px] font-semibold">
+              {manual ? `Bandingkan ${members.length} foto` : `Grup burst · ${members.length} foto`}
+            </span>
+            <span className="text-xs text-faint">
+              {manual ? 'Foto yang kamu pilih' : t0 && t1 ? `${t0} – ${t1}` : 'Foto berurutan yang mirip'}
+            </span>
           </div>
         </div>
-        <div className="flex items-center gap-2.5">
+        <div className={cx('flex items-center gap-2.5', manual && 'hidden')}>
           <IconButton icon={ChevronLeft} label="Grup sebelumnya" disabled={at <= 0} onClick={() => jump(-1)} />
           <span className="text-[13px] text-muted tabular-nums">
             Grup {num(at + 1)} dari {num(groups.length)}
@@ -147,8 +156,8 @@ export function Compare({ group }: { group: number }) {
       <footer className="flex h-[30px] shrink-0 items-center gap-3.5 border-t border-line-soft bg-panel px-4 text-[11px] text-faint">
         {[
           [`1-${members.length}`, 'Pilih foto'],
-          [kPick, 'Pick'],
-          [kReject, 'Reject'],
+          [kPick, 'Pilih'],
+          [kReject, 'Lewati'],
           ['Enter', 'Grup berikutnya'],
           ['Esc', 'Kembali'],
         ].map(([k, l]) => (

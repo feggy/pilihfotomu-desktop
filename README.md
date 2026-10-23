@@ -1,7 +1,7 @@
 # pilihfotomu Desktop
 
 Aplikasi desktop (macOS + Windows) yang memilah foto sesi secara otomatis —
-**Picks / Maybe / Rejects**, lengkap dengan alasannya — dan berjalan
+**Pilih / Cek / Lewati**, lengkap dengan alasannya — dan berjalan
 sepenuhnya offline. Foto klien tidak pernah di-upload, file asli tidak pernah
 diubah.
 
@@ -31,7 +31,7 @@ data contoh (`src/dev/mock.ts`); pilihan lain: `home`, `setup`, `picks`,
 
 ```bash
 npm run check           # TypeScript
-npm run test:rust       # 27 test inti Rust
+npm run test:rust       # 29 test inti Rust
 npm run tauri build     # installer untuk OS yang sedang dipakai
 ```
 
@@ -42,7 +42,8 @@ GitHub Actions `tauri-action`).
 
 ```
 Beranda ─ pilih/seret folder ─▶ Atur analisis ─ Mulai ─▶ Memproses ─▶ Review
-                                                                     │  P / U / X, ← →, Space
+                                                                     │  P / U / X (bisa diubah), ← →, Space
+                                                                     │  ⌘/Shift-klik pilih banyak · ⌘A · ⌘Z / ⇧⌘Z
                                     Loupe (Space) ◀──────────────────┤  ← →, 1–5 bintang, I info
                                     Bandingkan burst ◀─ C ───────────┤
                                     Tempel pilihan klien ◀───────────┤
@@ -81,7 +82,13 @@ Beranda ─ pilih/seret folder ─▶ Atur analisis ─ Mulai ─▶ Memproses �
    Hanya menambah: di grup burst frame yang tersenyum diutamakan (asal
    ketajamannya ≤ 12 poin di bawah yang tertajam), Pick yang semua wajah
    utamanya tersenyum dapat ★5. Tidak pernah membuat foto Maybe/Reject.
-7. **Simpan** (`session.rs`) — hasil + koreksi manual di
+7. **Subjek kurang tajam** (`analyze::face_variance`) — ketajaman bagian
+   tengah wajah utama. Nilai mutlaknya tidak bisa membedakan wajah blur dari
+   kulit halus/menunduk (diuji di sesi Galvin), jadi dipakai **relatif**: di
+   grup burst foto terbaik dipilih dari wajah tertajam, dan frame yang
+   wajahnya < 35 % wajah tertajam ditandai. Foto tunggal hanya bila wajah
+   ≥ 150 px dan sangat lembut.
+8. **Simpan** (`session.rs`) — hasil + koreksi manual di
    `<app data>/sessions/<id>.json`, thumbnail 640 px di
    `<app cache>/thumbs/<id>/`.
 
@@ -91,9 +98,9 @@ Beranda ─ pilih/seret folder ─▶ Atur analisis ─ Mulai ─▶ Memproses �
 
 | Status | Label | Rating | Keyword |
 |--------|-------|--------|---------|
-| Picks | Green | ★★★★ (★★★★★ terbaik di grup) | `pilihfotomu › pick` |
-| Maybe | Yellow | ★★★ | `pilihfotomu › maybe › …alasan` |
-| Rejects | Red | ★ | `pilihfotomu › reject › blur` |
+| Pilih | Green | ★★★★ (★★★★★ terbaik di grup / semua tersenyum) | `pilihfotomu › pilih` |
+| Cek | Yellow | ★★★ | `pilihfotomu › cek › …alasan` |
+| Lewati | Red | ★ | `pilihfotomu › lewati › blur` |
 
 - **File `.xmp` yang sudah ada tidak ditimpa** (bisa berisi edit Lightroom),
   kecuali dicentang "Timpa".

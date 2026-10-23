@@ -10,9 +10,9 @@ import { persist } from 'zustand/middleware';
 export type Action = 'pick' | 'maybe' | 'reject' | 'zoom' | 'compare' | 'info' | 'faces';
 
 export const ACTIONS: { id: Action; label: string }[] = [
-  { id: 'pick', label: 'Tandai Pick' },
-  { id: 'maybe', label: 'Tandai Maybe' },
-  { id: 'reject', label: 'Tandai Reject' },
+  { id: 'pick', label: 'Tandai Pilih' },
+  { id: 'maybe', label: 'Tandai Cek' },
+  { id: 'reject', label: 'Tandai Lewati' },
   { id: 'compare', label: 'Bandingkan grup burst' },
   { id: 'zoom', label: 'Zoom / pas layar (tampilan besar)' },
   { id: 'info', label: 'Info foto (tampilan besar)' },

@@ -71,6 +71,45 @@ fn sharpness(g: &GrayImage) -> f32 {
     (t.clamp(0.0, 1.0) * 100.0).round()
 }
 
+/// Side the middle of a face is resampled to before measuring, so a face
+/// filling the frame and one across the room are judged on the same scale.
+const FACE_SIDE: u32 = 96;
+
+/// Laplacian variance of the middle of a face (eyes, nose, mouth — not the
+/// hair or background at the box edges), at a fixed size. Box in fractions.
+///
+/// On its own this can't tell a soft face from a smooth or downcast one
+/// (tested on a real session); it is reliable *between frames of the same
+/// person*, which is how `cull` uses it.
+pub fn face_variance(g: &GrayImage, x: f32, y: f32, w: f32, h: f32) -> f32 {
+    let (iw, ih) = (g.width() as f32, g.height() as f32);
+    let x0 = ((x + w * 0.2) * iw).clamp(0.0, iw - 1.0) as u32;
+    let x1 = ((x + w * 0.8) * iw).clamp(0.0, iw) as u32;
+    let y0 = ((y + h * 0.15) * ih).clamp(0.0, ih - 1.0) as u32;
+    let y1 = ((y + h * 0.85) * ih).clamp(0.0, ih) as u32;
+    if x1 <= x0 + 8 || y1 <= y0 + 8 {
+        return 0.0;
+    }
+    let crop = image::imageops::crop_imm(g, x0, y0, x1 - x0, y1 - y0).to_image();
+    let s = image::imageops::resize(&crop, FACE_SIDE, FACE_SIDE, FilterType::Triangle);
+    let (mut sum, mut sq, mut n) = (0f64, 0f64, 0f64);
+    for yy in 1..FACE_SIDE - 1 {
+        for xx in 1..FACE_SIDE - 1 {
+            let c = s.get_pixel(xx, yy)[0] as f64;
+            let lap = s.get_pixel(xx - 1, yy)[0] as f64
+                + s.get_pixel(xx + 1, yy)[0] as f64
+                + s.get_pixel(xx, yy - 1)[0] as f64
+                + s.get_pixel(xx, yy + 1)[0] as f64
+                - 4.0 * c;
+            sum += lap;
+            sq += lap * lap;
+            n += 1.0;
+        }
+    }
+    let mean = sum / n;
+    (sq / n - mean * mean) as f32
+}
+
 fn exposure(g: &GrayImage) -> (f32, f32, f32) {
     let n = g.pixels().len().max(1) as f32;
     let (mut lo, mut hi, mut sum) = (0u32, 0u32, 0u64);

@@ -55,9 +55,9 @@ fn label(status: Status) -> &'static str {
 
 fn status_word(status: Status) -> &'static str {
     match status {
-        Status::Pick => "pick",
-        Status::Maybe => "maybe",
-        Status::Reject => "reject",
+        Status::Pick => "pilih",
+        Status::Maybe => "cek",
+        Status::Reject => "lewati",
     }
 }
 
@@ -65,6 +65,7 @@ fn reason_word(r: &Reason) -> Option<&'static str> {
     Some(match r {
         Reason::Blur => "blur",
         Reason::SoftFocus => "kurang tajam",
+        Reason::SubjectSoft => "subjek kurang tajam",
         Reason::Dark => "gelap",
         Reason::Bright => "terang",
         Reason::Duplicate { .. } => "duplikat",
@@ -310,7 +311,7 @@ mod tests {
         let xml = fs::read_to_string(tmp.path().join("IMG_0001.xmp")).unwrap();
         assert!(xml.contains(r#"xmp:Rating="1""#));
         assert!(xml.contains(r#"xmp:Label="Red""#));
-        assert!(xml.contains("<rdf:li>pilihfotomu|reject|duplikat</rdf:li>"));
+        assert!(xml.contains("<rdf:li>pilihfotomu|lewati|duplikat</rdf:li>"));
 
         fs::write(tmp.path().join("IMG_0001.xmp"), "edits from lightroom").unwrap();
         let r = write_xmp(&[mark], Existing::Skip, true);
@@ -322,7 +323,7 @@ mod tests {
     fn copies_pairs_once() {
         let tmp = tempfile::tempdir().unwrap();
         let p = photo(tmp.path(), "IMG_0002", true);
-        let dest = tmp.path().join("Picks");
+        let dest = tmp.path().join("Dipilih");
         let first = copy_photos(&[&p], &dest);
         assert_eq!(first.copied, 2);
         let again = copy_photos(&[&p], &dest);

@@ -27,7 +27,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
   const [withReasons, setWithReasons] = useState(true);
   const [overwrite, setOverwrite] = useState(false);
   const [which, setWhich] = useState<Which>('pick');
-  const [copy, setCopy] = useState(() => defaultCopySettings('Picks'));
+  const [copy, setCopy] = useState(() => defaultCopySettings('Dipilih'));
   const [busy, setBusy] = useState<{ done: number; total: number } | null>(null);
   const [xmpDone, setXmpDone] = useState<ExportReport | null>(null);
   const [copyDone, setCopyDone] = useState<CopyResult | null>(null);
@@ -80,7 +80,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
           <div className="flex flex-col gap-1">
             <h2 className="text-xl font-semibold">Ekspor hasil pilihan</h2>
             <p className="text-xs text-faint">
-              {session.name} · {num(counts.pick)} Picks · {num(counts.maybe)} Maybe · {num(counts.reject)} Rejects
+              {session.name} · {num(counts.pick)} dipilih · {num(counts.maybe)} dicek · {num(counts.reject)} dilewati
             </p>
           </div>
           <button type="button" onClick={onClose} aria-label="Tutup" className="text-faint hover:text-fg">
@@ -154,18 +154,18 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
                     value={which}
                     onChange={setWhich}
                     options={[
-                      { value: 'pick', label: `Picks (${num(counts.pick)})` },
-                      { value: 'pickMaybe', label: `Picks + Maybe (${num(counts.pick + counts.maybe)})` },
+                      { value: 'pick', label: `Dipilih (${num(counts.pick)})` },
+                      { value: 'pickMaybe', label: `Dipilih + Dicek (${num(counts.pick + counts.maybe)})` },
                     ]}
                   />
                 </div>
-                <CopySettingsForm value={copy} onChange={setCopy} base="Picks" mix={sourceMix(toCopy)} />
+                <CopySettingsForm value={copy} onChange={setCopy} base="Dipilih" mix={sourceMix(toCopy)} />
               </div>
             </Option>
             <Option
               icon={CloudUpload}
               title="Kirim ke pilihfotomu"
-              sub="Upload Picks ke galeri booking supaya klien memilih dari foto yang sudah bersih. Butuh internet."
+              sub="Upload foto yang dipilih ke galeri booking supaya klien memilih dari foto yang sudah bersih. Butuh internet."
               active={false}
               disabled
             />

@@ -1,13 +1,13 @@
-mod analyze;
+pub mod analyze;
 mod client_picks;
-mod cull;
+pub mod cull;
 mod export;
 pub mod faces;
 pub mod full_res;
 mod menu;
 pub mod preview;
-mod scan;
-mod session;
+pub mod scan;
+pub mod session;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -137,6 +137,14 @@ fn list_sessions(app: AppHandle) -> CmdResult<Vec<Summary>> {
 #[tauri::command]
 fn open_session(app: AppHandle, state: State<'_, AppState>, id: String) -> CmdResult<Session> {
     let s = session::load(&sessions_dir(&app)?, &id).ok_or("Sesi tidak ditemukan.")?;
+    // Without the folder nothing can be exported, copied or zoomed — say so
+    // instead of opening a session that half works.
+    if !s.root.is_dir() {
+        return Err(format!(
+            "Folder “{}” tidak ditemukan. Kalau ada di drive eksternal, sambungkan dulu drivenya lalu coba lagi.",
+            s.root.display()
+        ));
+    }
     *state.current.lock().unwrap() = Some(s.clone());
     Ok(s)
 }
@@ -155,6 +163,17 @@ fn delete_session(app: AppHandle, state: State<'_, AppState>, id: String) -> Cmd
     .map_err(|e| e.to_string())
 }
 
+/// A session whose folder moved: point it at `path` and open it there.
+#[tauri::command]
+fn relink_session(app: AppHandle, state: State<'_, AppState>, id: String, path: PathBuf) -> CmdResult<Session> {
+    let dir = sessions_dir(&app)?;
+    let s = session::load(&dir, &id).ok_or("Sesi tidak ditemukan.")?;
+    let s = session::relink(&dir, &thumbs_dir(&app)?, s, &path).map_err(|e| e.to_string())?;
+    state.scanned.lock().unwrap().remove(&path);
+    *state.current.lock().unwrap() = Some(s.clone());
+    Ok(s)
+}
+
 /// Runs `f` on the open session and saves it.
 fn with_current<T>(app: &AppHandle, state: &AppState, f: impl FnOnce(&mut Session) -> T) -> CmdResult<T> {
     let mut guard = state.current.lock().unwrap();
@@ -167,6 +186,11 @@ fn with_current<T>(app: &AppHandle, state: &AppState, f: impl FnOnce(&mut Sessio
 #[tauri::command]
 fn set_status(app: AppHandle, state: State<'_, AppState>, ids: Vec<u32>, status: Status) -> CmdResult<()> {
     with_current(&app, &state, |s| s.set_status(&ids, status))
+}
+
+#[tauri::command]
+fn set_marks(app: AppHandle, state: State<'_, AppState>, marks: Vec<session::Mark>) -> CmdResult<()> {
+    with_current(&app, &state, |s| s.set_marks(&marks))
 }
 
 #[tauri::command]
@@ -349,8 +373,10 @@ pub fn run() {
             list_sessions,
             open_session,
             delete_session,
+            relink_session,
             set_status,
             set_rating,
+            set_marks,
             preview_image,
             full_res_supported,
             full_res_image,

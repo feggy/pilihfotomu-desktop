@@ -5,7 +5,37 @@
 use tauri::menu::{AboutMetadataBuilder, Menu, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder};
 use tauri::{AppHandle, Emitter, Runtime};
 
+/// AppKit adds AutoFill, Start Dictation and Emoji & Symbols to whatever
+/// menu is called "Edit". They do nothing useful here; these app-level
+/// defaults (read when the menu is first shown) switch them off.
+#[cfg(target_os = "macos")]
+pub fn hide_system_edit_items() {
+    use core_foundation::base::TCFType;
+    use core_foundation::boolean::CFBoolean;
+    use core_foundation::string::{CFString, CFStringRef};
+
+    #[link(name = "CoreFoundation", kind = "framework")]
+    unsafe extern "C" {
+        static kCFPreferencesCurrentApplication: CFStringRef;
+        fn CFPreferencesSetAppValue(key: CFStringRef, value: *const std::ffi::c_void, app: CFStringRef);
+    }
+    for key in ["NSDisabledDictationMenuItem", "NSDisabledCharacterPaletteMenuItem", "NSDisabledAutoFillMenuItem"] {
+        let k = CFString::new(key);
+        unsafe {
+            CFPreferencesSetAppValue(
+                k.as_concrete_TypeRef(),
+                CFBoolean::true_value().as_CFTypeRef(),
+                kCFPreferencesCurrentApplication,
+            )
+        };
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn hide_system_edit_items() {}
+
 pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
+    hide_system_edit_items();
     let item = |id: &str, text: &str, accel: Option<&str>| {
         let b = MenuItemBuilder::with_id(id, text);
         match accel {
@@ -43,8 +73,10 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
 
     // Without these, ⌘C / ⌘V / ⌘A don't work in text fields on macOS.
     let edit = SubmenuBuilder::new(app, "Edit")
-        .item(&PredefinedMenuItem::undo(app, Some("Urungkan"))?)
-        .item(&PredefinedMenuItem::redo(app, Some("Ulangi"))?)
+        // Custom, not the system items: in a text field they undo typing,
+        // elsewhere they undo status and star changes (the UI decides).
+        .item(&item("undo", "Urungkan", Some("CmdOrCtrl+Z"))?)
+        .item(&item("redo", "Ulangi", Some("CmdOrCtrl+Shift+Z"))?)
         .separator()
         .item(&PredefinedMenuItem::cut(app, Some("Potong"))?)
         .item(&PredefinedMenuItem::copy(app, Some("Salin"))?)

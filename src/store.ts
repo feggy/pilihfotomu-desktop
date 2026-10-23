@@ -7,7 +7,8 @@ export type Screen =
   | { name: 'setup'; folder: FolderInfo }
   | { name: 'progress' }
   | { name: 'review' }
-  | { name: 'compare'; group: number }
+  /** A burst group, or any photos picked by hand (`ids`). */
+  | { name: 'compare'; group?: number; ids?: number[] }
   /** Client picks on any folder; uses the open session's thumbnails when it is that folder. */
   | { name: 'picks'; root: string; back: Screen }
   | { name: 'settings'; back: Screen; section?: 'license' | 'keys' | 'about' };
@@ -34,13 +35,24 @@ interface AppState {
   screen: Screen;
   session: Session | null;
   run: Run | null;
+  /** The photo in focus: shown in the side panel, moved with the arrows. */
   selectedId: number | null;
+  /** Photos selected together (⌘/Shift-click); always includes selectedId when non-empty. */
+  selection: number[];
   error: string | null;
+  /** Status/star changes, newest last, for ⌘Z / ⇧⌘Z. */
+  undoStack: Change[];
+  redoStack: Change[];
 
   go: (screen: Screen) => void;
   fail: (error: unknown) => void;
   dismissError: () => void;
   select: (id: number | null) => void;
+  /** ⌘-click toggles, Shift-click extends from the focused photo over `order`. */
+  selectWith: (id: number, mode: 'toggle' | 'range', order: number[]) => void;
+  selectAll: (ids: number[]) => void;
+  undo: () => void;
+  redo: () => void;
   analyze: (folder: FolderInfo, folders: string[], options: Options) => Promise<void>;
   cancel: () => Promise<void>;
   openSession: (id: string) => Promise<void>;
@@ -49,6 +61,13 @@ interface AppState {
   markExported: () => void;
 }
 
+type Mark = { id: number; status: Status; rating: number };
+interface Change {
+  before: Mark[];
+  after: Mark[];
+}
+const HISTORY = 200;
+
 const message = (e: unknown) => (typeof e === 'string' ? e : e instanceof Error ? e.message : String(e));
 
 export const useApp = create<AppState>((set, get) => ({
@@ -56,12 +75,47 @@ export const useApp = create<AppState>((set, get) => ({
   session: null,
   run: null,
   selectedId: null,
+  selection: [],
   error: null,
+  undoStack: [],
+  redoStack: [],
 
   go: (screen) => set({ screen }),
   fail: (error) => set({ error: message(error) }),
   dismissError: () => set({ error: null }),
-  select: (selectedId) => set({ selectedId }),
+  select: (selectedId) => set({ selectedId, selection: [] }),
+
+  selectWith: (id, mode, order) =>
+    set(({ selectedId, selection }) => {
+      const current = selection.length ? selection : selectedId != null ? [selectedId] : [];
+      if (mode === 'toggle') {
+        const next = current.includes(id) ? current.filter((x) => x !== id) : [...current, id];
+        return { selection: next.length > 1 ? next : [], selectedId: next.includes(id) ? id : (next[0] ?? id) };
+      }
+      const a = order.indexOf(selectedId ?? id);
+      const b = order.indexOf(id);
+      if (a < 0 || b < 0) return { selectedId: id, selection: [] };
+      const range = order.slice(Math.min(a, b), Math.max(a, b) + 1);
+      return { selection: range.length > 1 ? range : [], selectedId: id };
+    }),
+
+  selectAll: (ids) => set(({ selectedId }) => ({ selection: ids.length > 1 ? ids : [], selectedId: selectedId ?? ids[0] ?? null })),
+
+  undo: () => {
+    const { undoStack, redoStack } = get();
+    const c = undoStack[undoStack.length - 1];
+    if (!c) return;
+    set({ undoStack: undoStack.slice(0, -1), redoStack: [...redoStack, c] });
+    applyMarks(c.before);
+  },
+
+  redo: () => {
+    const { undoStack, redoStack } = get();
+    const c = redoStack[redoStack.length - 1];
+    if (!c) return;
+    set({ redoStack: redoStack.slice(0, -1), undoStack: [...undoStack, c] });
+    applyMarks(c.after);
+  },
 
   analyze: async (folder, folders, options) => {
     set({
@@ -95,7 +149,7 @@ export const useApp = create<AppState>((set, get) => ({
       });
     try {
       const session = await api.analyzeFolder(folder.root, folders, options, onProgress);
-      set({ session, run: null, screen: { name: 'review' }, selectedId: session.photos[0]?.id ?? null });
+      set({ session, run: null, screen: { name: 'review' }, selectedId: session.photos[0]?.id ?? null, selection: [], undoStack: [], redoStack: [] });
     } catch (e) {
       const cancelled = message(e) === 'Dibatalkan.';
       set({ run: null, screen: { name: 'setup', folder }, error: cancelled ? null : message(e) });
@@ -107,7 +161,7 @@ export const useApp = create<AppState>((set, get) => ({
   openSession: async (id) => {
     try {
       const session = await api.openSession(id);
-      set({ session, screen: { name: 'review' }, selectedId: session.photos[0]?.id ?? null });
+      set({ session, screen: { name: 'review' }, selectedId: session.photos[0]?.id ?? null, selection: [], undoStack: [], redoStack: [] });
     } catch (e) {
       get().fail(e);
     }
@@ -118,16 +172,13 @@ export const useApp = create<AppState>((set, get) => ({
     if (!session || ids.length === 0) return;
     const before = session;
     // Optimistic: keyboard culling has to feel instant.
-    set({
-      session: {
-        ...session,
-        photos: session.photos.map((p) =>
-          ids.includes(p.id)
-            ? { ...p, status, rating: status === 'pick' ? Math.max(p.rating, 4) : status === 'maybe' ? 3 : 1 }
-            : p,
-        ),
-      },
-    });
+    const photos = session.photos.map((p) =>
+      ids.includes(p.id)
+        ? { ...p, status, rating: status === 'pick' ? Math.max(p.rating, 4) : status === 'maybe' ? 3 : 1 }
+        : p,
+    );
+    record(before.photos, photos, ids);
+    set({ session: { ...session, photos } });
     try {
       await api.setStatus(ids, status);
     } catch (e) {
@@ -140,7 +191,9 @@ export const useApp = create<AppState>((set, get) => ({
     const { session } = get();
     if (!session || ids.length === 0) return;
     const before = session;
-    set({ session: { ...session, photos: session.photos.map((p) => (ids.includes(p.id) ? { ...p, rating } : p)) } });
+    const photos = session.photos.map((p) => (ids.includes(p.id) ? { ...p, rating } : p));
+    record(before.photos, photos, ids);
+    set({ session: { ...session, photos } });
     try {
       await api.setRating(ids, rating);
     } catch (e) {
@@ -151,3 +204,30 @@ export const useApp = create<AppState>((set, get) => ({
 
   markExported: () => set(({ session }) => (session ? { session: { ...session, exported: true } } : {})),
 }));
+
+/** Pushes one undoable change (only photos that actually changed). */
+function record(before: { id: number; status: Status; rating: number }[], after: typeof before, ids: number[]) {
+  const pick = (list: typeof before) =>
+    list.filter((p) => ids.includes(p.id)).map(({ id, status, rating }) => ({ id, status, rating }));
+  const b = pick(before);
+  const a = pick(after);
+  if (b.every((m, i) => m.status === a[i].status && m.rating === a[i].rating)) return;
+  useApp.setState(({ undoStack }) => ({ undoStack: [...undoStack, { before: b, after: a }].slice(-HISTORY), redoStack: [] }));
+}
+
+/** Puts marks back exactly (undo / redo), on screen first, then on disk. */
+function applyMarks(marks: Mark[]) {
+  const { session, fail } = useApp.getState();
+  if (!session) return;
+  const by = new Map(marks.map((m) => [m.id, m]));
+  useApp.setState({
+    session: {
+      ...session,
+      photos: session.photos.map((p) => (by.has(p.id) ? { ...p, status: by.get(p.id)!.status, rating: by.get(p.id)!.rating } : p)),
+    },
+    // Show what was undone.
+    selectedId: marks[0]?.id ?? useApp.getState().selectedId,
+    selection: marks.length > 1 ? marks.map((m) => m.id) : [],
+  });
+  api.setMarks(marks).catch(fail);
+}

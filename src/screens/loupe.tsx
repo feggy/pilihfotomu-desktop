@@ -23,6 +23,7 @@ import {
   X,
   type LucideIcon,
   Smile,
+  UserRound,
 } from 'lucide-react';
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 
@@ -98,14 +99,34 @@ export function Loupe({
   const area = useRef<HTMLDivElement>(null);
   const pic = useRef<HTMLImageElement>(null);
   const [view, setView] = useState<View>(FIT);
+  // The picture's fitted size (zoom 1). Zooming sets real width/height from
+  // it — a CSS scale() would enlarge the already-drawn small bitmap, so a
+  // full-resolution file would still look soft.
+  const base = useRef({ w: 0, h: 0 });
+  const measure = () => {
+    const img = pic.current;
+    if (img && view.s <= 1 && img.offsetWidth) base.current = { w: img.offsetWidth, h: img.offsetHeight };
+  };
+  useEffect(() => {
+    const img = pic.current;
+    if (!img) return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(img);
+    return () => ro.disconnect();
+  });
   const drag = useRef<{ x: number; y: number; vx: number; vy: number; moved: boolean } | null>(null);
-  useEffect(() => setView(FIT), [photo?.id]);
+  // A new photo starts fitted — reset during render, not in an effect, so
+  // nothing (like the auto full-quality load) ever sees the old zoom on it.
+  const [viewOf, setViewOf] = useState(photo?.id);
+  if (photo && viewOf !== photo.id) {
+    setViewOf(photo.id);
+    setView(FIT);
+  }
 
   /** Keeps the picture from being dragged out of sight. */
   const clamp = (v: View): View => {
     if (v.s <= 1.001) return FIT;
-    const w = pic.current?.offsetWidth ?? 0;
-    const h = pic.current?.offsetHeight ?? 0;
+    const { w, h } = base.current;
     const mx = ((v.s - 1) * w) / 2;
     const my = ((v.s - 1) * h) / 2;
     return { s: v.s, x: Math.max(-mx, Math.min(mx, v.x)), y: Math.max(-my, Math.min(my, v.y)) };
@@ -126,8 +147,8 @@ export function Loupe({
 
   /** Fills ~60 % of the view with one face. */
   const zoomToFace = (f: { x: number; y: number; w: number; h: number }) => {
-    const w = pic.current?.offsetWidth ?? 1;
-    const h = pic.current?.offsetHeight ?? 1;
+    const w = base.current.w || 1;
+    const h = base.current.h || 1;
     const r = area.current?.getBoundingClientRect();
     const s = Math.max(1.5, Math.min(MAX_ZOOM, ((r?.height ?? h) * 0.6) / (f.h * h)));
     const qx = (f.x + f.w / 2 - 0.5) * w;
@@ -139,8 +160,14 @@ export function Loupe({
   useEffect(() => {
     const el = area.current;
     if (!el) return;
+    // Mac habits: pinch (arrives as ctrl+wheel) or ⌘+scroll zooms; a plain
+    // two-finger scroll / wheel moves a zoomed-in photo around.
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
+      if (!e.ctrlKey && !e.metaKey) {
+        setView((v) => (v.s > 1 ? clamp({ s: v.s, x: v.x - e.deltaX, y: v.y - e.deltaY }) : v));
+        return;
+      }
       const factor = Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.002));
       setView((v) => {
         const next = Math.max(1, Math.min(MAX_ZOOM, v.s * factor));
@@ -263,8 +290,8 @@ export function Loupe({
   useEffect(() => {
     const img = pic.current;
     // …unless the photographer chose the preview for this photo.
-    if (!photo || !img || view.s <= 1 || full[photo.id] || usePreview.has(photo.id)) return;
-    if (img.offsetWidth * view.s > img.naturalWidth * 1.05) loadFull(photo.id);
+    if (!photo || !img || view.s <= 1 || viewOf !== photo.id || full[photo.id] || usePreview.has(photo.id)) return;
+    if (base.current.w * view.s > img.naturalWidth * 1.05) loadFull(photo.id);
   });
 
   if (!photo) return null;
@@ -380,11 +407,18 @@ export function Loupe({
             // of it — and zoom moves both together.
             <div
               className={cx(
-                'relative max-h-full max-w-full',
-                view.s > 1 ? (drag.current?.moved ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-zoom-in',
-                !drag.current?.moved && 'transition-transform duration-150 ease-out',
+                'relative shrink-0',
+                view.s > 1 ? (drag.current?.moved ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-zoom-in max-h-full max-w-full',
               )}
-              style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.s})` }}
+              style={
+                view.s > 1
+                  ? {
+                      width: base.current.w * view.s,
+                      height: base.current.h * view.s,
+                      transform: `translate(${view.x}px, ${view.y}px)`,
+                    }
+                  : undefined
+              }
               onClick={onPictureClick}
             >
               <img
@@ -393,7 +427,11 @@ export function Loupe({
                 src={thumbUrl(src)}
                 alt=""
                 draggable={false}
-                className="block max-h-[calc(100vh-232px)] max-w-full object-contain shadow-2xl"
+                onLoad={measure}
+                className={cx(
+                  'block object-contain shadow-2xl',
+                  view.s > 1 ? 'h-full w-full' : 'max-h-[calc(100vh-232px)] max-w-full',
+                )}
               />
               {showFaces &&
                 photo.faces?.map((f, i) => {
@@ -413,22 +451,20 @@ export function Loupe({
                         'absolute rounded-md hover:bg-white/10',
                         closed ? 'border-reject' : 'border-pick/80',
                       )}
-                      // Border stays 2 screen px however far we zoom in.
                       style={{
                         left: `${f.x * 100}%`,
                         top: `${f.y * 100}%`,
                         width: `${f.w * 100}%`,
                         height: `${f.h * 100}%`,
-                        borderWidth: 2 / view.s,
+                        borderWidth: 2,
                         borderStyle: 'solid',
                       }}
                     >
                       {closed && (
                         <span
-                          className="absolute bottom-full left-0 mb-1 origin-bottom-left rounded bg-reject px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap text-bg"
-                          style={{ transform: `scale(${1 / view.s})` }}
+                          className="absolute bottom-full left-0 mb-1 rounded bg-reject px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap text-bg"
                         >
-                          Mungkin terpejam
+                          Terdeteksi terpejam
                         </span>
                       )}
                     </button>
@@ -438,44 +474,36 @@ export function Loupe({
           )}
           {canFull && (
             <div className="absolute top-4 left-4 z-10 flex items-center gap-2" onPointerDown={(e) => e.stopPropagation()}>
-              {quality === 'full' && (
-                <>
-                  <span className="inline-flex h-7 items-center gap-1.5 rounded-full bg-panel/85 px-2.5 text-xs font-medium text-pick backdrop-blur">
-                    <CircleCheck size={13} /> Kualitas penuh
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => togglePreview(photo.id, true)}
-                    title="Kembali ke preview kamera (warna persis seperti di kamera)"
-                    className="inline-flex h-7 items-center rounded-full border border-line bg-panel/85 px-2.5 text-xs font-medium text-muted backdrop-blur hover:text-fg"
-                  >
-                    Pakai pratinjau
-                  </button>
-                </>
-              )}
-              {quality === 'loading' && (
-                <span className="inline-flex h-7 items-center gap-1.5 rounded-full bg-panel/85 px-2.5 text-xs font-medium text-muted backdrop-blur">
-                  <LoaderCircle size={13} className="animate-spin" /> Memuat kualitas penuh…
-                </span>
-              )}
-              {quality === 'preview' && (
-                <>
-                  <span
-                    className="inline-flex h-7 items-center rounded-full bg-panel/85 px-2.5 text-xs font-medium text-faint backdrop-blur"
-                    title="Gambar dari preview kamera — bisa buram kalau diperbesar"
-                  >
-                    Pratinjau
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => loadFull(photo.id)}
-                    title="Decode file RAW asli supaya tetap tajam saat diperbesar (±1 detik)"
-                    className="inline-flex h-7 items-center rounded-full border border-gold/60 bg-panel/85 px-2.5 text-xs font-medium text-gold-text backdrop-blur hover:bg-gold/15"
-                  >
-                    {full[photo.id] ? 'Pakai kualitas penuh' : 'Muat kualitas penuh'}
-                  </button>
-                </>
-              )}
+              {/* One switch: which picture is on screen. Full quality loads on first use. */}
+              <div className="flex h-8 items-center rounded-full border border-line bg-panel/90 p-0.5 text-xs font-medium shadow-lg backdrop-blur">
+                <button
+                  type="button"
+                  onClick={() => togglePreview(photo.id, true)}
+                  title="Preview dari kamera — cepat, bisa buram kalau diperbesar"
+                  className={cx(
+                    'h-full rounded-full px-3',
+                    quality === 'preview' ? 'bg-raised text-fg' : 'text-faint hover:text-fg',
+                  )}
+                >
+                  Pratinjau
+                </button>
+                <button
+                  type="button"
+                  onClick={() => loadFull(photo.id)}
+                  title="Decode file RAW asli supaya tetap tajam saat diperbesar (±1 detik pertama kali)"
+                  className={cx(
+                    'inline-flex h-full items-center gap-1.5 rounded-full px-3',
+                    quality === 'full' ? 'bg-gold/20 text-gold-text' : 'text-faint hover:text-fg',
+                  )}
+                >
+                  {quality === 'loading' ? (
+                    <LoaderCircle size={12} className="animate-spin" />
+                  ) : quality === 'full' ? (
+                    <CircleCheck size={12} />
+                  ) : null}
+                  {quality === 'loading' ? 'Memuat…' : 'Kualitas penuh'}
+                </button>
+              </div>
               {fullError[photo.id] && <span className="text-xs text-maybe">{fullError[photo.id]}</span>}
             </div>
           )}
@@ -622,7 +650,15 @@ function InfoPanel({
         ) : (
           m && (
             <>
-              <Row icon={Sparkles} label="Ketajaman" value={`${Math.round(m.sharpness)}%`} tone={sharpTone} />
+              <Row icon={Sparkles} label="Ketajaman foto" value={`${Math.round(m.sharpness)}%`} tone={sharpTone} />
+              {photo.faces?.some((f) => f.sharpness != null) && (
+                <Row
+                  icon={UserRound}
+                  label="Fokus di wajah"
+                  value={photo.reasons.some((r) => r.kind === 'subjectSoft') ? 'Meleset' : 'Kena'}
+                  tone={photo.reasons.some((r) => r.kind === 'subjectSoft') ? 'maybe' : 'pick'}
+                />
+              )}
               {exposure && <Row icon={SunMedium} label="Eksposur" value={exposure[0]} tone={exposure[1]} />}
               {eyes && <Row icon={Eye} label="Mata" value={eyes.label} tone={eyes.tone} />}
               {smileOf(photo) && <Row icon={Smile} label="Ekspresi" value={smileOf(photo)!.label} tone={null} />}
@@ -685,13 +721,14 @@ function Title({ children, hint }: { children: string; hint?: string }) {
 /** `tone` null = information only: no coloured dot, which would read as a verdict. */
 function Row({ icon: Icon, label, value, tone }: { icon: LucideIcon; label: string; value: string; tone: Status | 'gold' | null }) {
   return (
-    <div className="flex h-[30px] items-center justify-between">
-      <span className="flex items-center gap-2 text-xs text-muted">
+    // Label never shrinks; a long value wraps under itself, right-aligned.
+    <div className="flex min-h-[30px] items-start justify-between gap-3 py-[7px]">
+      <span className="flex shrink-0 items-center gap-2 text-xs text-muted">
         <Icon size={14} className="text-faint" /> {label}
       </span>
-      <span className="flex items-center gap-1.5 text-xs font-medium">
+      <span className="flex min-w-0 items-center justify-end gap-1.5 text-right text-xs font-medium">
         {tone && <Dot color={toneColor(tone)} size={6} />}
-        {value}
+        <span className="min-w-0">{value}</span>
       </span>
     </div>
   );

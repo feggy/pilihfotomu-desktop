@@ -84,6 +84,9 @@ pub struct Summary {
     pub rejects: u32,
     /// Up to three Pick thumbnails for the session list.
     pub covers: Vec<PathBuf>,
+    /// The session folder is reachable right now (an external drive may be
+    /// unplugged — the session itself is still fine).
+    pub available: bool,
 }
 
 impl Session {
@@ -96,6 +99,7 @@ impl Session {
             created_at: self.created_at,
             duration_ms: self.duration_ms,
             exported: self.exported,
+            available: self.root.is_dir(),
             total: self.photos.len() as u32,
             picks: count(Status::Pick),
             maybe: count(Status::Maybe),
@@ -121,12 +125,29 @@ impl Session {
         }
     }
 
+    /// Puts exact status + stars back (undo / redo).
+    pub fn set_marks(&mut self, marks: &[Mark]) {
+        for m in marks {
+            if let Some(e) = self.photos.iter_mut().find(|e| e.photo.id == m.id) {
+                e.status = m.status;
+                e.rating = m.rating.min(5);
+            }
+        }
+    }
+
     /// Stars 0–5, as the photographer sets them; status stays as it is.
     pub fn set_rating(&mut self, ids: &[u32], rating: u8) {
         for e in self.photos.iter_mut().filter(|e| ids.contains(&e.photo.id)) {
             e.rating = rating.min(5);
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, Deserialize)]
+pub struct Mark {
+    pub id: u32,
+    pub status: Status,
+    pub rating: u8,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -259,6 +280,10 @@ pub fn analyze(
     if cancel.load(Ordering::Relaxed) {
         return Err(SessionError::Cancelled);
     }
+
+    if cancel.load(Ordering::Relaxed) {
+        return Err(SessionError::Cancelled);
+    }
     progress(Progress::Grouping);
 
     let inputs: Vec<Input> = measured
@@ -367,6 +392,68 @@ pub fn load(dir: &Path, id: &str) -> Option<Session> {
     serde_json::from_slice(&fs::read(dir.join(format!("{id}.json"))).ok()?).ok()
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum RelinkError {
+    #[error(transparent)]
+    Scan(#[from] scan::ScanError),
+    #[error(
+        "Folder ini sepertinya bukan sesi yang sama: hanya {found} dari {total} foto yang namanya cocok. Pilih folder lain."
+    )]
+    Mismatch { found: usize, total: usize },
+    #[error(transparent)]
+    Save(#[from] SessionError),
+}
+
+/// Share of the session's photos that must be found by name in the new
+/// folder. Some may have been deleted since; a different shoot won't get close.
+const RELINK_MATCH: f32 = 0.8;
+
+/// Points a session at the folder it was moved to. Photos are matched by
+/// subfolder + file name; everything decided about them (status, stars,
+/// reasons, groups) carries over and ids are remapped to the new scan.
+/// Returns the new session (its id changes with its folder); the old one is
+/// removed and its thumbnails moved along.
+pub fn relink(sessions_dir: &Path, thumbs_dir: &Path, mut s: Session, new_root: &Path) -> Result<Session, RelinkError> {
+    let key = |folder: &str, stem: &str| (folder.to_string(), stem.to_lowercase());
+    let fresh: std::collections::HashMap<_, Photo> =
+        scan::scan(new_root)?.into_iter().map(|p| (key(&p.folder, &p.stem), p)).collect();
+    let found = s.photos.iter().filter(|e| fresh.contains_key(&key(&e.photo.folder, &e.photo.stem))).count();
+    if (found as f32) < s.photos.len() as f32 * RELINK_MATCH {
+        return Err(RelinkError::Mismatch { found, total: s.photos.len() });
+    }
+
+    let old_id = s.id.clone();
+    let new_id = id_for(new_root);
+    let (old_thumbs, new_thumbs) = (thumbs_dir.join(&old_id), thumbs_dir.join(&new_id));
+    if old_thumbs.is_dir() && !new_thumbs.exists() {
+        let _ = fs::rename(&old_thumbs, &new_thumbs);
+    }
+
+    let mut ids = std::collections::HashMap::new();
+    s.photos.retain_mut(|e| {
+        let Some(p) = fresh.get(&key(&e.photo.folder, &e.photo.stem)) else { return false };
+        ids.insert(e.photo.id, p.id);
+        e.photo = p.clone();
+        e.thumb = e.thumb.as_ref().and_then(|t| t.file_name()).map(|n| new_thumbs.join(n)).filter(|t| t.exists());
+        true
+    });
+    for e in &mut s.photos {
+        for r in &mut e.reasons {
+            if let Reason::Duplicate { of } = r {
+                *of = ids.get(of).copied().unwrap_or(*of);
+            }
+        }
+    }
+    s.name = new_root.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or(s.name);
+    s.root = new_root.to_path_buf();
+    s.id = new_id;
+    save(sessions_dir, &s)?;
+    if s.id != old_id {
+        let _ = fs::remove_file(sessions_dir.join(format!("{old_id}.json")));
+    }
+    Ok(s)
+}
+
 /// Forgets a session: its saved results and its cached pictures. The
 /// photos, XMP sidecars and copied folders are the photographer's files and
 /// are never touched.
@@ -457,6 +544,24 @@ mod tests {
         delete(&dir, std::slice::from_ref(&thumbs), &s.id).unwrap();
         assert!(load(&dir, &s.id).is_none() && !thumbs.join(&s.id).exists());
         assert!(shots.join("IMG_0001.JPG").exists(), "photos are never deleted");
-        delete(&dir, &[thumbs], "../../etc").unwrap(); // ignored, not an id
+        delete(&dir, std::slice::from_ref(&thumbs), "../../etc").unwrap(); // ignored, not an id
+
+        // Moved folder: relinks, keeps decisions; a different folder is refused.
+        let s = analyze(&shots, &["".into()], Options::default(), &thumbs, &cancel, |_| {}).unwrap();
+        save(&dir, &s).unwrap();
+        let moved = tmp.path().join("moved shoot");
+        fs::rename(&shots, &moved).unwrap();
+        let mut s = load(&dir, &s.id).unwrap();
+        s.photos[0].rating = 2;
+        let old_id = s.id.clone();
+        let r = relink(&dir, &thumbs, s, &moved).unwrap();
+        assert_eq!((r.name.as_str(), r.photos.len(), r.photos[0].rating), ("moved shoot", 4, 2));
+        assert!(r.photos[0].photo.source().starts_with(&moved));
+        assert!(load(&dir, &old_id).is_none() && load(&dir, &r.id).is_some());
+        assert!(r.photos.iter().filter_map(|p| p.thumb.as_ref()).all(|t| t.exists()));
+        let other = tmp.path().join("other");
+        fs::create_dir(&other).unwrap();
+        fs::write(other.join("DSC_9999.JPG"), b"x").unwrap();
+        assert!(matches!(relink(&dir, &thumbs, r, &other), Err(RelinkError::Mismatch { found: 0, total: 4 })));
     }
 }

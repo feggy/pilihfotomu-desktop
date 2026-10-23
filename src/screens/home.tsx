@@ -1,5 +1,5 @@
 import { open } from '@tauri-apps/plugin-dialog';
-import { Check, ChevronRight, Clipboard, Clock, Folder, FolderOpen, Trash2 } from 'lucide-react';
+import { Check, ChevronRight, Clipboard, Clock, Folder, FolderOpen, FolderSearch, FolderX, RotateCw, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { TitleBar } from '../components/title-bar';
@@ -31,6 +31,36 @@ export function Home({ dragging }: { dragging: boolean }) {
   const go = useApp((s) => s.go);
 
   const [confirming, setConfirming] = useState<string | null>(null);
+  // Session whose folder couldn't be found when clicked.
+  const [missing, setMissing] = useState<string | null>(null);
+
+  const reload = () => api.listSessions().then(setSessions, () => setSessions([]));
+  const open = async (s: SessionSummary) => {
+    // Check again on click: the drive may have been plugged in since the list loaded.
+    const fresh = (await api.listSessions().catch(() => null))?.find((x) => x.id === s.id);
+    if (fresh && !fresh.available) {
+      setSessions((list) => list?.map((x) => (x.id === s.id ? fresh : x)) ?? null);
+      setMissing(s.id);
+      return;
+    }
+    setMissing(null);
+    openSession(s.id);
+  };
+
+  // The folder was moved or renamed: let the photographer point to it.
+  const [relinkError, setRelinkError] = useState<string | null>(null);
+  const relink = async (s: SessionSummary) => {
+    const picked = await pickFolder();
+    if (!picked) return;
+    try {
+      const session = await api.relinkSession(s.id, picked);
+      setMissing(null);
+      setRelinkError(null);
+      useApp.setState({ session, selectedId: session.photos[0]?.id ?? null, screen: { name: 'review' } });
+    } catch (e) {
+      setRelinkError(String(e));
+    }
+  };
   const fail = useApp((s) => s.fail);
 
   useEffect(() => {
@@ -111,7 +141,33 @@ export function Home({ dragging }: { dragging: boolean }) {
               </p>
             )}
             {sessions?.map((s) =>
-              confirming === s.id ? (
+              missing === s.id ? (
+                <div
+                  key={s.id}
+                  className="flex flex-wrap items-center gap-3 rounded-xl border border-maybe/60 bg-maybe/[0.06] p-3"
+                >
+                  <FolderX size={18} className="shrink-0 text-maybe" />
+                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <span className="truncate text-sm font-semibold">Folder “{s.name}” tidak ditemukan</span>
+                    <span className="truncate text-xs text-muted">
+                      Mungkin drive eksternalnya belum tersambung, atau foldernya dipindah / diganti nama. {s.root}
+                    </span>
+                    {relinkError && <span className="text-xs text-reject">{relinkError}</span>}
+                  </span>
+                  <Button variant="plain" onClick={() => (setMissing(null), setRelinkError(null))}>
+                    Tutup
+                  </Button>
+                  <Button icon={FolderSearch} onClick={() => relink(s)}>
+                    Cari folder…
+                  </Button>
+                  <Button icon={Trash2} onClick={() => (setMissing(null), setConfirming(s.id))}>
+                    Hapus dari daftar
+                  </Button>
+                  <Button variant="primary" icon={RotateCw} onClick={() => (reload(), open(s))}>
+                    Coba lagi
+                  </Button>
+                </div>
+              ) : confirming === s.id ? (
                 <div
                   key={s.id}
                   className="flex flex-wrap items-center gap-3 rounded-xl border border-reject/60 bg-reject/[0.06] p-3"
@@ -134,15 +190,22 @@ export function Home({ dragging }: { dragging: boolean }) {
                 <div key={s.id} className="group relative flex items-center">
                   <button
                     type="button"
-                    onClick={() => openSession(s.id)}
+                    onClick={() => open(s)}
                     className="flex min-w-0 flex-1 items-center gap-4 rounded-xl border border-line-soft bg-panel p-3 pr-14 text-left hover:border-line hover:bg-panel-2"
                   >
-                    <span className="hidden gap-1 sm:flex">
-                      {[0, 1, 2].map((i) =>
+                    {/* A small stack of covers: three photos, fanned, in the space of one. */}
+                    <span className="relative hidden h-11 w-[74px] shrink-0 sm:block">
+                      {[2, 1, 0].map((i) =>
                         s.covers[i] ? (
-                          <img key={i} src={thumbUrl(s.covers[i])} alt="" className="h-12 w-16 rounded-md object-cover" />
+                          <img
+                            key={i}
+                            src={thumbUrl(s.covers[i])}
+                            alt=""
+                            className="absolute top-0 h-11 w-14 rounded-md object-cover ring-2 ring-panel"
+                            style={{ left: i * 9, opacity: i ? 0.75 - i * 0.15 : 1 }}
+                          />
                         ) : (
-                          <span key={i} className="h-12 w-16 rounded-md bg-raised" />
+                          i === 0 && <span key={i} className="absolute top-0 left-0 h-11 w-14 rounded-md bg-raised" />
                         ),
                       )}
                     </span>
@@ -163,7 +226,11 @@ export function Home({ dragging }: { dragging: boolean }) {
                         <Dot color={STATUS.reject.color} /> {num(s.rejects)}
                       </span>
                     </span>
-                    {s.exported ? (
+                    {!s.available ? (
+                      <Chip color="var(--color-maybe)" icon={FolderX}>
+                        Folder tidak ditemukan
+                      </Chip>
+                    ) : s.exported ? (
                       <Chip color={STATUS.pick.color} icon={Check}>
                         Sudah diekspor
                       </Chip>

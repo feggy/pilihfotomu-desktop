@@ -18,6 +18,8 @@ pub enum Status {
 pub enum Reason {
     Blur,
     SoftFocus,
+    /// The frame is sharp somewhere, but the main subject's face isn't.
+    SubjectSoft,
     Dark,
     Bright,
     /// Another frame of the same burst was better.
@@ -95,6 +97,12 @@ struct Eyes {
     main_smiling: u8,
 }
 
+/// Faces at least 40 % the size of the largest: the people the photo is about.
+fn main_faces(faces: &[Face]) -> impl Iterator<Item = &Face> {
+    let largest = faces.iter().map(|f| f.w * f.h).fold(0.0, f32::max);
+    faces.iter().filter(move |f| f.w * f.h >= largest * 0.4)
+}
+
 fn eyes(faces: &[Face]) -> Eyes {
     let largest = faces.iter().map(|f| f.w * f.h).fold(0.0, f32::max);
     let mut e = Eyes::default();
@@ -155,6 +163,15 @@ fn thresholds(s: Strictness) -> Thresholds {
     }
 }
 
+/// In a burst, a face under this share of the sharpest face is out of focus.
+/// Galvin JPG00932 read 8 against 105–115 for the frames beside it.
+const SUBJECT_SOFT_RATIO: f32 = 0.35;
+
+/// Sharpness of the largest face, if it was big enough to read.
+fn subject_sharpness(faces: &[Face]) -> Option<f32> {
+    faces.iter().max_by(|a, b| (a.w * a.h).total_cmp(&(b.w * b.h))).and_then(|f| f.sharpness)
+}
+
 /// Within a burst, frames this close to the sharpest still compete on smiles.
 const SHARP_SLACK: f32 = 12.0;
 
@@ -193,6 +210,16 @@ pub fn cull(inputs: &[Input], opts: &Options) -> Vec<Verdict> {
                     }
                 }
             }
+            // Focus on the background, not the person: only main faces big
+            // enough to judge (see `faces::SHARP_MIN_PX`).
+            if opts.check_blur && main_faces(p.faces).any(|f| f.soft()) && !reasons.contains(&Reason::Blur) {
+                reasons.push(Reason::SubjectSoft);
+                if t.reject_eyes {
+                    status = Status::Reject;
+                } else if status == Status::Pick {
+                    status = Status::Maybe;
+                }
+            }
             if opts.check_eyes {
                 let e = eyes(p.faces);
                 let closed = e.main_closed + e.other_closed;
@@ -218,8 +245,17 @@ pub fn cull(inputs: &[Input], opts: &Options) -> Vec<Verdict> {
             // the one where most of the main subjects smile; then sharpness.
             let open = |i: usize| !opts.check_eyes || eyes(inputs[i].faces).main_closed == 0;
             let smiles = |i: usize| if opts.check_smile { eyes(inputs[i].faces).main_smiling } else { 0 };
-            let top = group.iter().map(|&i| inputs[i].metrics.sharpness).fold(0.0, f32::max);
-            let sharp_enough = |i: usize| inputs[i].metrics.sharpness >= top - SHARP_SLACK;
+            // Sharpness that matters is the subject's: when every frame has a
+            // readable main face, compare faces (0–100 against the group's
+            // sharpest face) — the background may be crisp in all of them.
+            let face = |i: usize| subject_sharpness(inputs[i].faces);
+            let by_face = group.iter().all(|&i| face(i).is_some());
+            let best_face = group.iter().filter_map(|&i| face(i)).fold(0.0, f32::max).max(1e-3);
+            let sharp = |i: usize| {
+                if by_face { face(i).unwrap_or(0.0) / best_face * 100.0 } else { inputs[i].metrics.sharpness }
+            };
+            let top = group.iter().map(|&i| sharp(i)).fold(0.0, f32::max);
+            let sharp_enough = |i: usize| sharp(i) >= top - SHARP_SLACK;
             let best = group
                 .iter()
                 .copied()
@@ -229,11 +265,19 @@ pub fn cull(inputs: &[Input], opts: &Options) -> Vec<Verdict> {
                         .cmp(&open(b))
                         .then(sharp_enough(a).cmp(&sharp_enough(b)))
                         .then(smiles(a).cmp(&smiles(b)))
-                        .then(inputs[a].metrics.sharpness.total_cmp(&inputs[b].metrics.sharpness))
+                        .then(sharp(a).total_cmp(&sharp(b)))
                 })
                 .unwrap_or(group[0]);
             for &i in &group {
                 out[i].group = Some(gi as u32);
+                // Far softer face than the same person a moment later: focus missed.
+                if opts.check_blur
+                    && by_face
+                    && sharp(i) < SUBJECT_SOFT_RATIO * 100.0
+                    && !out[i].reasons.iter().any(|r| matches!(r, Reason::Blur | Reason::SubjectSoft))
+                {
+                    out[i].reasons.push(Reason::SubjectSoft);
+                }
                 if i == best {
                     out[i].reasons.push(Reason::BestInGroup);
                 } else if out[i].status != Status::Reject {
@@ -295,7 +339,18 @@ mod tests {
     }
 
     fn face(size: f32, ear: f32) -> Face {
-        Face { x: 0.1, y: 0.1, w: size, h: size, score: 0.9, left_eye: ear, right_eye: ear, smile: Some(0.1) }
+        Face {
+            x: 0.1,
+            y: 0.1,
+            w: size,
+            h: size,
+            score: 0.9,
+            left_eye: ear,
+            right_eye: ear,
+            smile: Some(0.1),
+            sharpness: Some(90.0),
+            px: 150.0,
+        }
     }
 
     #[test]
@@ -307,11 +362,37 @@ mod tests {
         let v = cull(&inputs, &Options::default());
         assert!(v[1].reasons.contains(&Reason::BestInGroup));
         assert_eq!(v[1].rating, 5);
-        // …but not over a frame that is clearly sharper.
-        let inputs =
-            [Input { faces: &neutral, ..photo(1, 0.0, 90.0, 0) }, Input { faces: &smiling, ..photo(2, 0.4, 60.0, 0) }];
+        // …but not over a frame whose face is clearly sharper.
+        let sharp_neutral = [Face { sharpness: Some(100.0), ..face(0.2, 0.3) }];
+        let soft_smiling = [Face { smile: Some(0.8), sharpness: Some(60.0), ..face(0.2, 0.3) }];
+        let inputs = [
+            Input { faces: &sharp_neutral, ..photo(1, 0.0, 90.0, 0) },
+            Input { faces: &soft_smiling, ..photo(2, 0.4, 90.0, 0) },
+        ];
         let v = cull(&inputs, &Options::default());
         assert!(v[0].reasons.contains(&Reason::BestInGroup));
+    }
+
+    #[test]
+    fn soft_subject_on_a_sharp_frame_goes_to_check() {
+        let soft = [Face { sharpness: Some(20.0), px: 180.0, ..face(0.2, 0.3) }];
+        let inputs = [Input { faces: &soft, ..photo(1, 0.0, 91.0, 0) }];
+        let v = cull(&inputs, &Options::default());
+        assert_eq!((v[0].status, v[0].reasons.clone()), (Status::Maybe, vec![Reason::SubjectSoft]));
+        let strict = cull(&inputs, &Options { strictness: Strictness::Strict, ..Options::default() });
+        assert_eq!(strict[0].status, Status::Reject);
+    }
+
+    #[test]
+    fn burst_keeper_is_the_sharpest_face_not_the_sharpest_frame() {
+        // Like Galvin JPG00932–34: background crisp in all, the first misses the face.
+        let missed = [Face { sharpness: Some(8.0), ..face(0.2, 0.3) }];
+        let hit = [Face { sharpness: Some(110.0), ..face(0.2, 0.3) }];
+        let inputs =
+            [Input { faces: &missed, ..photo(1, 0.0, 91.0, 0) }, Input { faces: &hit, ..photo(2, 0.5, 78.0, 0) }];
+        let v = cull(&inputs, &Options { strictness: Strictness::Loose, ..Options::default() });
+        assert!(v[1].reasons.contains(&Reason::BestInGroup));
+        assert!(v[0].reasons.contains(&Reason::SubjectSoft));
     }
 
     #[test]

@@ -13,10 +13,13 @@ export function ProgressScreen() {
   const { remainingMs: remaining, perMinute } = useEta(run?.done ?? 0, run?.total ?? 0, run?.startedAt ?? Date.now());
   if (!run) return null;
 
-  const pct = run.total ? run.done / run.total : 0;
+  // Reading photos is most of the work; grouping is the last stretch. The
+  // bar only fills once every step below is done.
+  const reading = run.done < run.total;
+  const pct = (run.total ? run.done / run.total : 0) * 0.9 + (run.grouping ? 0.05 : 0);
   const steps: [string, 'done' | 'active' | 'todo'][] = [
-    ['Baca preview & ukur ketajaman', run.done < run.total ? 'active' : 'done'],
-    ['Cek eksposur', run.done < run.total ? 'active' : 'done'],
+    ['Baca foto, ketajaman & eksposur', reading ? 'active' : 'done'],
+    ['Deteksi wajah, mata & senyum', reading ? 'active' : 'done'],
     ['Kelompokkan duplikat', run.grouping ? 'active' : 'todo'],
   ];
 
@@ -64,7 +67,7 @@ export function ProgressScreen() {
           {(['pick', 'maybe', 'reject'] as const).map((st) => (
             <div key={st} className="flex flex-col gap-1.5 rounded-xl border border-line-soft bg-panel p-4">
               <span className="flex items-center gap-2 text-[13px] text-muted">
-                <Dot color={STATUS[st].color} /> {STATUS[st].label}
+                <Dot color={STATUS[st].color} /> {st === 'pick' ? 'Lolos sejauh ini' : STATUS[st].label}
               </span>
               <span className="flex items-end gap-2">
                 <span className="text-[28px] font-semibold tabular-nums">{num(run.counts[st])}</span>
@@ -72,11 +75,14 @@ export function ProgressScreen() {
                   {run.done ? Math.round((run.counts[st] / run.done) * 100) : 0}%
                 </span>
               </span>
+              {/* Duplicates need every frame of a burst, so they only move here at the end. */}
+              {st === 'reject' && <span className="text-[11px] text-faint">+ duplikat dihitung di akhir</span>}
             </div>
           ))}
         </div>
         <p className="-mt-4 w-full max-w-[880px] text-[11px] text-faint">
-          Angka sementara. Duplikat baru dikelompokkan setelah semua foto terbaca.
+          Angka sementara. Duplikat baru bisa ditentukan setelah semua foto terbaca, jadi sebagian foto yang lolos
+          sekarang akan pindah ke Dilewati di tahap terakhir.
         </p>
 
         {run.recent.length > 0 && (

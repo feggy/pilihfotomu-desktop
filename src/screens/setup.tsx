@@ -42,9 +42,9 @@ const SHOOT_TYPES: { id: string; icon: LucideIcon; label: string; sub: string }[
 ];
 
 const STRICTNESS_HINT: Record<Strictness, string> = {
-  loose: 'Longgar: hanya yang jelas blur dibuang. Duplikat tetap di Maybe.',
-  balanced: 'Seimbang: foto yang ragu-ragu masuk Maybe, bukan langsung dibuang.',
-  strict: 'Ketat: standar ketajaman lebih tinggi, Picks lebih sedikit.',
+  loose: 'Longgar: hanya yang jelas blur dibuang. Duplikat tetap di Cek.',
+  balanced: 'Seimbang: foto yang ragu-ragu masuk Cek, bukan langsung dilewati.',
+  strict: 'Ketat: standar ketajaman lebih tinggi, foto yang dipilih lebih sedikit.',
 };
 
 export function Setup({ folder }: { folder: FolderInfo }) {
@@ -209,7 +209,7 @@ export function Setup({ folder }: { folder: FolderInfo }) {
           <div className="flex flex-col rounded-2xl border border-line-soft bg-panel p-5">
             <h2 className="mb-1 text-[15px] font-semibold">Yang dicek AI</h2>
             <Check icon={Focus} label="Blur / tidak fokus" sub="Diukur di bagian paling tajam, bukan latar bokeh" on={options.checkBlur} onChange={(checkBlur) => set({ checkBlur })} />
-            <Check icon={EyeOff} label="Mata terpejam" sub="Ditandai Maybe untuk dicek; Reject hanya di mode Ketat" on={options.checkEyes} onChange={(checkEyes) => set({ checkEyes })} />
+            <Check icon={EyeOff} label="Mata terpejam" sub="Masuk Cek; dilewati hanya di mode Ketat" on={options.checkEyes} onChange={(checkEyes) => set({ checkEyes })} />
             <Check icon={Copy} label="Duplikat & burst" sub="Simpan yang terbaik per grup" on={options.checkDuplicates} onChange={(checkDuplicates) => set({ checkDuplicates })} />
             <Check icon={SunMedium} label="Eksposur" sub="Terlalu gelap atau terlalu terang" on={options.checkExposure} onChange={(checkExposure) => set({ checkExposure })} />
             <Check icon={Smile} label="Ekspresi" sub="Di grup burst, yang tersenyum diutamakan · tidak pernah membuang foto" on={options.checkSmile} onChange={(checkSmile) => set({ checkSmile })} />

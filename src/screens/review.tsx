@@ -17,6 +17,9 @@ import {
   X,
   type LucideIcon,
   Smile,
+  UserRound,
+  Check,
+  Columns2,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
@@ -45,6 +48,8 @@ const STATUS_OF: Partial<Record<Action, Status>> = { pick: 'pick', maybe: 'maybe
 
 
 const CARD_MIN = 190;
+/** Photos shown side by side in a hand-picked comparison. */
+const MAX_COMPARE = 4;
 const GAP = 12;
 const CARD_INFO_H = 34;
 
@@ -52,6 +57,9 @@ export function Review() {
   const session = useApp((s) => s.session)!;
   const selectedId = useApp((s) => s.selectedId);
   const select = useApp((s) => s.select);
+  const selection = useApp((s) => s.selection);
+  const selectWith = useApp((s) => s.selectWith);
+  const selectAll = useApp((s) => s.selectAll);
   const setStatus = useApp((s) => s.setStatus);
   const setRating = useApp((s) => s.setRating);
   const go = useApp((s) => s.go);
@@ -150,20 +158,26 @@ export function Review() {
       // shown over this one (it stays mounted underneath to keep its place).
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || exporting || lightbox) return;
       if (useApp.getState().screen.name !== 'review') return;
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') {
+        e.preventDefault();
+        selectAll(visible.map((p) => p.id));
+        return;
+      }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const k = e.key.toLowerCase();
       const action = actionFor(k);
       const mark = action && STATUS_OF[action];
-      if (mark && selected) {
+      const targets = selection.length ? selection : selected ? [selected.id] : [];
+      if (mark && targets.length) {
         e.preventDefault();
-        setStatus([selected.id], mark);
-        // Lightroom-style auto-advance, unless the photo is about to leave the filtered view.
-        if (tab === 'all' || tab === mark) moveTo(index + 1);
+        setStatus(targets, mark);
+        // Lightroom-style auto-advance for one photo, unless it is about to leave the filtered view.
+        if (!selection.length && (tab === 'all' || tab === mark)) moveTo(index + 1);
         return;
       }
-      if (/^[0-5]$/.test(k) && selected) {
+      if (/^[0-5]$/.test(k) && targets.length) {
         e.preventDefault();
-        setRating([selected.id], Number(k));
+        setRating(targets, Number(k));
         return;
       }
       const step: Record<string, number> = { arrowright: 1, arrowleft: -1, arrowdown: cols, arrowup: -cols };
@@ -177,6 +191,9 @@ export function Review() {
         setLightbox(true);
       } else if (k === 'escape') {
         setDetails(false);
+        if (selection.length) select(selectedId);
+      } else if (action === 'compare' && selection.length >= 2) {
+        go({ name: 'compare', ids: selection.slice(0, MAX_COMPARE) });
       } else if (action === 'compare' && selected?.group != null) {
         go({ name: 'compare', group: selected.group });
       }
@@ -347,6 +364,37 @@ export function Review() {
               </button>
             </div>
           )}
+          {selection.length > 1 && (
+            <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line-soft bg-gold/[0.08] px-5 py-2 text-xs">
+              <span className="font-semibold text-fg">{num(selection.length)} foto dipilih</span>
+              <span className="text-faint">· tandai semuanya:</span>
+              {(['pick', 'maybe', 'reject'] as const).map((st) => {
+                const Icon = STATUS_ICON[st];
+                return (
+                  <button
+                    key={st}
+                    type="button"
+                    onClick={() => setStatus(selection, st)}
+                    className="inline-flex h-7 items-center gap-1.5 rounded-md border border-line bg-raised px-2.5 font-medium hover:bg-line"
+                  >
+                    <Icon size={13} style={{ color: STATUS[st].color }} strokeWidth={2.5} />
+                    {STATUS[st].one}
+                  </button>
+                );
+              })}
+              <button
+                type="button"
+                onClick={() => go({ name: 'compare', ids: selection.slice(0, MAX_COMPARE) })}
+                className="inline-flex h-7 items-center gap-1.5 rounded-md border border-line bg-raised px-2.5 font-medium hover:bg-line"
+                title={selection.length > MAX_COMPARE ? `Hanya ${MAX_COMPARE} foto pertama` : undefined}
+              >
+                <Columns2 size={13} className="text-muted" /> Bandingkan{selection.length > MAX_COMPARE ? ` (${MAX_COMPARE} pertama)` : ''}
+              </button>
+              <button type="button" onClick={() => select(selectedId)} className="ml-auto font-medium text-gold-text hover:underline">
+                Batal pilih
+              </button>
+            </div>
+          )}
           <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto">
             {visible.length === 0 ? (
               <div className="flex flex-col items-center gap-3 p-10 text-center text-sm text-faint">
@@ -367,7 +415,12 @@ export function Review() {
                         photo={p}
                         width={cardW}
                         selected={p.id === selectedId}
-                        onSelect={() => select(p.id)}
+                        inSelection={selection.includes(p.id)}
+                        onSelect={(e) => {
+                          if (e.shiftKey) selectWith(p.id, 'range', visible.map((x) => x.id));
+                          else if (e.metaKey || e.ctrlKey) selectWith(p.id, 'toggle', []);
+                          else select(p.id);
+                        }}
                         onOpen={() => (select(p.id), setLightbox(true))}
                       />
                     ))}
@@ -392,9 +445,9 @@ export function Review() {
       <footer className="flex h-[30px] shrink-0 items-center justify-between border-t border-line-soft bg-panel px-4 text-[11px] text-faint">
         <span className="flex items-center gap-3.5">
           {[
-            [kPick, 'Pick'],
-            [kMaybe, 'Maybe'],
-            [kReject, 'Reject'],
+            [kPick, 'Pilih'],
+            [kMaybe, 'Cek'],
+            [kReject, 'Lewati'],
             ['1-5', 'Bintang'],
             ['← →', 'Pindah'],
             ['Space', 'Perbesar'],
@@ -481,13 +534,16 @@ function Card({
   photo: p,
   width,
   selected,
+  inSelection,
   onSelect,
   onOpen,
 }: {
   photo: PhotoEntry;
   width: number;
   selected: boolean;
-  onSelect: () => void;
+  /** Part of a multi-selection. */
+  inSelection: boolean;
+  onSelect: (e: React.MouseEvent) => void;
   onOpen: () => void;
 }) {
   // Only a photo that wasn't picked gets a reason on the card — it says why.
@@ -502,10 +558,15 @@ function Card({
       style={{ width }}
       className={cx(
         'flex shrink-0 flex-col overflow-hidden rounded-[10px] bg-panel-2 text-left',
-        selected ? 'ring-2 ring-gold' : 'ring-1 ring-line-soft hover:ring-line',
+        selected ? 'ring-2 ring-gold' : inSelection ? 'ring-2 ring-gold/60' : 'ring-1 ring-line-soft hover:ring-line',
       )}
     >
       <div className="relative aspect-[3/2] w-full bg-raised">
+        {inSelection && (
+          <span className="absolute top-2 right-2 z-10 flex size-5 items-center justify-center rounded-full bg-gold text-bg">
+            <Check size={13} strokeWidth={3} />
+          </span>
+        )}
         {p.thumb ? (
           <img
             src={thumbUrl(p.thumb)}
@@ -603,7 +664,7 @@ function Inspector({
             <button
               key={st}
               type="button"
-              onClick={() => setStatus([photo.id], st)}
+              onClick={() => setStatus(useApp.getState().selection.length ? useApp.getState().selection : [photo.id], st)}
               className={cx(
                 'flex h-[34px] flex-1 items-center justify-center gap-1.5 rounded-lg text-xs font-semibold',
                 on ? 'text-bg' : 'border border-line bg-raised text-fg hover:bg-line',
@@ -632,7 +693,15 @@ function Inspector({
         ) : (
           m && (
             <>
-              <Metric icon={Sparkles} label="Ketajaman" value={`${Math.round(m.sharpness)}%`} tone={sharpTone} />
+              <Metric icon={Sparkles} label="Ketajaman foto" value={`${Math.round(m.sharpness)}%`} tone={sharpTone} />
+              {photo.faces?.some((f) => f.sharpness != null) && (
+                <Metric
+                  icon={UserRound}
+                  label="Fokus di wajah"
+                  value={photo.reasons.some((r) => r.kind === 'subjectSoft') ? 'Meleset' : 'Kena'}
+                  tone={photo.reasons.some((r) => r.kind === 'subjectSoft') ? 'maybe' : 'pick'}
+                />
+              )}
               <Metric icon={SunMedium} label="Eksposur" value={exposure![0]} tone={exposure![1] as Status} />
               {eyes && <Metric icon={Eye} label="Mata" value={eyes.label} tone={eyes.tone} />}
               {smileOf(photo) && <Metric icon={Smile} label="Ekspresi" value={smileOf(photo)!.label} tone={null} />}
@@ -697,13 +766,14 @@ function Inspector({
 /** `tone` null = information only: no coloured dot, which would read as a verdict. */
 function Metric({ icon: Icon, label, value, tone }: { icon: LucideIcon; label: string; value: string; tone: Status | 'gold' | null }) {
   return (
-    <div className="flex h-[30px] items-center justify-between">
-      <span className="flex items-center gap-2 text-xs text-muted">
+    // Label never shrinks; a long value wraps under itself, right-aligned.
+    <div className="flex min-h-[30px] items-start justify-between gap-3 py-[7px]">
+      <span className="flex shrink-0 items-center gap-2 text-xs text-muted">
         <Icon size={14} className="text-faint" /> {label}
       </span>
-      <span className="flex items-center gap-1.5 text-xs font-medium">
+      <span className="flex min-w-0 items-center justify-end gap-1.5 text-right text-xs font-medium">
         {tone && <Dot color={toneColor(tone)} size={6} />}
-        {value}
+        <span className="min-w-0">{value}</span>
       </span>
     </div>
   );

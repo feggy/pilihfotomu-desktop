@@ -37,6 +37,15 @@ export function App() {
   useEffect(() => {
     const off = listen<string>('menu', ({ payload }) => {
       const { screen: current, session: open, go: goTo } = useApp.getState();
+      if (payload === 'undo' || payload === 'redo') {
+        const field = document.activeElement;
+        if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) {
+          document.execCommand(payload);
+        } else if (current.name === 'review' || current.name === 'compare') {
+          useApp.getState()[payload]();
+        }
+        return;
+      }
       if (current.name === 'progress') return; // don't walk away from a running analysis
       const back = current.name === 'settings' ? current.back : current;
       if (payload === 'settings') goTo({ name: 'settings', back });
@@ -67,7 +76,7 @@ export function App() {
     ) : screen.name === 'progress' ? (
       <ProgressScreen />
     ) : screen.name === 'review' ? null : screen.name === 'compare' ? (
-      <Compare group={screen.group} />
+      <Compare key={screen.ids?.join(',') ?? screen.group} group={screen.group} ids={screen.ids} />
     ) : screen.name === 'picks' ? (
       <ClientPicks key={screen.root} root={screen.root} back={screen.back} />
     ) : screen.name === 'settings' ? (

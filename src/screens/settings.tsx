@@ -22,6 +22,8 @@ const FIXED: [string, string][] = [
   ['1–5 / 0', 'Beri / hapus bintang'],
   ['Space', 'Buka / tutup tampilan besar'],
   ['+ / −', 'Perbesar / perkecil'],
+  [isMac ? 'Pinch / ⌘ + scroll' : 'Ctrl + scroll', 'Zoom di tampilan besar'],
+  ['Scroll / drag', 'Geser foto saat di-zoom'],
   ['1–9', 'Pilih foto di Bandingkan'],
   ['Enter', 'Grup burst berikutnya'],
   ['Esc', 'Kembali / tutup'],
@@ -66,7 +68,7 @@ function KeyEditor() {
           Kembalikan bawaan
         </Button>
       </div>
-      <p className="-mt-3 text-[13px] text-muted">Klik tombol di kanan, lalu tekan huruf baru. Contoh: Q / W / E untuk Pick / Maybe / Reject.</p>
+      <p className="-mt-3 text-[13px] text-muted">Klik tombol di kanan, lalu tekan huruf baru. Contoh: Q / W / E untuk Pilih / Cek / Lewati.</p>
       <div className="flex flex-col rounded-2xl border border-line-soft bg-panel px-5 py-2">
         {ACTIONS.map((a) => (
           <div key={a.id} className="flex h-11 items-center justify-between gap-3 border-b border-line-soft last:border-0">
