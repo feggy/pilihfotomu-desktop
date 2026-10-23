@@ -1,0 +1,116 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/inter';
+
+/* ─────────────────────────────────────────────
+   pilihfotomu Desktop — sama dengan design system web (zamrud gelap, aksen
+   emas), tapi selalu gelap: foto dinilai lebih jujur di latar gelap, dan
+   Lightroom/Capture One juga begitu.
+   ───────────────────────────────────────────── */
+
+@theme {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, Menlo, Consolas, monospace;
+
+  --color-bg: #0b1310;
+  --color-panel: #0f1a16;
+  --color-panel-2: #13201b;
+  --color-raised: #1a2923;
+  --color-line: #25362f;
+  --color-line-soft: #1d2c26;
+  --color-fg: #f4f7f5;
+  --color-muted: #9eaea6;
+  --color-faint: #86978f;
+
+  --color-gold: #c9a96e;
+  --color-gold-text: #d9bd88;
+  --color-gold-600: #8c6a30;
+  --color-gold-800: #5c451f;
+
+  --color-pick: #3fb67a;
+  --color-maybe: #e0b84a;
+  --color-reject: #e0645a;
+}
+
+/* Tombol utama: emas → perunggu, sama dengan `bg-brand-gradient` di web. */
+@utility bg-gold-gradient {
+  background-image: linear-gradient(135deg, var(--color-gold-600), var(--color-gold-800));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.16);
+  &:hover:not(:disabled) {
+    background-image: linear-gradient(135deg, #735626, #46351a);
+  }
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+  /* A desktop app, not a page: no rubber-band scroll, no text selection
+     unless a field asks for it. */
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: default;
+}
+
+input,
+textarea {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Double-clicking the title bar (or any button) must never select its label. */
+button,
+header,
+[role='button'] {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Anything clickable shows a hand, like the web app. */
+button:not(:disabled),
+[role='button']:not([aria-disabled='true']),
+[role='radio']:not([aria-disabled='true']),
+[role='checkbox'],
+[role='switch']:not(:disabled),
+label:has(input[type='checkbox']),
+input[type='range'],
+summary {
+  cursor: pointer;
+}
+button:disabled {
+  cursor: not-allowed;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-line);
+  border-radius: 999px;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-gold);
+  outline-offset: 2px;
+}
+input:focus-visible,
+textarea:focus-visible {
+  outline: none;
+}
