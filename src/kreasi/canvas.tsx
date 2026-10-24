@@ -104,6 +104,8 @@ export interface CanvasHandlers {
   onMulti?: (list: Multi) => void;
   /** The picked things dragged together (live). */
   onMove?: (moves: Placed[]) => void;
+  /** ⌥ + drag: copies of these, right where they are, picked; the drag moves the copies. */
+  onCloneDrag?: (list: Multi) => Multi;
   /** Free layout: a photo from the list dropped on empty canvas, at (x, y) as 0–1 of it. */
   onDropNew?: (photoId: number, x: number, y: number) => void;
   /** Double-click on a photo: "Atur ukuran" for it. */
@@ -500,7 +502,11 @@ export function DocCanvas({
       // On one of the picked set: they move together.
       const member = multi.length > 1 ? hits.find((h) => multi.some((m) => sameSel(m, h))) : undefined;
       if (member) {
-        const from = multi.map(placeOf).filter((p): p is Placed => !!p);
+        let from = multi.map(placeOf).filter((p): p is Placed => !!p);
+        if (e.altKey && handlers.onCloneDrag) {
+          const copies = handlers.onCloneDrag(from.map((p) => p.sel));
+          from = from.map((p, i) => ({ ...p, sel: copies[i] ?? p.sel }));
+        }
         start({ kind: 'group', x, y, from, moved: false }, e);
         return;
       }
@@ -523,13 +529,18 @@ export function DocCanvas({
     if (s.kind === 'text' || s.kind === 'sticker') {
       if (isLayerLocked(doc, keyOfItem(s))) return next && handlers.onSelect?.(next);
       const it = itemOf(s)!;
-      start({ kind: 'move', sel: s, x, y, ix: it.x, iy: it.y, snap: snapInfo(doc, f, ref.current!.getContext('2d')!, keyOfItem(s)), moved: false, next }, e);
+      const snap = snapInfo(doc, f, ref.current!.getContext('2d')!, keyOfItem(s));
+      // ⌥: the copy moves, the original stays.
+      const moving = e.altKey && handlers.onCloneDrag ? ((handlers.onCloneDrag([s])[0] as Item | undefined) ?? s) : s;
+      start({ kind: 'move', sel: moving, x, y, ix: it.x, iy: it.y, snap, moved: false, next: moving === s ? next : null }, e);
     } else if (s.kind === 'cell' && free) {
       // A free frame moves like any element; its picture moves in "Atur ukuran".
       const cell = doc.freeCells[s.index];
       if (!cell || isLayerLocked(doc, frameKey(s.index))) return next && handlers.onSelect?.(next);
       const snap = snapInfo(doc, f, ref.current!.getContext('2d')!, frameKey(s.index));
-      start({ kind: 'frame', index: s.index, x, y, ix: cell.x + cell.w / 2, iy: cell.y + cell.h / 2, snap, moved: false, next }, e);
+      const copy = e.altKey && handlers.onCloneDrag ? handlers.onCloneDrag([s])[0] : undefined;
+      const index = copy?.kind === 'cell' ? copy.index : s.index;
+      start({ kind: 'frame', index, x, y, ix: cell.x + cell.w / 2, iy: cell.y + cell.h / 2, snap, moved: false, next: copy ? null : next }, e);
     } else if (s.kind === 'cell') {
       const slot = doc.slots[s.index];
       const img = slot && images.get(slot.file.fileId);

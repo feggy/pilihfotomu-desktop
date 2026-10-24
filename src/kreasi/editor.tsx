@@ -56,7 +56,10 @@ import {
   placeMany,
   remove,
   removeMany,
+  copyOf,
+  pasteClip,
   type Align,
+  type Clip,
   type Edit,
 } from './actions';
 import { DocCanvas, sameSel, useBox, useDocImages, type Box, type Multi } from './canvas';
@@ -79,6 +82,10 @@ const RAIL: { id: Panel; icon: typeof Layers; label: string }[] = [
   { id: 'elemen', icon: Shapes, label: 'Elemen' },
   { id: 'latar', icon: PaintBucket, label: 'Latar' },
 ];
+
+/** What ⌘C / ⌘X copied, for ⌘V here or in another design; each paste steps a little further. */
+let clip: Clip | null = null;
+let pastes = 0;
 
 /** Layar 14 · Editor template. */
 export function Editor() {
@@ -105,6 +112,51 @@ export function Editor() {
   const select = (s: Selection) => (commit(), setSelection(s), setEditingText(null), setMulti([]));
   // Several picked at once (a box dragged on the canvas, Shift + click); `selection` is then null.
   const [multi, setMulti] = useState<Multi>([]);
+  /**
+   * ⌘C / ⌘X / ⌘V on the picked layers (the app's own clipboard). Reached by
+   * the keys, and by the Edit menu's Copy / Cut / Paste (as clipboard events)
+   * — the same press can arrive both ways, so one within a moment counts once.
+   */
+  const lastClip = useRef(0);
+  const clipboard = (op: 'c' | 'x' | 'v') => {
+    if (Date.now() - lastClip.current < 250) return;
+    lastClip.current = Date.now();
+    const d = useKreasi.getState().doc;
+    if (!d) return;
+    const root = useKreasi.getState().source?.root ?? null;
+    if (op === 'v') {
+      if (!clip) return;
+      pastes += 1;
+      const p = pasteClip(clip, d, root, 0.02 * pastes);
+      if (!p.selection.length) return;
+      edit(p.edit);
+      if (p.selection.length === 1) select(p.selection[0]!);
+      else pickMany(p.selection);
+      return;
+    }
+    const picked = multi.length > 1 ? multi : selection && movableIn(d, selection) ? [selection] : [];
+    if (!picked.length) return;
+    clip = copyOf(picked, d, root);
+    pastes = 0;
+    if (op === 'x') (edit(removeMany(picked)), select(null));
+  };
+  useEffect(() => {
+    const on = (op: 'c' | 'x' | 'v') => (e: ClipboardEvent) => {
+      const el = document.activeElement;
+      if (el instanceof HTMLTextAreaElement || (el instanceof HTMLInputElement && ['text', 'search', 'number', ''].includes(el.type))) return;
+      e.preventDefault();
+      clipboard(op);
+    };
+    const copy = on('c'), cut = on('x'), paste = on('v');
+    document.addEventListener('copy', copy);
+    document.addEventListener('cut', cut);
+    document.addEventListener('paste', paste);
+    return () => {
+      document.removeEventListener('copy', copy);
+      document.removeEventListener('cut', cut);
+      document.removeEventListener('paste', paste);
+    };
+  });
   const pickMany = (list: Multi) => (commit(), setMulti(list), list.length > 1 && setSelection(null));
   // A press on the stage around the canvas starts a selection box there too.
   const bandRef = useRef<((e: { clientX: number; clientY: number; shiftKey: boolean }) => void) | null>(null);
@@ -186,6 +238,11 @@ export function Editor() {
         const first = to === 'forward' || to === 'back' ? -1 : 1;
         keys.sort((a, b) => first * (at.indexOf(a) - at.indexOf(b)));
         if (keys.length) edit((doc) => keys.reduce((x, k) => order(k, to)(x), doc));
+        return;
+      }
+      if (mod && !e.shiftKey && ['c', 'x', 'v'].includes(e.key.toLowerCase())) {
+        e.preventDefault();
+        clipboard(e.key.toLowerCase() as 'c' | 'x' | 'v');
         return;
       }
       if (mod && e.key.toLowerCase() === 'a') {
@@ -459,6 +516,14 @@ export function Editor() {
                     onSelect: (s) => (select(s), s && s.kind !== 'watermark' && setPanel('lapisan')),
                     onMulti: (list) => (pickMany(list), list.length > 1 && setPanel('lapisan')),
                     onMove: (moves) => live(placeMany(moves)),
+                    // ⌥ + drag: copies where the originals are; the drag then moves the copies.
+                    onCloneDrag: (list) => {
+                      const dup = duplicateMany(list, doc, 0);
+                      edit(dup.edit);
+                      if (dup.selection.length === 1) select(dup.selection[0]!);
+                      else pickMany(dup.selection);
+                      return dup.selection;
+                    },
                     onCropCell: (i) => placed(doc)[i] != null && (select({ kind: 'cell', index: i }), setCropping(i)),
                     onEndCrop: () => setCropping(null),
                     onPan: (i, ox, oy) => setSlot(i, { ox, oy }, true),

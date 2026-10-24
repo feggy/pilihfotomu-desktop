@@ -59,6 +59,8 @@ const KREASI: [string, string][] = [
   [isMac ? '⇧⌘Z' : 'Ctrl + Shift + Z / Ctrl + Y', 'Ulangi'],
   [`${M}T`, 'Atur ukuran foto di tempatnya'],
   [`${M}D`, 'Duplikat'],
+  [`${M}C / ${M}X / ${M}V`, 'Salin / potong / tempel lapisan'],
+  [isMac ? '⌥ + seret' : 'Alt + seret', 'Seret salinannya'],
   ['Shift + klik', 'Pilih beberapa (atau seret kotak di area kosong)'],
   [`${M}A`, 'Pilih semua'],
   ['] / [', 'Naikkan / turunkan lapisan'],
@@ -163,7 +165,7 @@ function KeyEditor() {
         {KREASI.map(([k, l]) => (
           <div key={k} className="flex h-10 items-center justify-between border-b border-line-soft last:border-0">
             <span className="text-[13px] text-muted">{t(l)}</span>
-            <Kbd>{k}</Kbd>
+            <Kbd>{t(k)}</Kbd>
           </div>
         ))}
       </div>

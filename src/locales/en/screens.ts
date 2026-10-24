@@ -149,4 +149,9 @@ export default {
   'Pilih semua': 'Select all',
   'Naikkan / turunkan lapisan': 'Bring forward / send backward',
   'Paling atas / paling bawah': 'Bring to front / send to back',
+  'Salin / potong / tempel lapisan': 'Copy / cut / paste layers',
+  'Seret salinannya': 'Drag a copy',
+  '⌥ + seret': '⌥ + drag',
+  'Alt + seret': 'Alt + drag',
+  'Shift + klik': 'Shift + click',
 } as Record<string, string | [string, string]>;

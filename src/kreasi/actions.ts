@@ -19,8 +19,10 @@ import {
   slotsFor,
   stickerLayerKey,
   textLayerKey,
+  emptyPhotoFile,
   type CollageDoc,
   type FreeCell,
+  type Slot,
   type LayerMove,
   type StickerLayer,
   type TextLayer,
@@ -192,10 +194,10 @@ export const removeFrame =
   });
 
 /** Free layout: a copy of frame `index` with its photo, a little down and right; the copy's index. */
-export function duplicateFrame(index: number, d: CollageDoc): { edit: Edit; index: number } | null {
+export function duplicateFrame(index: number, d: CollageDoc, shift = 0.02): { edit: Edit; index: number } | null {
   const c = d.freeCells[index];
   if (!c) return null;
-  const copy = { ...c, id: newId(), x: c.x + 0.02 / d.slides, y: c.y + 0.02 };
+  const copy = { ...c, id: newId(), x: c.x + shift / d.slides, y: c.y + shift };
   return {
     index: d.freeCells.length,
     edit: (doc) => ({
@@ -223,21 +225,21 @@ export const remove =
           : d;
 
 /** A copy of a text, element or free photo frame, a little down and to the right; returns its selection. */
-export function duplicate(sel: Selection, d: CollageDoc): { edit: Edit; selection: Selection } | null {
+export function duplicate(sel: Selection, d: CollageDoc, shift = 0.02): { edit: Edit; selection: Selection } | null {
   if (sel?.kind === 'cell' && isFreeLayout(d)) {
-    const dup = duplicateFrame(sel.index, d);
+    const dup = duplicateFrame(sel.index, d, shift);
     return dup && { edit: dup.edit, selection: { kind: 'cell', index: dup.index } };
   }
   const id = newId();
   if (sel?.kind === 'text') {
     const src = d.texts.find((x) => x.id === sel.id);
     if (!src) return null;
-    return { selection: { kind: 'text', id }, edit: (doc) => ({ ...doc, texts: [...doc.texts, { ...src, id, x: Math.min(1, src.x + 0.02), y: Math.min(1, src.y + 0.02) }] }) };
+    return { selection: { kind: 'text', id }, edit: (doc) => ({ ...doc, texts: [...doc.texts, { ...src, id, x: Math.min(1, src.x + shift), y: Math.min(1, src.y + shift) }] }) };
   }
   if (sel?.kind === 'sticker') {
     const src = d.stickers.find((x) => x.id === sel.id);
     if (!src) return null;
-    return { selection: { kind: 'sticker', id }, edit: (doc) => ({ ...doc, stickers: [...doc.stickers, { ...src, id, x: Math.min(1, src.x + 0.02), y: Math.min(1, src.y + 0.02) }] }) };
+    return { selection: { kind: 'sticker', id }, edit: (doc) => ({ ...doc, stickers: [...doc.stickers, { ...src, id, x: Math.min(1, src.x + shift), y: Math.min(1, src.y + shift) }] }) };
   }
   return null;
 }
@@ -311,11 +313,11 @@ export const removeMany =
   };
 
 /** A copy of every picked thing; the copies, to pick next. */
-export function duplicateMany(list: Picked[], d: CollageDoc): { edit: Edit; selection: Picked[] } {
+export function duplicateMany(list: Picked[], d: CollageDoc, shift = 0.02): { edit: Edit; selection: Picked[] } {
   let doc = d;
   const picked: Picked[] = [];
   for (const s of list) {
-    const dup = duplicate(s, doc);
+    const dup = duplicate(s, doc, shift);
     if (!dup?.selection) continue;
     doc = dup.edit(doc);
     picked.push(dup.selection);
@@ -356,3 +358,55 @@ export const alignMany =
       return nudge(s, dx!, dy!, 1, 1)(doc);
     }, d);
   };
+
+// ── Copy and paste ───────────────────────────────────────────────
+
+/**
+ * Layers copied with ⌘C / ⌘X, kept in the app (not the system clipboard), so
+ * they can be pasted into this design or another. A frame's photo belongs to
+ * the photos it came from (`root`).
+ */
+export interface Clip {
+  root: string | null;
+  texts: TextLayer[];
+  stickers: StickerLayer[];
+  frames: { cell: FreeCell; slot: Slot | null }[];
+}
+
+export function copyOf(list: Picked[], d: CollageDoc, root: string | null): Clip {
+  return {
+    root,
+    texts: list.flatMap((s) => (s.kind === 'text' ? d.texts.filter((x) => x.id === s.id) : [])),
+    stickers: list.flatMap((s) => (s.kind === 'sticker' ? d.stickers.filter((x) => x.id === s.id) : [])),
+    frames: list.flatMap((s) => (s.kind === 'cell' && isFreeLayout(d) && d.freeCells[s.index] ? [{ cell: d.freeCells[s.index]!, slot: d.slots[s.index] ?? null }] : [])),
+  };
+}
+
+/**
+ * The clip in `d`, each thing `shift` down and right of where it was copied
+ * from; what was pasted, to pick next. Frames only go into a free layout; a
+ * frame from other photos keeps its shape but not its picture.
+ */
+export function pasteClip(clip: Clip, d: CollageDoc, root: string | null, shift: number): { edit: Edit; selection: Picked[] } {
+  const texts = clip.texts.map((x) => ({ ...x, id: newId(), x: Math.min(1, x.x + shift / d.slides), y: Math.min(1, x.y + shift) }));
+  const stickers = clip.stickers.map((x) => ({ ...x, id: newId(), x: Math.min(1, x.x + shift / d.slides), y: Math.min(1, x.y + shift) }));
+  const frames = isFreeLayout(d) ? clip.frames : [];
+  const same = clip.root === root;
+  return {
+    selection: [
+      ...texts.map((x) => ({ kind: 'text', id: x.id }) as const),
+      ...stickers.map((x) => ({ kind: 'sticker', id: x.id }) as const),
+      ...frames.map((_, i) => ({ kind: 'cell', index: d.freeCells.length + i }) as const),
+    ],
+    edit: (doc) => ({
+      ...doc,
+      texts: [...doc.texts, ...texts],
+      stickers: [...doc.stickers, ...stickers],
+      freeCells: [...doc.freeCells, ...frames.map((f) => ({ ...f.cell, id: newId(), x: f.cell.x + shift / doc.slides, y: f.cell.y + shift }))],
+      slots: [
+        ...slotsFor(doc, doc.freeCells.length),
+        ...frames.map((f, i) => (f.slot ? (same ? { ...f.slot } : { ...f.slot, file: emptyPhotoFile(doc.freeCells.length + i + 1) }) : null)),
+      ],
+    }),
+  };
+}
