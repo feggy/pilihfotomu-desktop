@@ -32,7 +32,7 @@ export function TitleBar({ title = 'pilihfotomu', right }: { title?: ReactNode; 
             aria-label={t('Beranda')}
             className="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-faint hover:bg-raised hover:text-fg"
           >
-            <House size={14} /> Beranda
+            <House size={14} /> {t('Beranda')}
           </button>
         )}
       </div>

@@ -99,6 +99,12 @@ export async function installMock() {
         case 'recull':
           session.options = a.options as Session['options'];
           return { ...session, photos: session.photos.map((p) => ({ ...p })) };
+        case 'save_export': {
+          // Raw body: the picture bytes. Remember the size so a test can check it.
+          const bytes = args as unknown as Uint8Array;
+          (window as unknown as { __lastExport?: number }).__lastExport = bytes.byteLength;
+          return `${session.root}/Konten/konten-${bytes.byteLength}.jpg`;
+        }
         case 'cache_info':
           return { dir: '/Users/demo/Library/Caches/com.pilihfotomu.desktop', previews: 812e6, full: 2.4e9, thumbs: 96e6, unusedThumbs: 31e6 };
         case 'clear_cache':

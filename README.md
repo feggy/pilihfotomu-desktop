@@ -38,6 +38,27 @@ npm run tauri build     # installer untuk OS yang sedang dipakai
 Installer Mac harus di-build di Mac, installer Windows di Windows (atau lewat
 GitHub Actions `tauri-action`).
 
+## Buat konten (`src/kreasi/`)
+
+Story / feed / carousel Instagram dari template, offline:
+**Pilih template → Isi foto → Edit & ekspor** (Beranda › Buat konten, atau
+Review › Lanjutkan ▾ › Buat konten untuk memakai foto sesi yang terbuka).
+
+- **Mesin** (`src/kreasi/engine/`) disalin dari `pilihfotomu-web/src/features/collage`
+  apa adanya, kecuali bagian yang khusus web: `fonts.ts` (font dibundel, lihat
+  bawah), `types.ts` (`DriveFile` lokal), draf cloud dan kuota ekspor dibuang.
+  Perbaikan mesin sebaiknya dibuat di web lalu disalin ulang ke sini.
+- **Template**: 354 template komunitas dari `pilihfotomu-api/prisma/seed-data/community-templates.json`
+  di `public/kreasi/templates.json`. Pratinjau digambar mesin dengan foto pengganti.
+- **Font**: 97 keluarga Google Fonts (OFL), subset latin, di `public/fonts/` +
+  `src/kreasi/fonts.css`. Buat ulang dengan `node scripts/fetch-fonts.mjs`.
+- **Isi foto**: dari sesi yang terbuka (Dipilih / Bintang 5 / Semua) atau folder
+  mana saja. "Hanya yang pas untuk slot" memakai bentuk foto (diukur dari
+  thumbnail); foto diletakkan supaya wajah dari analisis ada di tengah tempatnya.
+  "Isi sisanya otomatis": Dipilih, bintang tertinggi, bentuk pas, tidak dua dari satu burst.
+- **Ekspor**: JPG/PNG 1080 px atau 2×, foto dari pratinjau 2048 px, disimpan ke
+  `<folder sesi>/Konten/` lewat `save_export` (byte mentah, tidak pernah menimpa).
+
 ## Bahasa
 
 Indonesia dan Inggris (Pengaturan › Bahasa; bawaan ikut bahasa sistem —

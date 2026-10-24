@@ -438,6 +438,65 @@ async fn export_jpegs(
     .map_err(|e| e.to_string())
 }
 
+/// Saves a picture made in the UI (Buat konten export) into `<root>/<folder>/`.
+/// The bytes come as the raw request body; root, folder and file name as
+/// URI-encoded headers. Never overwrites: a name already taken gets " (2)".
+#[tauri::command]
+fn save_export(request: tauri::ipc::Request<'_>) -> CmdResult<PathBuf> {
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+        return Err("Data gambar tidak terbaca.".into());
+    };
+    let header = |k: &str| -> CmdResult<String> {
+        let v = request.headers().get(k).and_then(|v| v.to_str().ok()).ok_or("Permintaan simpan tidak lengkap.")?;
+        percent_decode(v)
+    };
+    let root = PathBuf::from(header("root")?);
+    if !root.is_dir() {
+        return Err(format!("Folder “{}” tidak ditemukan.", root.display()));
+    }
+    let dir = output_dir(&root, &header("folder")?)?;
+    let name = header("name")?;
+    let name = name.trim();
+    if name.is_empty() || name.contains(['/', '\\']) || name.starts_with('.') {
+        return Err("Nama file tidak valid.".into());
+    }
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let path = free_name(&dir, name);
+    let tmp = path.with_extension("pilihfotomu-tmp");
+    std::fs::write(&tmp, bytes).and_then(|_| std::fs::rename(&tmp, &path)).map_err(|e| e.to_string())?;
+    Ok(path)
+}
+
+/// `name` in `dir`, or "stem (2).ext", "stem (3).ext"… when taken.
+fn free_name(dir: &Path, name: &str) -> PathBuf {
+    let first = dir.join(name);
+    if !first.exists() {
+        return first;
+    }
+    let p = Path::new(name);
+    let stem = p.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+    let ext = p.extension().map(|e| format!(".{}", e.to_string_lossy())).unwrap_or_default();
+    (2..).map(|n| dir.join(format!("{stem} ({n}){ext}"))).find(|p| !p.exists()).unwrap()
+}
+
+/// Decodes `%XX` escapes (what `encodeURIComponent` makes).
+fn percent_decode(s: &str) -> CmdResult<String> {
+    let b = s.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'%' && i + 2 < b.len() {
+            let hex = std::str::from_utf8(&b[i + 1..i + 3]).map_err(|e| e.to_string())?;
+            out.push(u8::from_str_radix(hex, 16).map_err(|e| e.to_string())?);
+            i += 3;
+        } else {
+            out.push(b[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8(out).map_err(|e| e.to_string())
+}
+
 /// The UI's language ("id" / "en"): rebuilds the menu bar in it.
 #[tauri::command]
 fn set_language(app: AppHandle, lang: String) -> CmdResult<()> {
@@ -466,6 +525,7 @@ pub fn run() {
             set_marks,
             recull,
             set_language,
+            save_export,
             cache_info,
             clear_cache,
             preview_image,
@@ -480,4 +540,20 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn decodes_headers_and_never_overwrites() {
+        assert_eq!(percent_decode("Wedding%20Rina%20%26%20Dimas").unwrap(), "Wedding Rina & Dimas");
+        assert_eq!(percent_decode("caf%C3%A9").unwrap(), "café");
+        let tmp = tempfile::tempdir().unwrap();
+        assert_eq!(free_name(tmp.path(), "a.jpg"), tmp.path().join("a.jpg"));
+        std::fs::write(tmp.path().join("a.jpg"), b"x").unwrap();
+        std::fs::write(tmp.path().join("a (2).jpg"), b"x").unwrap();
+        assert_eq!(free_name(tmp.path(), "a.jpg"), tmp.path().join("a (3).jpg"));
+    }
 }

@@ -11,6 +11,10 @@ export type Screen =
   | { name: 'compare'; group?: number; ids?: number[] }
   /** Client picks on any folder; uses the open session's thumbnails when it is that folder. */
   | { name: 'picks'; root: string; back: Screen }
+  /** Buat konten: pick a template, fill its photos, edit, export. */
+  | { name: 'kreasi'; back: Screen }
+  /** Edit foto: develop photos like Lightroom. */
+  | { name: 'edit'; back: Screen }
   | { name: 'settings'; back: Screen; section?: 'license' | 'language' | 'analysis' | 'storage' | 'keys' | 'about' };
 
 export interface RecentPhoto {

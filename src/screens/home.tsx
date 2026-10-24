@@ -1,9 +1,24 @@
 import { open } from '@tauri-apps/plugin-dialog';
-import { Check, ChevronRight, Clipboard, Clock, Folder, FolderOpen, FolderSearch, FolderX, RotateCw, Trash2 } from 'lucide-react';
+import {
+  ArrowRight,
+  Check,
+  ChevronRight,
+  Clipboard,
+  Clock,
+  FolderDown,
+  FolderSearch,
+  FolderX,
+  LayoutTemplate,
+  RotateCw,
+  SlidersHorizontal,
+  Sparkles,
+  Trash2,
+  type LucideIcon,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { TitleBar } from '../components/title-bar';
-import { Button, Chip, Dot } from '../components/ui';
+import { Button, Chip, Dot, cx } from '../components/ui';
 import { api, thumbUrl, type SessionSummary } from '../lib/api';
 import { date, duration, num, STATUS } from '../lib/format';
 import { t, tRust } from '../lib/i18n';
@@ -24,6 +39,73 @@ export async function chooseFolder(path?: string) {
   } catch (e) {
     fail(e);
   }
+}
+
+/** "Selamat pagi" … by the clock on this computer. */
+function greeting() {
+  const h = new Date().getHours();
+  return h < 11 ? t('Selamat pagi') : h < 15 ? t('Selamat siang') : h < 18 ? t('Selamat sore') : t('Selamat malam');
+}
+
+/** One of the three things the app does, as a big card with a picture of it. */
+function ModeCard({
+  preview,
+  icon: Icon,
+  title,
+  sub,
+  tags,
+  onClick,
+  primary,
+  highlight,
+}: {
+  preview: string;
+  icon: LucideIcon;
+  title: string;
+  sub: string;
+  tags: string[];
+  onClick: () => void;
+  primary?: boolean;
+  highlight?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cx(
+        'group flex flex-col gap-3.5 rounded-[18px] border bg-panel p-3 text-left transition-colors',
+        highlight ? 'border-2 border-gold bg-raised' : primary ? 'border-gold/70 hover:border-gold' : 'border-line-soft hover:border-line',
+      )}
+    >
+      <img src={preview} alt="" className="aspect-[296/196] w-full rounded-xl object-cover" draggable={false} />
+      <span className="flex flex-col gap-1.5 px-1.5">
+        <span className="flex items-center justify-between gap-2">
+          <span className="flex items-center gap-2.5">
+            <span className="flex size-[30px] items-center justify-center rounded-lg bg-raised text-gold-text">
+              <Icon size={16} />
+            </span>
+            <span className="text-[17px] font-semibold">{title}</span>
+          </span>
+          <span
+            className={cx(
+              'flex size-[30px] items-center justify-center rounded-full text-white transition-transform group-hover:translate-x-0.5',
+              primary ? 'bg-gold-gradient' : 'bg-raised',
+            )}
+          >
+            <ArrowRight size={15} />
+          </span>
+        </span>
+        <span className="text-xs text-muted">{sub}</span>
+      </span>
+      <span className="mx-1.5 h-px bg-line-soft" />
+      <span className="flex flex-wrap gap-1.5 px-1.5 pb-0.5">
+        {tags.map((tag) => (
+          <span key={tag} className="rounded-md bg-panel-2 px-1.5 py-0.5 text-[10px] text-faint">
+            {tag}
+          </span>
+        ))}
+      </span>
+    </button>
+  );
 }
 
 export function Home({ dragging }: { dragging: boolean }) {
@@ -90,48 +172,63 @@ export function Home({ dragging }: { dragging: boolean }) {
     <div className="flex h-full flex-col">
       <TitleBar />
       <main className="flex-1 overflow-y-auto">
-        <div className="mx-auto flex w-full max-w-[960px] flex-col gap-8 px-6 pt-10 pb-10 lg:px-8 lg:pt-14">
-          <div className="flex items-center gap-4">
-            <img src="/brand-icon.png" alt="" className="size-12 rounded-[14px]" />
-            <div className="flex flex-col gap-1">
-              <h1 className="text-2xl font-semibold lg:text-[28px]">{t('Mulai sesi baru')}</h1>
-              <p className="text-sm text-muted">{t('Pilih folder sesi, biar pilihfotomu yang memilah foto terbaiknya.')}</p>
+        <div className="mx-auto flex w-full max-w-[1000px] flex-col gap-7 px-6 pt-10 pb-10 lg:px-8 lg:pt-12">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[13px] text-gold-text">{greeting()}</span>
+              <h1 className="text-2xl font-semibold lg:text-[28px]">{t('Mau mengerjakan apa hari ini?')}</h1>
             </div>
-          </div>
-
-          <div className="flex flex-col gap-4 lg:flex-row">
-            <button
-              type="button"
-              onClick={() => chooseFolder()}
-              className={
-                'flex min-h-[200px] flex-1 flex-col items-center justify-center gap-3.5 rounded-2xl border bg-panel p-6 transition-colors lg:h-[220px] ' +
-                (dragging ? 'border-2 border-gold bg-raised' : 'border-gold/70 hover:border-gold')
-              }
+            <span
+              className={cx(
+                'flex items-center gap-2 rounded-[10px] border px-3 py-2 text-xs',
+                dragging ? 'border-gold bg-gold/10 text-gold-text' : 'border-line-soft bg-panel text-muted',
+              )}
             >
-              <span className="flex size-14 items-center justify-center rounded-2xl bg-gold/15 text-gold-text">
-                <FolderOpen size={26} />
-              </span>
-              <span className="text-base font-semibold">{dragging ? t('Lepas untuk membuka folder') : t('Seret folder sesi ke sini')}</span>
-              <span className="text-center text-xs text-faint">RAW Canon, Nikon, Sony, Fujifilm · JPEG</span>
-              <span className="mt-1 inline-flex h-[34px] items-center gap-2 rounded-[10px] bg-gold-gradient px-3.5 font-medium text-white">
-                <Folder size={15} /> {t('Pilih folder & pilah otomatis')}
-              </span>
-            </button>
-
-            <div className="flex flex-col gap-2.5 rounded-2xl border border-line-soft bg-panel p-5 lg:h-[220px] lg:w-[300px]">
-              <span className="flex size-10 items-center justify-center rounded-xl bg-raised text-gold-text">
-                <Clipboard size={20} />
-              </span>
-              <h2 className="text-[15px] font-semibold">{t('Klien kirim daftar foto?')}</h2>
-              <p className="text-xs text-muted">
-                {t('Pilih folder sesinya, lalu tempel pesan WhatsApp klien. Kami carikan dan kumpulkan fotonya — tanpa perlu dipilah dulu.')}
-              </p>
-              <div className="flex-1" />
-              <Button icon={Clipboard} className="self-start" onClick={clientPicks}>
-                {t('Tempel pilihan klien')}
-              </Button>
-            </div>
+              <FolderDown size={15} /> {dragging ? t('Lepas untuk memilah foto di folder ini') : t('Seret folder ke mana saja di jendela ini')}
+            </span>
           </div>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3 lg:gap-5">
+            <ModeCard
+              primary
+              highlight={dragging}
+              preview="/home/pilih.jpg"
+              icon={Sparkles}
+              title={t('Pilih foto')}
+              sub={t('Ratusan foto sesi dipilah otomatis jadi Pilih, Cek, dan Lewati, lengkap dengan alasannya.')}
+              tags={[t('Offline'), 'RAW & JPEG', '⌘O']}
+              onClick={() => chooseFolder()}
+            />
+            <ModeCard
+              preview="/home/edit.jpg"
+              icon={SlidersHorizontal}
+              title={t('Edit foto')}
+              sub={t('Atur cahaya dan warna ala Lightroom, dengan AI denoise, masking, dan preset.')}
+              tags={[t('Preset Lightroom'), 'XMP']}
+              onClick={() => go({ name: 'edit', back: { name: 'home' } })}
+            />
+            <ModeCard
+              preview="/home/konten.jpg"
+              icon={LayoutTemplate}
+              title={t('Buat konten')}
+              sub={t('Story dan feed Instagram dari template. Pilih template, isi fotonya, selesai.')}
+              tags={['Story 9:16', 'Feed 4:5', '1:1']}
+              onClick={() => go({ name: 'kreasi', back: { name: 'home' } })}
+            />
+          </div>
+
+          <button
+            type="button"
+            onClick={clientPicks}
+            className="-mt-3 flex items-center gap-3 self-start rounded-xl border border-line-soft bg-panel px-3.5 py-2.5 text-left hover:border-line"
+          >
+            <Clipboard size={16} className="shrink-0 text-gold-text" />
+            <span className="text-[13px]">
+              <span className="font-medium">{t('Klien kirim daftar foto?')}</span>{' '}
+              <span className="text-muted">{t('Tempel pesan WhatsApp-nya, kami carikan fotonya — tanpa perlu dipilah dulu.')}</span>
+            </span>
+            <ChevronRight size={15} className="shrink-0 text-faint" />
+          </button>
 
           <section className="flex flex-col gap-2.5">
             <h2 className="text-sm font-semibold">{t('Sesi terakhir')}</h2>

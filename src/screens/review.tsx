@@ -25,10 +25,13 @@ import {
   Star,
   ChartPie,
   Images,
+  ChevronDown,
+  LayoutTemplate,
+  SlidersHorizontal as Sliders,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { TitleBar } from '../components/title-bar';
+import { TitleBar, isMac } from '../components/title-bar';
 import { Button, Chip, Dot, IconButton, Kbd, StatusBadge, Stars, STATUS_ICON, cx } from '../components/ui';
 import { isManual, thumbUrl, type PhotoEntry, type ShootType, type Status, type Strictness } from '../lib/api';
 import { clock, duration, eyeSummary,
@@ -248,13 +251,12 @@ export function Review() {
             >
               <Clipboard size={13} className="text-muted" /> {t('Pilihan klien')}
             </button>
-            <button
-            type="button"
-            onClick={() => setExporting(true)}
-            className="inline-flex h-7 items-center gap-1.5 rounded-md bg-gold-gradient px-2.5 text-xs font-semibold text-white"
-          >
-            <Upload size={13} /> {t('Ekspor')}
-          </button>
+            <ContinueMenu
+              picks={counts.pick}
+              onExport={() => setExporting(true)}
+              onEdit={() => go({ name: 'edit', back: { name: 'review' } })}
+              onCreate={() => go({ name: 'kreasi', back: { name: 'review' } })}
+            />
           </>
         }
       />
@@ -624,6 +626,64 @@ function Retune() {
         <p className="px-1 text-[11px] leading-snug text-faint">{t('Foto yang sudah diubah manual tidak ikut berubah.')}</p>
       </div>
     </>
+  );
+}
+
+/**
+ * "Lanjutkan ▾": what to do with the picked photos — export them, edit them,
+ * or make Instagram content from them. ⌘E still opens Ekspor directly.
+ */
+function ContinueMenu({ picks, onExport, onEdit, onCreate }: { picks: number; onExport: () => void; onEdit: () => void; onCreate: () => void }) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close();
+    window.addEventListener('mousedown', close);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', close);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+  const item = (Icon: LucideIcon, title: string, sub: string, run: () => void, kbd?: string) => (
+    <button
+      type="button"
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={() => (setOpen(false), run())}
+      className="flex items-center gap-3 rounded-lg p-2.5 text-left hover:bg-raised"
+    >
+      <Icon size={16} className="shrink-0 text-gold-text" />
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="text-[13px] font-medium">{title}</span>
+        <span className="text-[11px] text-faint">{sub}</span>
+      </span>
+      {kbd && <span className="text-[11px] text-faint">{kbd}</span>}
+    </button>
+  );
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onMouseDown={(e) => e.stopPropagation()}
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="inline-flex h-7 items-center gap-1.5 rounded-md bg-gold-gradient px-2.5 text-xs font-semibold text-white"
+      >
+        {t('Lanjutkan')} <ChevronDown size={13} />
+      </button>
+      {open && (
+        <div
+          onMouseDown={(e) => e.stopPropagation()}
+          className="absolute top-9 right-0 z-50 flex w-72 flex-col gap-0.5 rounded-xl border border-line bg-panel-2 p-1.5 shadow-2xl"
+        >
+          <span className="px-2.5 pt-1.5 pb-1 text-[11px] font-semibold text-faint uppercase">{t('{count} foto dipilih', { n: picks, count: num(picks) })}</span>
+          {item(Upload, t('Ekspor'), t('XMP untuk Lightroom, salin, atau JPG'), onExport, isMac ? '⌘E' : 'Ctrl+E')}
+          {item(Sliders, t('Edit foto'), t('Buka foto Dipilih di editor'), onEdit)}
+          {item(LayoutTemplate, t('Buat konten'), t('Story / feed dari foto Dipilih'), onCreate)}
+        </div>
+      )}
+    </div>
   );
 }
 

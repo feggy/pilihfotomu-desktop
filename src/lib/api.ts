@@ -249,6 +249,11 @@ export const api = {
     invoke<ExportReport>('export_xmp', { existing, withReasons, jpegCopies }),
   copyToFolder: (root: string, ids: number[], folderName: string) =>
     invoke<CopyReport>('copy_to_folder', { root, ids, folderName }),
+  /** Saves picture bytes into `<root>/<folder>/<name>` (never overwrites); returns the path written. */
+  saveExport: (root: string, folder: string, name: string, bytes: Uint8Array) =>
+    invoke<string>('save_export', bytes, {
+      headers: { root: encodeURIComponent(root), folder: encodeURIComponent(folder), name: encodeURIComponent(name) },
+    }),
   exportJpegs: (
     root: string,
     ids: number[],

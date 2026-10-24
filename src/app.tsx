@@ -3,7 +3,10 @@ import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { TriangleAlert, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
+import { KreasiScreen } from './kreasi/screen';
+import { useKreasi } from './kreasi/store';
 import { ClientPicks } from './screens/client-picks';
+import { EditPhotos } from './screens/edit-photos';
 import { Compare } from './screens/compare';
 import { chooseFolder, Home } from './screens/home';
 import { ProgressScreen } from './screens/progress';
@@ -51,6 +54,8 @@ export function App() {
           document.execCommand(payload);
         } else if (current.name === 'review' || current.name === 'compare') {
           useApp.getState()[payload]();
+        } else if (current.name === 'kreasi') {
+          useKreasi.getState()[payload]();
         }
         return;
       }
@@ -87,6 +92,10 @@ export function App() {
       <Compare key={screen.ids?.join(',') ?? screen.group} group={screen.group} ids={screen.ids} />
     ) : screen.name === 'picks' ? (
       <ClientPicks key={screen.root} root={screen.root} back={screen.back} />
+    ) : screen.name === 'kreasi' ? (
+      <KreasiScreen back={screen.back} />
+    ) : screen.name === 'edit' ? (
+      <EditPhotos back={screen.back} />
     ) : screen.name === 'settings' ? (
       <Settings key={screen.section ?? 'license'} back={screen.back} initial={screen.section} />
     ) : (
@@ -113,7 +122,7 @@ export function App() {
 
 function fromReview(s: Screen): boolean {
   if (s.name === 'review' || s.name === 'compare') return true;
-  if (s.name === 'settings' || s.name === 'picks') return fromReview(s.back);
+  if (s.name === 'settings' || s.name === 'picks' || s.name === 'kreasi' || s.name === 'edit') return fromReview(s.back);
   return false;
 }
 
