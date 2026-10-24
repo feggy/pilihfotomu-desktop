@@ -392,7 +392,7 @@ export function Settings({ back, initial = 'license' }: { back: Screen; initial?
         </nav>
         <main className="flex-1 overflow-y-auto px-6 py-8 lg:px-12 lg:py-9">
           {section === 'license' && (
-            <div className="flex max-w-[760px] flex-col gap-5">
+            <div className="flex max-w-[560px] flex-col gap-5">
               <h1 className="text-[22px] font-semibold">{t('Lisensi & perangkat')}</h1>
               <div className="flex flex-col gap-3 rounded-2xl border border-line-soft bg-panel p-5">
                 <span className="flex items-center gap-2.5 text-base font-semibold">
@@ -401,7 +401,7 @@ export function Settings({ back, initial = 'license' }: { back: Screen; initial?
                 </span>
                 <p className="text-[13px] text-muted">
                   {t(
-                    'Aktivasi lisensi (1 lisensi = 1 perangkat, update gratis selamanya) dibuat setelah server lisensi di pilihfotomu-api siap. Untuk sekarang semua fitur terbuka.',
+                    'Aktivasi lisensi (1 lisensi = 1 perangkat, update gratis selamanya) menyusul. Untuk sekarang semua fitur terbuka.',
                   )}
                 </p>
               </div>

@@ -56,6 +56,7 @@ function ModeCard({
   tags,
   onClick,
   highlight,
+  soon,
 }: {
   preview: string;
   icon: LucideIcon;
@@ -64,6 +65,8 @@ function ModeCard({
   tags: string[];
   onClick: () => void;
   highlight?: boolean;
+  /** Not built yet: says so on the card, so it promises nothing. */
+  soon?: boolean;
 }) {
   return (
     <button
@@ -83,6 +86,7 @@ function ModeCard({
               <Icon size={16} />
             </span>
             <span className="text-[17px] font-semibold">{title}</span>
+            {soon && <Chip color="var(--color-faint)">{t('Segera')}</Chip>}
           </span>
           <span
             className={cx(
@@ -237,6 +241,7 @@ export function Home({ dragging }: { dragging: boolean }) {
               onClick={() => chooseFolder()}
             />
             <ModeCard
+              soon
               preview="/home/edit.jpg"
               icon={SlidersHorizontal}
               title={t('Edit foto')}

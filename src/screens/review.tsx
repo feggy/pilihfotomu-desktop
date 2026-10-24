@@ -646,7 +646,7 @@ function ContinueMenu({ picks, onExport, onEdit, onCreate }: { picks: number; on
       window.removeEventListener('keydown', onKey);
     };
   }, [open]);
-  const item = (Icon: LucideIcon, title: string, sub: string, run: () => void, kbd?: string) => (
+  const item = (Icon: LucideIcon, title: string, sub: string, run: () => void, kbd?: React.ReactNode) => (
     <button
       type="button"
       onMouseDown={(e) => e.stopPropagation()}
@@ -677,9 +677,9 @@ function ContinueMenu({ picks, onExport, onEdit, onCreate }: { picks: number; on
           onMouseDown={(e) => e.stopPropagation()}
           className="absolute top-9 right-0 z-50 flex w-72 flex-col gap-0.5 rounded-xl border border-line bg-panel-2 p-1.5 shadow-2xl"
         >
-          <span className="px-2.5 pt-1.5 pb-1 text-[11px] font-semibold text-faint uppercase">{t('{count} foto dipilih', { n: picks, count: num(picks) })}</span>
+          <span className="px-2.5 pt-1.5 pb-1 text-[11px] font-semibold text-faint uppercase">{t('{count} foto berstatus Pilih', { n: picks, count: num(picks) })}</span>
           {item(Upload, t('Ekspor'), t('XMP untuk Lightroom, salin, atau JPG'), onExport, isMac ? '⌘E' : 'Ctrl+E')}
-          {item(Sliders, t('Edit foto'), t('Buka foto Dipilih di editor'), onEdit)}
+          {item(Sliders, t('Edit foto'), t('Buka foto Dipilih di editor'), onEdit, <Chip color="var(--color-faint)">{t('Segera')}</Chip>)}
           {item(LayoutTemplate, t('Buat konten'), t('Story / feed dari foto Dipilih'), onCreate)}
         </div>
       )}

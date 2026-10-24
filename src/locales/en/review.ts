@@ -93,6 +93,7 @@ export default {
   'Nama: “{query}”': 'Name: “{query}”',
   'Tampilkan semua': 'Show all',
   '{count} foto dipilih': ['{count} photo selected', '{count} photos selected'],
+  '{count} foto berstatus Pilih': ['{count} picked photo', '{count} picked photos'],
   'tandai semuanya:': 'mark all:',
   'Hanya {n} foto pertama': 'Only the first {n} photos',
   Bandingkan: 'Compare',

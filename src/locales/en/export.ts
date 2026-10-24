@@ -185,8 +185,8 @@ export default {
     'The menu bar follows too. Keywords written to .xmp files stay in Indonesian (pilihfotomu › pilih / cek / lewati), so the Lightroom keyword list stays the same across exports.',
   'Versi pengembangan': 'Development version',
   'Belum perlu aktivasi': 'No activation needed yet',
-  'Aktivasi lisensi (1 lisensi = 1 perangkat, update gratis selamanya) dibuat setelah server lisensi di pilihfotomu-api siap. Untuk sekarang semua fitur terbuka.':
-    'License activation (1 license = 1 device, free updates forever) comes once the license server in pilihfotomu-api is ready. For now every feature is open.',
+  'Aktivasi lisensi (1 lisensi = 1 perangkat, update gratis selamanya) menyusul. Untuk sekarang semua fitur terbuka.':
+    'License activation (1 license = 1 device, free updates forever) is coming. For now every feature is open.',
   'Versi {version}': 'Version {version}',
   'Semua foto diproses di perangkat ini. Tidak ada foto yang di-upload, dan file asli tidak pernah diubah.':
     'All photos are processed on this device. Nothing is uploaded, and originals are never changed.',
