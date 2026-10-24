@@ -10,7 +10,7 @@ import { useApp } from '../store';
 import { previewUrl } from './canvas';
 import { slotsFor, templateOf } from './engine/document';
 import { exportCollage } from './engine/render';
-import { loadDocFonts, loadLocalImage, photoIdOf } from './kit';
+import { coverCrop, loadDocFonts, loadLocalImage, photoIdOf, photoIdOfSticker } from './kit';
 import { emptyAssets } from './preview';
 import { useKreasi } from './store';
 
@@ -58,11 +58,18 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
           if (s && id != null) pictures.set(s.file.fileId, (await loadLocalImage(await previewUrl(source.root, id))) as unknown as HTMLCanvasElement);
         }),
       );
+      const stickerImages = new Map<string, HTMLImageElement>();
+      await Promise.all(
+        doc.stickers.map(async (st) => {
+          const id = photoIdOfSticker(st.sticker);
+          if (id != null) stickerImages.set(st.sticker, coverCrop(await loadLocalImage(await previewUrl(source.root, id)), st.ratio ?? 1) as unknown as HTMLImageElement);
+        }),
+      );
       const blobs = await exportCollage({
         slideWidth: width,
         doc,
         template: templateOf(doc),
-        assets: (({ images: _, ...rest }) => rest)(emptyAssets()),
+        assets: { ...(({ images: _, ...rest }) => rest)(emptyAssets()), stickerImages },
         format,
         quality: 0.92,
         pictures,

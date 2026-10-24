@@ -6,7 +6,17 @@
 
 import { convertFileSrc } from '@tauri-apps/api/core';
 
-import { FORMATS, emptyPhotoFile, templateOf, type CollageDoc, type FormatId } from './engine/document';
+import {
+  BACKGROUND_PLACEHOLDER,
+  FORMATS,
+  IMAGE_STICKER_PREFIX,
+  emptyPhotoFile,
+  isPlaceholder,
+  templateOf,
+  type CollageDoc,
+  type FormatId,
+  type StickerLayer,
+} from './engine/document';
 import { normalizeDoc } from './engine/draft';
 import { FONTS, type FontFamilies } from './engine/font-catalog';
 import { cellLayouts, frameOf } from './engine/render';
@@ -139,6 +149,32 @@ export function photoFile(opts: { root: string; id: number; name: string; thumb:
 export const photoIdOf = (file: DriveFile) => (file.fileId.startsWith('foto-') ? Number(file.fileId.slice(5)) : null);
 
 export { emptyPhotoFile };
+
+/**
+ * A background-image place filled with a session photo: an image sticker
+ * whose id names the photo, so the design file stays small and the picture
+ * is read from the folder like the photo places' are.
+ */
+const PHOTO_STICKER = `${IMAGE_STICKER_PREFIX}foto-`;
+export const photoSticker = (photoId: number) => `${PHOTO_STICKER}${photoId}`;
+export const photoIdOfSticker = (sticker: string) => (sticker.startsWith(PHOTO_STICKER) ? Number(sticker.slice(PHOTO_STICKER.length)) : null);
+/** A place for a background picture, empty or filled with a photo. */
+export const isPicturePlace = (st: Pick<StickerLayer, 'sticker'>) => isPlaceholder(st.sticker) || photoIdOfSticker(st.sticker) != null;
+export const EMPTY_PICTURE = BACKGROUND_PLACEHOLDER;
+
+/**
+ * `img` cut to the middle at a box `ratio` (height / width) — the engine
+ * stretches a picture to its box, a photo should fill it instead.
+ */
+export function coverCrop(img: HTMLImageElement, ratio: number): HTMLCanvasElement {
+  const iw = img.naturalWidth, ih = img.naturalHeight;
+  const sw = Math.min(iw, ih / ratio), sh = sw * ratio;
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(sw));
+  c.height = Math.max(1, Math.round(sh));
+  c.getContext('2d')!.drawImage(img, (iw - sw) / 2, (ih - sh) / 2, sw, sh, 0, 0, c.width, c.height);
+  return c;
+}
 
 const images = new Map<string, Promise<HTMLImageElement>>();
 /**

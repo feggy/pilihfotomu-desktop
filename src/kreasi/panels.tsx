@@ -28,6 +28,7 @@ import { SHAPES, shapeById } from './engine/shapes';
 import { STICKER_CATEGORIES, STICKERS, stickerById } from './engine/stickers';
 import { PRESET_CATEGORIES, TEXT_PRESETS } from './engine/text-presets';
 import { GENERATED_PRESETS } from './engine/text-presets-generated';
+import { isPicturePlace } from './kit';
 import { itemPreviewOf, previewOf } from './preview';
 
 const ALL_PRESETS = [...TEXT_PRESETS, ...GENERATED_PRESETS];
@@ -158,6 +159,7 @@ export function LayersPanel({
 export function elementName(st: { sticker: string; gradient?: unknown } | undefined): string {
   if (!st) return t('Elemen');
   if (st.gradient) return t('Gradasi##lapisan');
+  if (isPicturePlace(st)) return t('Gambar latar');
   return stickerById(st.sticker)?.name ?? shapeById(st.sticker)?.name ?? t('Elemen');
 }
 

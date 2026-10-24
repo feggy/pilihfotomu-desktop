@@ -35,11 +35,11 @@ import { thumbUrl } from '../lib/api';
 import { t } from '../lib/i18n';
 import { duplicate, keyOf, nudge, patchSticker, patchText, remove, type Edit } from './actions';
 import { DocCanvas, useBox, useDocImages, type Box } from './canvas';
-import { isLayerLocked, type CollageDoc, type StickerLayer, type TextLayer } from './engine/document';
+import { isLayerLocked, isPlaceholder, type CollageDoc, type StickerLayer, type TextLayer } from './engine/document';
 import { FONT_CATEGORIES, FONTS } from './engine/font-catalog';
 import { frameOf, type Selection } from './engine/render';
 import { ExportDialog } from './export';
-import { fontFamilies, formatLabel, photoIdOf, slotShapes } from './kit';
+import { EMPTY_PICTURE, fontFamilies, formatLabel, isPicturePlace, photoIdOf, photoSticker, slotShapes } from './kit';
 import { BackgroundPanel, ElementsPanel, LayersPanel, TextPanel, elementName } from './panels';
 import { facePan, ranked, useKreasi, type SourcePhoto } from './store';
 import { SHAPE_LABEL, ShapeIcon, Steps } from './ui';
@@ -61,6 +61,8 @@ export function Editor() {
   const [panel, setPanel] = useState<Panel>('lapisan');
   const [exporting, setExporting] = useState(false);
   const [replacing, setReplacing] = useState<number | null>(null);
+  // A background-image place (by its sticker id) being given a photo.
+  const [picturing, setPicturing] = useState<string | null>(null);
   // "Atur ukuran" (⌘T, double-click): the photo place whose whole picture is out to drag and resize.
   const [cropping, setCropping] = useState<number | null>(null);
   // The layer row under the pointer: outlined on the canvas as if hovered there.
@@ -125,7 +127,7 @@ export function Editor() {
         el instanceof HTMLTextAreaElement ||
         el instanceof HTMLSelectElement ||
         (el instanceof HTMLInputElement && ['text', 'search', 'number', 'email', 'url', 'password', ''].includes(el.type));
-      if (typing || exporting || replacing != null) return;
+      if (typing || exporting || replacing != null || picturing != null) return;
       const d = useKreasi.getState().doc;
       if (!d) return;
       const mod = e.metaKey || e.ctrlKey;
@@ -206,6 +208,10 @@ export function Editor() {
     if (selection?.kind === 'text') {
       items.push(btn(<Pencil size={13} />, t('Ubah teks'), () => setEditingText(selection.id)));
       items.push(btn(<Copy size={13} />, t('Duplikat'), copy));
+      items.push(btn(<Trash2 size={13} />, t('Hapus'), () => (edit(remove(selection)), setSelection(null)), true));
+    } else if (selection?.kind === 'sticker' && selSticker && isPicturePlace(selSticker)) {
+      const empty = isPlaceholder(selSticker.sticker);
+      items.push(btn(<Replace size={13} />, empty ? t('Pilih foto##isi') : t('Ganti'), () => setPicturing(selection.id)));
       items.push(btn(<Trash2 size={13} />, t('Hapus'), () => (edit(remove(selection)), setSelection(null)), true));
     } else if (selection?.kind === 'sticker') {
       items.push(btn(<Copy size={13} />, t('Duplikat'), copy));
@@ -351,7 +357,13 @@ export function Editor() {
           {selText ? (
             <TextInspector key={selText.id} layer={selText} doc={doc} onChange={(p) => edit(patchText(selText.id, p))} onLive={(p) => live(patchText(selText.id, p))} onCommit={commit} />
           ) : selSticker ? (
-            <StickerInspector layer={selSticker} onChange={(p) => edit(patchSticker(selSticker.id, p))} onLive={(p) => live(patchSticker(selSticker.id, p))} onCommit={commit} />
+            <StickerInspector
+              layer={selSticker}
+              onChange={(p) => edit(patchSticker(selSticker.id, p))}
+              onLive={(p) => live(patchSticker(selSticker.id, p))}
+              onCommit={commit}
+              onPicture={() => setPicturing(selSticker.id)}
+            />
           ) : selection?.kind === 'cell' ? (
             <PhotoInspector
               index={selection.index}
@@ -373,7 +385,21 @@ export function Editor() {
         </aside>
       </div>
       {exporting && <ExportDialog onClose={() => setExporting(false)} />}
-      {replacing != null && <ReplaceDialog index={replacing} onClose={() => setReplacing(null)} onPickMore={() => (setActive(replacing), setStep('isi'))} />}
+      {replacing != null && (
+        <ReplaceDialog
+          title={t('Ganti Foto {n}', { n: replacing + 1 })}
+          onPick={(p) => useKreasi.getState().place(replacing, p)}
+          onClose={() => setReplacing(null)}
+          onPickMore={() => (setActive(replacing), setStep('isi'))}
+        />
+      )}
+      {picturing != null && (
+        <ReplaceDialog
+          title={t('Foto untuk gambar latar')}
+          onPick={(p) => edit(patchSticker(picturing, { sticker: photoSticker(p.id) }))}
+          onClose={() => setPicturing(null)}
+        />
+      )}
     </div>
   );
 }
@@ -565,13 +591,38 @@ function TextInspector({ layer, doc, onChange, onLive, onCommit }: { layer: Text
   );
 }
 
-function StickerInspector({ layer, onChange, onLive, onCommit }: { layer: StickerLayer; onChange: (p: Partial<StickerLayer>) => void; onLive: (p: Partial<StickerLayer>) => void; onCommit: () => void }) {
+function StickerInspector({
+  layer,
+  onChange,
+  onLive,
+  onCommit,
+  onPicture,
+}: {
+  layer: StickerLayer;
+  onChange: (p: Partial<StickerLayer>) => void;
+  onLive: (p: Partial<StickerLayer>) => void;
+  onCommit: () => void;
+  onPicture: () => void;
+}) {
   const doc = useKreasi((s) => s.doc)!;
   const name = elementName(layer);
+  const picture = isPicturePlace(layer);
+  const empty = isPlaceholder(layer.sticker);
   return (
     <>
       <span className="text-[15px] font-semibold">{name}</span>
-      {!layer.gradient && (
+      {picture && (
+        <Section title={t('Foto##latar')}>
+          <p className="text-xs text-muted">
+            {empty ? t('Tempat untuk foto latar. Kosong tidak ikut terekspor.') : t('Dipotong pas di tengah kotaknya.')}
+          </p>
+          <Btn onClick={onPicture}>
+            <Replace size={13} /> {empty ? t('Pilih foto##isi') : t('Ganti foto')}
+          </Btn>
+          {!empty && <Btn onClick={() => onChange({ sticker: EMPTY_PICTURE })}>{t('Kosongkan')}</Btn>}
+        </Section>
+      )}
+      {!layer.gradient && !picture && (
         <Section title={t('Warna')}>
           <Swatches doc={doc} value={layer.color} onPick={(color) => onChange({ color })} />
         </Section>
@@ -666,9 +717,8 @@ function FontPicker({ value, onChange }: { value: string; onChange: (id: string)
 }
 
 /** Ganti foto without leaving the editor: the source's photos, best first. */
-function ReplaceDialog({ index, onClose, onPickMore }: { index: number; onClose: () => void; onPickMore: () => void }) {
+function ReplaceDialog({ title, onPick, onClose, onPickMore }: { title: string; onPick: (p: SourcePhoto) => void; onClose: () => void; onPickMore?: () => void }) {
   const source = useKreasi((s) => s.source);
-  const place = useKreasi((s) => s.place);
   const [q, setQ] = useState('');
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
@@ -683,7 +733,7 @@ function ReplaceDialog({ index, onClose, onPickMore }: { index: number; onClose:
     <div className="fixed inset-x-0 top-10 bottom-0 z-40 flex items-center justify-center bg-black/70 p-4" onMouseDown={onClose}>
       <div onMouseDown={(e) => e.stopPropagation()} className="flex max-h-full w-[760px] max-w-full flex-col gap-4 rounded-[18px] border border-line bg-panel p-6 shadow-2xl">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold">{t('Ganti Foto {n}', { n: index + 1 })}</h2>
+          <h2 className="text-lg font-semibold">{title}</h2>
           <div className="flex items-center gap-2">
             <label className="flex h-8 w-52 items-center gap-2 rounded-lg border border-line bg-bg px-2.5 focus-within:border-gold">
               <Search size={13} className="text-faint" />
@@ -696,7 +746,7 @@ function ReplaceDialog({ index, onClose, onPickMore }: { index: number; onClose:
         </div>
         <div className="grid min-h-0 grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-2.5 overflow-y-auto p-1">
           {photos.map((p) => (
-            <button key={p.id} type="button" onClick={() => (place(index, p), onClose())} title={p.name} className="aspect-[3/2] overflow-hidden rounded-lg bg-raised hover:ring-2 hover:ring-gold">
+            <button key={p.id} type="button" onClick={() => (onPick(p), onClose())} title={p.name} className="aspect-[3/2] overflow-hidden rounded-lg bg-raised hover:ring-2 hover:ring-gold">
               {p.thumb && <img src={thumbUrl(p.thumb)} alt="" loading="lazy" className="size-full object-cover" />}
             </button>
           ))}
@@ -704,9 +754,11 @@ function ReplaceDialog({ index, onClose, onPickMore }: { index: number; onClose:
         </div>
         <div className="flex items-center justify-between text-xs text-faint">
           <span>{t('Foto Dipilih dan Cek, bintang tertinggi dulu.')}</span>
-          <button type="button" onClick={onPickMore} className="font-medium text-gold-text hover:underline">
-            {t('Pilih dari folder lain…')}
-          </button>
+          {onPickMore && (
+            <button type="button" onClick={onPickMore} className="font-medium text-gold-text hover:underline">
+              {t('Pilih dari folder lain…')}
+            </button>
+          )}
         </div>
       </div>
     </div>

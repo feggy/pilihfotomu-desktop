@@ -189,4 +189,9 @@ export default {
   'Ekspor {format}': 'Export {format}',
   'Slide {n}': 'Slide {n}',
   'Atur ukuran': 'Resize',
+  'Foto untuk gambar latar': 'Photo for the background picture',
+  'Gambar latar': 'Background picture',
+  'Foto##latar': 'Photo',
+  'Tempat untuk foto latar. Kosong tidak ikut terekspor.': 'A place for a background photo. Left empty, it isn’t exported.',
+  'Dipotong pas di tengah kotaknya.': 'Cropped to fill its box, from the middle.',
 } as Record<string, string | [string, string]>;

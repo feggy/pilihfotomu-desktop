@@ -19,7 +19,7 @@ import {
 import { itemBounds } from './engine/bounds';
 import { safeArea } from './engine/instagram';
 import { cellLayouts, drawCollage, drawSticker, frameOf, hitCell, photoPlacement, placeImage, stickerBox, textBox, type Frame2D, type Selection } from './engine/render';
-import { fontFamilies, loadDocFonts, loadLocalImage, photoIdOf } from './kit';
+import { coverCrop, fontFamilies, loadDocFonts, loadLocalImage, photoIdOf, photoIdOfSticker } from './kit';
 import { emptyAssets } from './preview';
 
 const previewPaths = new Map<string, Promise<string>>();
@@ -41,7 +41,10 @@ export function previewUrl(root: string, id: number): Promise<string> {
  */
 export function useDocImages(doc: CollageDoc | null, root: string | null, sharp: boolean) {
   const [images, setImages] = useState<Map<string, HTMLImageElement>>(new Map());
-  const key = doc ? slotsFor(doc, templateOf(doc).cells.length).map((s) => s?.file.fileId ?? '').join(',') : '';
+  const pictures = doc ? doc.stickers.filter((s) => photoIdOfSticker(s.sticker) != null) : [];
+  const key = doc
+    ? [...slotsFor(doc, templateOf(doc).cells.length).map((s) => s?.file.fileId ?? ''), ...pictures.map((s) => `${s.sticker}:${(s.ratio ?? 1).toFixed(3)}`)].join(',')
+    : '';
   useEffect(() => {
     if (!doc) return;
     let alive = true;
@@ -60,6 +63,14 @@ export function useDocImages(doc: CollageDoc | null, root: string | null, sharp:
           .then((img) => alive && setImages((m) => new Map(m).set(id, img)), () => {});
       }
     }
+    // Background pictures from photos, cut to their box (keyed by the sticker id).
+    if (root)
+      for (const st of pictures) {
+        const n = photoIdOfSticker(st.sticker)!;
+        previewUrl(root, n)
+          .then(loadLocalImage)
+          .then((img) => alive && setImages((m) => new Map(m).set(st.sticker, coverCrop(img, st.ratio ?? 1) as unknown as HTMLImageElement)), () => {});
+      }
     return () => {
       alive = false;
     };
@@ -231,7 +242,7 @@ export function DocCanvas({
       width: f.width,
       doc,
       template: templateOf(doc),
-      assets: { ...emptyAssets(), images },
+      assets: { ...emptyAssets(), images, stickerImages: images },
       editor: {
         selection: outlines ? null : selection,
         swapTarget: null,
