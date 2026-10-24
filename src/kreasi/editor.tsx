@@ -437,7 +437,7 @@ export function Editor() {
         <div className="flex min-w-0 flex-1 flex-col bg-[#08100d]">
           <div ref={stageRef} className="min-h-0 flex-1 overflow-auto">
             {/* Centred while it fits; scrollable from its edges once zoomed past the window. Room above for the quick bar. */}
-            <div className="flex min-h-full w-max min-w-full items-center justify-center px-8 pt-16 pb-8 outline-none" tabIndex={-1} onPointerDown={(e) => e.target === e.currentTarget && e.button === 0 && (e.currentTarget.focus({ preventScroll: true }), select(null), bandRef.current?.(e))}>
+            <div className="flex min-h-full w-max min-w-full items-center justify-center px-8 pt-16 pb-8 outline-none" data-keyboard-target tabIndex={-1} onPointerDown={(e) => e.target === e.currentTarget && e.button === 0 && (e.currentTarget.focus({ preventScroll: true }), select(null), bandRef.current?.(e))}>
               {stage.w > 0 && (
                 <DocCanvas
                   doc={doc}

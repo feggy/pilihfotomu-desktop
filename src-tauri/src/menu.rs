@@ -43,6 +43,8 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
 pub fn build_in<R: Runtime>(app: &AppHandle<R>, en: bool) -> tauri::Result<Menu<R>> {
     hide_system_edit_items();
     let l = |id: &'static str, english: &'static str| if en { english } else { id };
+    // A shortcut written in the item's name, for items whose keys the page handles.
+    let keys = |mac: &'static str, other: &'static str| if cfg!(target_os = "macos") { mac } else { other };
     let item = |id: &str, text: &str, accel: Option<&str>| {
         let b = MenuItemBuilder::with_id(id, text);
         match accel {
@@ -81,14 +83,18 @@ pub fn build_in<R: Runtime>(app: &AppHandle<R>, en: bool) -> tauri::Result<Menu<
     // Without these, ⌘C / ⌘V / ⌘A don't work in text fields on macOS.
     let edit = SubmenuBuilder::new(app, "Edit")
         // Custom, not the system items: in a text field they undo typing,
-        // elsewhere they undo status and star changes (the UI decides).
-        .item(&item("undo", l("Urungkan", "Undo"), Some("CmdOrCtrl+Z"))?)
-        .item(&item("redo", l("Ulangi", "Redo"), Some("CmdOrCtrl+Shift+Z"))?)
+        // elsewhere the design or the culling (the UI decides). No shortcut
+        // here: on macOS a menu shortcut takes ⌘Z before the page sees it, so
+        // the page handles ⌘Z / ⇧⌘Z itself (app.tsx) and these are for clicking.
+        .item(&item("undo", &format!("{}  {}", l("Urungkan", "Undo"), keys("⌘Z", "Ctrl+Z")), None)?)
+        .item(&item("redo", &format!("{}  {}", l("Ulangi", "Redo"), keys("⇧⌘Z", "Ctrl+Shift+Z")), None)?)
         .separator()
         .item(&PredefinedMenuItem::cut(app, Some(l("Potong", "Cut")))?)
         .item(&PredefinedMenuItem::copy(app, Some(l("Salin", "Copy")))?)
         .item(&PredefinedMenuItem::paste(app, Some(l("Tempel", "Paste")))?)
-        .item(&PredefinedMenuItem::select_all(app, Some(l("Pilih semua", "Select All")))?)
+        // Likewise ⌘A: all the text in a field, all the photos in Review, all
+        // the layers in Buat konten — the page decides.
+        .item(&item("select-all", &format!("{}  {}", l("Pilih semua", "Select All"), keys("⌘A", "Ctrl+A")), None)?)
         .build()?;
 
     let view = SubmenuBuilder::new(app, l("Tampilan", "View"))

@@ -710,6 +710,7 @@ export function DocCanvas({
         ref={ref}
         style={{ width: f.width, height: f.height }}
         tabIndex={outlines ? -1 : undefined}
+        data-keyboard-target
         className="block touch-none rounded-[4px] shadow-[0_20px_60px_rgb(0_0_0/0.5)] outline-none"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}

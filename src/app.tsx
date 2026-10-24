@@ -13,6 +13,7 @@ import { ProgressScreen } from './screens/progress';
 import { Review } from './screens/review';
 import { Settings } from './screens/settings';
 import { Setup } from './screens/setup';
+import { isMac } from './components/title-bar';
 import { lang, syncNativeLang, t, tRust, useLang } from './lib/i18n';
 import { useApp, type Screen } from './store';
 
@@ -27,8 +28,6 @@ function isTyping(el: Element | null) {
     (el instanceof HTMLElement && el.isContentEditable)
   );
 }
-
-let lastKeyUndo = 0;
 
 /** Undo / redo for whatever the open screen keeps a history of. */
 function undoRedo(which: 'undo' | 'redo') {
@@ -65,19 +64,24 @@ export function App() {
     };
   }, []);
 
-  // ⌘Z / ⇧⌘Z (Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y) caught in the page first: on
-  // macOS the web view answers ⌘Z itself (its own typing history) before the
-  // menu bar sees it, so the menu item alone can't be relied on. In a text
-  // field the keys stay the field's.
+  // ⌘Z / ⇧⌘Z (Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y) and ⌘A are the page's alone
+  // (the menu bar items have no shortcut, see menu.rs). In a text field they
+  // act on the typing; elsewhere on the screen's own history and selection.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!(e.metaKey || e.ctrlKey) || e.altKey || isTyping(document.activeElement)) return;
+      if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
       const k = e.key.toLowerCase();
+      const typing = isTyping(document.activeElement);
+      if (k === 'a' && typing) {
+        e.preventDefault();
+        document.execCommand('selectAll');
+        return;
+      }
       const which = k === 'z' ? (e.shiftKey ? 'redo' : 'undo') : k === 'y' && !e.shiftKey ? 'redo' : null;
       if (!which) return;
       e.preventDefault();
-      lastKeyUndo = Date.now();
-      undoRedo(which);
+      if (typing) document.execCommand(which);
+      else undoRedo(which);
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
@@ -89,8 +93,13 @@ export function App() {
       const { screen: current, session: open, go: goTo } = useApp.getState();
       if (payload === 'undo' || payload === 'redo') {
         if (isTyping(document.activeElement)) document.execCommand(payload);
-        // The same key press already handled in the page (some systems send both).
-        else if (Date.now() - lastKeyUndo > 300) undoRedo(payload);
+        else undoRedo(payload);
+        return;
+      }
+      if (payload === 'select-all') {
+        // As if ⌘A were pressed: each screen handles it its own way.
+        if (isTyping(document.activeElement)) document.execCommand('selectAll');
+        else window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', code: 'KeyA', metaKey: isMac, ctrlKey: !isMac, bubbles: true }));
         return;
       }
       if (current.name === 'progress') return; // don't walk away from a running analysis

@@ -120,6 +120,8 @@ button:disabled {
   outline-offset: 2px;
 }
 input:focus-visible,
-textarea:focus-visible {
+textarea:focus-visible,
+/* Focused only so the keyboard reaches the editor (Buat konten): no ring. */
+[data-keyboard-target]:focus-visible {
   outline: none;
 }
