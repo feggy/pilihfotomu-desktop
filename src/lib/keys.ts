@@ -7,17 +7,27 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+import { t } from './i18n';
+
 export type Action = 'pick' | 'maybe' | 'reject' | 'zoom' | 'compare' | 'info' | 'faces';
 
-export const ACTIONS: { id: Action; label: string }[] = [
-  { id: 'pick', label: 'Tandai Pilih' },
-  { id: 'maybe', label: 'Tandai Cek' },
-  { id: 'reject', label: 'Tandai Lewati' },
-  { id: 'compare', label: 'Bandingkan grup burst' },
-  { id: 'zoom', label: 'Zoom / pas layar (tampilan besar)' },
-  { id: 'info', label: 'Info foto (tampilan besar)' },
-  { id: 'faces', label: 'Kotak wajah (tampilan besar)' },
+const ACTION_LABELS: [Action, string][] = [
+  ['pick', 'Tandai Pilih'],
+  ['maybe', 'Tandai Cek'],
+  ['reject', 'Tandai Lewati'],
+  ['compare', 'Bandingkan grup burst'],
+  ['zoom', 'Zoom / pas layar (tampilan besar)'],
+  ['info', 'Info foto (tampilan besar)'],
+  ['faces', 'Kotak wajah (tampilan besar)'],
 ];
+
+/** Labels are getters: read in the current language. */
+export const ACTIONS: { id: Action; readonly label: string }[] = ACTION_LABELS.map(([id, label]) => ({
+  id,
+  get label() {
+    return t(label);
+  },
+}));
 
 export const DEFAULT_KEYS: Record<Action, string> = {
   pick: 'p',

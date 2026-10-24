@@ -48,6 +48,15 @@ html,
 body,
 #root {
   height: 100%;
+  /* The window itself never scrolls; only the panels inside do. */
+  overflow: hidden;
+}
+
+/* WebKit rubber-bands every scrollable panel, not just the page: the grid,
+   the sidebar and the inspector would all wobble under a trackpad. */
+html,
+* {
+  overscroll-behavior: none;
 }
 
 body {

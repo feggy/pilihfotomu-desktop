@@ -21,6 +21,7 @@ import { Button, IconButton, cx } from '../components/ui';
 import { api, thumbUrl, type Photo, type PickResult } from '../lib/api';
 import { defaultFolders, folderLabel } from '../lib/folders';
 import { num } from '../lib/format';
+import { t, tj, tRust } from '../lib/i18n';
 import { useApp, type Screen } from '../store';
 
 const baseName = (p: string) => p.split(/[\\/]/).filter(Boolean).pop() ?? p;
@@ -48,14 +49,11 @@ export function ClientPicks({ root, back }: { root: string; back: Screen }) {
     api.scanPhotos(root).then(setScanned, fail);
   }, [root, fail]);
 
-  // Which top folders to search: clients usually pick from the JPGs they
-  // were sent, so this is a choice, not "everything".
+  // Which folders to search (any depth, each on its own): clients usually
+  // pick from the JPGs they were sent, so this is a choice, not "everything".
   const tops = useMemo(() => {
     const c = new Map<string, number>();
-    for (const p of scanned ?? []) {
-      const top = p.folder.split('/')[0] ?? '';
-      c.set(top, (c.get(top) ?? 0) + 1);
-    }
+    for (const p of scanned ?? []) c.set(p.folder, (c.get(p.folder) ?? 0) + 1);
     return [...c.entries()].sort(([a], [b]) => (a === '' ? -1 : b === '' ? 1 : a.localeCompare(b)));
   }, [scanned]);
   const [folders, setFolders] = useState<string[] | null>(null);
@@ -76,11 +74,11 @@ export function ClientPicks({ root, back }: { root: string; back: Screen }) {
   // paste is parsed once.
   useEffect(() => {
     if (!photos || !folders) return;
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       if (!text.trim()) return setResult(null);
       api.resolveClientPicks(root, folders, text).then(setResult, fail);
     }, 200);
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
   }, [text, root, photos, folders, fail]);
 
   useEffect(() => setReplyCopied(false), [text, choice, added]);
@@ -114,7 +112,7 @@ export function ClientPicks({ root, back }: { root: string; back: Screen }) {
   const over = limit > 0 && chosen.length > limit;
 
   const changeFolder = async () => {
-    const picked = await open({ directory: true, title: 'Pilih folder sesi' });
+    const picked = await open({ directory: true, title: t('Pilih folder sesi') });
     if (typeof picked === 'string') {
       setText('');
       setResult(null);
@@ -127,9 +125,9 @@ export function ClientPicks({ root, back }: { root: string; back: Screen }) {
   const reply = async () => {
     const names = chosen.map((p) => p.stem).join(', ');
     const missing = result?.notFound.map((n) => n.query) ?? [];
-    const lines = [`Halo kak, pilihan fotonya sudah kami terima: ${num(chosen.length)} foto.`, names];
-    if (missing.length) lines.push(`Nomor ini tidak kami temukan, boleh dicek lagi ya kak: ${missing.join(', ')}`);
-    if (over) lines.push(`Catatan: paket kakak mencakup ${num(limit)} foto edit.`);
+    const lines = [t('Halo kak, pilihan fotonya sudah kami terima: {count} foto.', { n: chosen.length, count: num(chosen.length) }), names];
+    if (missing.length) lines.push(t('Nomor ini tidak kami temukan, boleh dicek lagi ya kak: {list}', { list: missing.join(', ') }));
+    if (over) lines.push(t('Catatan: paket kakak mencakup {count} foto edit.', { n: limit, count: num(limit) }));
     await navigator.clipboard.writeText(lines.join('\n\n'));
     setReplyCopied(true);
   };
@@ -140,28 +138,28 @@ export function ClientPicks({ root, back }: { root: string; back: Screen }) {
       <div className="flex min-h-0 flex-1">
         <aside className="flex w-[340px] shrink-0 flex-col gap-4 overflow-y-auto border-r border-line-soft bg-panel p-5 xl:w-[420px] xl:p-6">
           <div className="flex items-center gap-3">
-            <IconButton icon={ArrowLeft} label="Kembali" onClick={() => go(back)} />
-            <h1 className="text-lg font-semibold">Tempel pilihan klien</h1>
+            <IconButton icon={ArrowLeft} label={t('Kembali')} onClick={() => go(back)} />
+            <h1 className="text-lg font-semibold">{t('Tempel pilihan klien')}</h1>
           </div>
           <p className="-mt-1 text-xs text-muted">
-            Tempel pesan apa adanya. Kata-kata, emoji, dan salah ketik kecil kami abaikan.
+            {t('Tempel pesan apa adanya. Kata-kata, emoji, dan salah ketik kecil kami abaikan.')}
           </p>
           <div className="flex items-center gap-2.5 rounded-[10px] bg-panel-2 p-2.5">
             <Folder size={16} className="shrink-0 text-gold-text" />
             <div className="flex min-w-0 flex-1 flex-col">
               <span className="truncate text-xs font-semibold">{baseName(root)}</span>
               <span className="text-[11px] text-faint">
-                {photos ? `${num(searched)} foto dicari` : 'Membaca folder…'}
-                {fromSession ? ' · sesi yang sudah dipilah' : ''}
+                {photos ? t('{count} foto dicari', { n: searched, count: num(searched) }) : t('Membaca folder…')}
+                {fromSession ? ` · ${t('sesi yang sudah dipilah')}` : ''}
               </span>
             </div>
             <button type="button" onClick={changeFolder} className="shrink-0 text-xs font-medium text-gold-text hover:underline">
-              Ganti folder
+              {t('Ganti folder')}
             </button>
           </div>
           {tops.length > 1 && folders && (
             <div className="-mt-1.5 flex flex-col gap-1.5">
-              <span className="text-[11px] font-semibold text-faint">Cari di folder</span>
+              <span className="text-[11px] font-semibold text-faint">{t('Cari di folder')}</span>
               <div className="flex flex-wrap gap-1.5">
                 {tops.map(([name, n]) => {
                   const on = folders.includes(name);
@@ -190,12 +188,12 @@ export function ClientPicks({ root, back }: { root: string; back: Screen }) {
             value={text}
             onChange={(e) => setText(e.target.value)}
             disabled={!photos}
-            placeholder={'kak ini pilihan aku ya\nIMG_0101, 0104, 0107\n0125-0134\njpg 141 sama 0146'}
+            placeholder={t('kak ini pilihan aku ya\nIMG_0101, 0104, 0107\n0125-0134\njpg 141 sama 0146')}
             className="min-h-[200px] resize-y rounded-xl border border-gold/70 bg-bg p-3.5 font-mono text-[13px] leading-6 outline-none placeholder:text-faint focus:border-gold disabled:opacity-50"
           />
           {result && result.readAs.length > 0 && (
             <div className="flex flex-col gap-1.5 rounded-[10px] bg-panel-2 p-3">
-              <span className="text-[11px] font-semibold text-faint">Terbaca sebagai</span>
+              <span className="text-[11px] font-semibold text-faint">{t('Terbaca sebagai')}</span>
               <div className="flex flex-wrap gap-1.5">
                 {result.readAs.map((t, i) => (
                   <span key={i} className="rounded-md bg-raised px-2 py-0.5 font-mono text-[11px]">
@@ -207,12 +205,12 @@ export function ClientPicks({ root, back }: { root: string; back: Screen }) {
           )}
           {result?.warnings.map((w) => (
             <p key={w} className="flex gap-2 text-xs text-maybe">
-              <TriangleAlert size={14} className="shrink-0" /> {w}
+              <TriangleAlert size={14} className="shrink-0" /> {tRust(w)}
             </p>
           ))}
           <div className="flex-1" />
           <label className="flex items-center justify-between gap-3 text-xs text-muted">
-            Kuota foto edit di paket (opsional)
+            {t('Kuota foto edit di paket (opsional)')}
             <input
               value={quota}
               onChange={(e) => setQuota(e.target.value.replace(/\D/g, ''))}
@@ -226,41 +224,41 @@ export function ClientPicks({ root, back }: { root: string; back: Screen }) {
         <main className="flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-5 xl:p-6">
           {!photos ? (
             <div className="flex flex-1 items-center justify-center gap-2 text-faint">
-              <LoaderCircle size={18} className="animate-spin" /> Membaca folder…
+              <LoaderCircle size={18} className="animate-spin" /> {t('Membaca folder…')}
             </div>
           ) : photos.length === 0 ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center text-faint">
               <TriangleAlert size={26} />
-              <p className="text-sm">Folder ini tidak berisi foto RAW atau JPEG.</p>
-              <Button onClick={changeFolder}>Pilih folder lain</Button>
+              <p className="text-sm">{t('Folder ini tidak berisi foto RAW atau JPEG.')}</p>
+              <Button onClick={changeFolder}>{t('Pilih folder lain')}</Button>
             </div>
           ) : result && result.readAs.length === 0 ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center text-faint">
               <TriangleAlert size={26} className="text-maybe" />
-              <p className="text-sm text-muted">Tidak ada nomor foto atau nama file yang terbaca.</p>
+              <p className="text-sm text-muted">{t('Tidak ada nomor foto atau nama file yang terbaca.')}</p>
               <p className="max-w-[400px] text-xs">
-                Tulis nomor (IMG_0101, 0104, 110-115) atau nama file seperti di folder (boleh sebagian, minimal 6
-                huruf/angka), satu per baris atau dipisah koma.
+                {t('Tulis nomor (IMG_0101, 0104, 110-115) atau nama file seperti di folder (boleh sebagian, minimal 6 huruf/angka), satu per baris atau dipisah koma.')}
               </p>
             </div>
           ) : !result ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center text-faint">
               <MessageCircle size={28} />
-              <p className="text-sm">Tempel pesan dari klien di kolom kiri.</p>
+              <p className="text-sm">{t('Tempel pesan dari klien di kolom kiri.')}</p>
               <p className="max-w-[380px] text-xs">
-                Bisa nomor (“IMG_0101, 0104, 110-115, jpg 141”) atau nama file lengkap maupun sebagian. Dicocokkan dengan
-                file di folder <span className="text-muted">{baseName(root)}</span>.
+                {tj('Bisa nomor (“IMG_0101, 0104, 110-115, jpg 141”) atau nama file lengkap maupun sebagian. Dicocokkan dengan file di folder {folder}.', {
+                  folder: <span className="text-muted">{baseName(root)}</span>,
+                })}
               </p>
             </div>
           ) : (
             <>
               <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-                <Summary icon={CircleCheck} n={result.found.length} label="Ditemukan" color="var(--color-pick)" />
-                <Summary icon={CircleHelp} n={result.ambiguous.length} label="Perlu dipilih" color="var(--color-maybe)" />
-                <Summary icon={CircleX} n={result.notFound.length} label="Tidak ditemukan" color="var(--color-reject)" />
+                <Summary icon={CircleCheck} n={result.found.length} label={t('Ditemukan')} color="var(--color-pick)" />
+                <Summary icon={CircleHelp} n={result.ambiguous.length} label={t('Perlu dipilih')} color="var(--color-maybe)" />
+                <Summary icon={CircleX} n={result.notFound.length} label={t('Tidak ditemukan')} color="var(--color-reject)" />
                 <div className="flex flex-col justify-center gap-1.5 rounded-xl bg-panel p-3">
                   <span className="flex justify-between text-[11px] text-muted">
-                    {limit ? 'Kuota paket' : 'Total dipilih'}
+                    {limit ? t('Kuota paket') : t('Total dipilih')}
                     <b className={cx('font-semibold', over ? 'text-reject' : 'text-fg')}>
                       {num(chosen.length)}
                       {limit ? ` / ${num(limit)}` : ''}
@@ -280,7 +278,8 @@ export function ClientPicks({ root, back }: { root: string; back: Screen }) {
               {result.ambiguous.map((a) => (
                 <div key={a.query} className="flex flex-col gap-2.5 rounded-xl border border-maybe bg-panel p-3.5">
                   <span className="flex items-center gap-2 text-[13px] font-semibold">
-                    <CircleHelp size={15} className="text-maybe" />“{a.query}” ada di {a.candidates.length} foto. Yang mana?
+                    <CircleHelp size={15} className="text-maybe" />
+                    {t('“{query}” ada di {n} foto. Yang mana?', { query: a.query, n: a.candidates.length })}
                   </span>
                   <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-2">
                     {a.candidates.map((id) => {
@@ -299,7 +298,7 @@ export function ClientPicks({ root, back }: { root: string; back: Screen }) {
                           <Thumb src={thumbOf(id)} className="h-10 w-[60px]" />
                           <span className="flex min-w-0 flex-1 flex-col">
                             <span className="truncate text-xs font-semibold">{fileName(p)}</span>
-                            <span className="truncate text-[11px] text-faint">{p.folder || 'Folder utama'}</span>
+                            <span className="truncate text-[11px] text-faint">{p.folder || t('Folder utama')}</span>
                           </span>
                           <span className={cx('size-4 shrink-0 rounded-full border-[1.5px]', on ? 'border-gold bg-gold' : 'border-faint')} />
                         </button>
@@ -312,11 +311,12 @@ export function ClientPicks({ root, back }: { root: string; back: Screen }) {
               {result.notFound.map((n) => (
                 <div key={n.query} className="flex flex-col gap-2.5 rounded-xl border border-reject bg-panel p-3.5">
                   <span className="flex items-center gap-2 text-[13px] font-semibold">
-                    <CircleX size={15} className="text-reject" />“{n.query}” tidak ada di folder ini
+                    <CircleX size={15} className="text-reject" />
+                    {t('“{query}” tidak ada di folder ini', { query: n.query })}
                   </span>
                   {n.suggestions.length > 0 && (
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-xs text-muted">Mungkin maksudnya:</span>
+                      <span className="text-xs text-muted">{t('Mungkin maksudnya:')}</span>
                       {n.suggestions.map((id) => {
                         const p = byId.get(id)!;
                         const on = added.has(id);
@@ -351,9 +351,9 @@ export function ClientPicks({ root, back }: { root: string; back: Screen }) {
               {chosen.length > 0 && (
                 <section className="flex flex-col gap-2.5">
                   <h2 className="text-[13px] font-semibold text-muted">
-                    Dipilih · {num(chosen.length)} foto
+                    {t('Dipilih · {count} foto', { n: chosen.length, count: num(chosen.length) })}
                     {chosen.some((p) => p.raw && p.jpeg) && (
-                      <span className="font-normal text-faint"> · RAW ikut dengan JPG pasangannya</span>
+                      <span className="font-normal text-faint"> · {t('RAW ikut dengan JPG pasangannya')}</span>
                     )}
                   </h2>
                   <div className="grid grid-cols-[repeat(auto-fill,minmax(112px,1fr))] gap-2">
@@ -370,10 +370,10 @@ export function ClientPicks({ root, back }: { root: string; back: Screen }) {
               <div className="flex-1" />
               <div className="flex flex-wrap items-center justify-between gap-2.5">
                 <Button icon={replyCopied ? Check : MessageCircle} onClick={reply} disabled={!chosen.length}>
-                  {replyCopied ? 'Balasan tersalin' : 'Salin balasan WhatsApp'}
+                  {replyCopied ? t('Balasan tersalin') : t('Salin balasan WhatsApp')}
                 </Button>
                 <Button variant="primary" icon={FolderInput} onClick={() => setCopying(true)} disabled={!chosen.length}>
-                  Salin {num(chosen.length)} foto ke folder…
+                  {t('Salin {count} foto ke folder…', { n: chosen.length, count: num(chosen.length) })}
                 </Button>
               </div>
             </>
@@ -385,7 +385,7 @@ export function ClientPicks({ root, back }: { root: string; back: Screen }) {
           root={root}
           ids={chosen.map((p) => p.id)}
           mix={sourceMix(chosen)}
-          base="Pilihan Klien"
+          base={t('Pilihan Klien')}
           onClose={() => setCopying(false)}
         />
       )}

@@ -59,7 +59,7 @@ const session: Session = {
   name: 'Wedding Rina & Dimas',
   createdAt: T0,
   durationMs: 192_000,
-  options: { strictness: 'balanced', checkBlur: true, checkExposure: true, checkDuplicates: true, checkEyes: true, checkSmile: true },
+  options: { strictness: 'balanced', shootType: 'auto', checkBlur: true, checkExposure: true, checkDuplicates: true, checkEyes: true, checkSmile: true },
   folders: [''],
   exported: false,
   photos: Array.from({ length: N }, (_, i) => photo(i)),
@@ -96,6 +96,15 @@ export async function installMock() {
           return null;
         case 'full_res_supported':
           return true;
+        case 'recull':
+          session.options = a.options as Session['options'];
+          return { ...session, photos: session.photos.map((p) => ({ ...p })) };
+        case 'cache_info':
+          return { dir: '/Users/demo/Library/Caches/com.pilihfotomu.desktop', previews: 812e6, full: 2.4e9, thumbs: 96e6, unusedThumbs: 31e6 };
+        case 'clear_cache':
+          return 3.24e9;
+        case 'export_xmp':
+          return { written: 77, skippedExisting: 0, skippedJpeg: 0, markedJpeg: 19, markedFolder: `${session.root}/JPG bertanda`, failed: [] };
         case 'full_res_image':
           await new Promise((r) => setTimeout(r, 1200));
           return { path: `https://picsum.photos/seed/pfm${a.id}/3000/2000`, width: 3000, height: 2000 };

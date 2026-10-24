@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react';
 
 import { api, type CopyReport, type JpegReport } from '../lib/api';
 import { num } from '../lib/format';
+import { lang, t, tRust } from '../lib/i18n';
 import { useApp } from '../store';
 import { Button, Segmented, cx } from './ui';
 
@@ -24,6 +25,7 @@ export interface CopySettings {
 
 export type CopyResult = { kind: 'original'; report: CopyReport } | { kind: 'jpg'; report: JpegReport };
 
+/** `label` is an i18n key. */
 const QUALITY = [
   { value: '92', label: 'Tinggi' },
   { value: '85', label: 'Sedang' },
@@ -57,20 +59,32 @@ export function sourceMix(photos: { raw: string | null; jpeg: string | null }[])
 }
 
 function originalHint(m: SourceMix) {
-  if (m.pairs) return 'Disalin apa adanya, tanpa diubah. File RAW ikut dengan JPG pasangannya (nama sama).';
-  return 'Disalin apa adanya, tanpa diubah.';
+  if (m.pairs) return t('Disalin apa adanya, tanpa diubah. File RAW ikut dengan JPG pasangannya (nama sama).');
+  return t('Disalin apa adanya, tanpa diubah.');
 }
 
 function jpgHint(m: SourceMix) {
   const parts: string[] = [];
-  if (m.jpegOnly || m.pairs) parts.push('Foto JPG diperkecil dan dikompres dari JPG aslinya.');
+  if (m.jpegOnly || m.pairs) parts.push(t('Foto JPG diperkecil dan dikompres dari JPG aslinya.'));
   if (m.rawOnly)
     parts.push(
-      `${m.jpegOnly || m.pairs ? 'Foto RAW tanpa JPG' : 'Foto RAW'} dibuat dari preview kamera di dalam file RAW — warnanya sama dengan layar kamera, dan 100% = ukuran preview itu (beberapa kamera hanya menyimpan ±1600 px).`,
+      m.jpegOnly || m.pairs
+        ? t(
+            'Foto RAW tanpa JPG dibuat dari preview kamera di dalam file RAW — warnanya sama dengan layar kamera, dan 100% = ukuran preview itu (beberapa kamera hanya menyimpan ±1600 px).',
+          )
+        : t(
+            'Foto RAW dibuat dari preview kamera di dalam file RAW — warnanya sama dengan layar kamera, dan 100% = ukuran preview itu (beberapa kamera hanya menyimpan ±1600 px).',
+          ),
     );
-  parts.push('File asli tidak diubah.');
+  parts.push(t('File asli tidak diubah.'));
   return parts.join(' ');
 }
+
+/**
+ * Default folder for copied Picks. A name, not a sentence: the English one
+ * must be one the scanner skips (`scan::SKIP_DIRS` has "picks").
+ */
+export const picksFolder = () => (lang() === 'en' ? 'Picks' : 'Dipilih');
 
 /** The folder name follows the format until the user types their own. */
 export function folderFor(base: string, format: CopyFormat) {
@@ -92,13 +106,13 @@ export function CopySettingsForm({
   const autoName = value.folder === folderFor(base, value.format);
   return (
     <div className="flex flex-col gap-3" onClick={(e) => e.stopPropagation()}>
-      <Field label="Yang disalin">
+      <Field label={t('Yang disalin')}>
         <Segmented<CopyFormat>
           value={value.format}
           onChange={(format) => set({ format, folder: autoName ? folderFor(base, format) : value.folder })}
           options={[
-            { value: 'original', label: 'Salin file asli' },
-            { value: 'jpg', label: 'Buat JPG baru' },
+            { value: 'original', label: t('Salin file asli') },
+            { value: 'jpg', label: t('Buat JPG baru') },
           ]}
         />
         <p className="flex gap-2 text-[11px] text-faint">
@@ -108,7 +122,7 @@ export function CopySettingsForm({
       </Field>
       {value.format === 'jpg' && (
         <>
-          <Field label="Ukuran" hint={`${value.scalePercent}%`}>
+          <Field label={t('Ukuran')} hint={`${value.scalePercent}%`}>
             <div className="flex items-center gap-3">
               <input
                 type="range"
@@ -118,7 +132,7 @@ export function CopySettingsForm({
                 value={value.scalePercent}
                 onChange={(e) => set({ scalePercent: Number(e.target.value) })}
                 className="flex-1 accent-[var(--color-gold)]"
-                aria-label="Ukuran dalam persen"
+                aria-label={t('Ukuran dalam persen')}
               />
               <div className="flex gap-1">
                 {SCALES.map((s) => (
@@ -137,14 +151,18 @@ export function CopySettingsForm({
               </div>
             </div>
           </Field>
-          <Field label="Kualitas">
-            <Segmented value={String(value.quality)} onChange={(q) => set({ quality: Number(q) })} options={QUALITY} />
+          <Field label={t('Kualitas')}>
+            <Segmented
+              value={String(value.quality)}
+              onChange={(q) => set({ quality: Number(q) })}
+              options={QUALITY.map((q) => ({ value: q.value, label: t(q.label) }))}
+            />
           </Field>
         </>
       )}
-      <Field label="Nama folder" hint="dibuat di dalam folder sesi">
+      <Field label={t('Nama folder')} hint={t('dibuat di dalam folder sesi')}>
         <input
-          aria-label="Nama folder"
+          aria-label={t('Nama folder')}
           value={value.folder}
           onChange={(e) => set({ folder: e.target.value })}
           className="h-[34px] rounded-[10px] border border-line bg-bg px-3 text-[13px] outline-none focus:border-gold"
@@ -186,15 +204,25 @@ export function CopyResultView({ result, onDone }: { result: CopyResult; onDone:
   const lines =
     result.kind === 'original'
       ? [
-          `${num(result.report.copied)} file disalin.`,
-          result.report.alreadyThere ? `${num(result.report.alreadyThere)} file sudah ada di sana, tidak disalin ulang.` : '',
+          t('{count} file disalin.', { n: result.report.copied, count: num(result.report.copied) }),
+          result.report.alreadyThere
+            ? t('{count} file sudah ada di sana, tidak disalin ulang.', {
+                n: result.report.alreadyThere,
+                count: num(result.report.alreadyThere),
+              })
+            : '',
         ]
       : [
-          `${num(result.report.written)} JPG dibuat.`,
+          t('{count} JPG dibuat.', { n: result.report.written, count: num(result.report.written) }),
           result.report.largest
-            ? `Ukuran hasil: ${sizeRange(result.report.smallest!, result.report.largest)} px.`
+            ? t('Ukuran hasil: {size} px.', { size: sizeRange(result.report.smallest!, result.report.largest) })
             : '',
-          result.report.alreadyThere ? `${num(result.report.alreadyThere)} JPG sudah ada dengan nama sama, dilewati.` : '',
+          result.report.alreadyThere
+            ? t('{count} JPG sudah ada dengan nama sama, dilewati.', {
+                n: result.report.alreadyThere,
+                count: num(result.report.alreadyThere),
+              })
+            : '',
         ];
   return (
     <div className="flex flex-col gap-4">
@@ -209,21 +237,27 @@ export function CopyResultView({ result, onDone }: { result: CopyResult; onDone:
       </div>
       {r.failed.length > 0 && (
         <div className="max-h-32 overflow-y-auto rounded-xl bg-reject/10 p-3 text-xs text-reject">
-          <p className="mb-1 font-semibold">{num(r.failed.length)} gagal:</p>
+          <p className="mb-1 font-semibold">{t('{count} gagal:', { count: num(r.failed.length) })}</p>
           {r.failed.map((f) => (
-            <p key={f}>{f}</p>
+            <p key={f}>{failedLine(f)}</p>
           ))}
         </div>
       )}
       <div className="flex justify-end gap-2.5">
-        <Button onClick={() => revealItemInDir(r.folder)}>Buka folder</Button>
+        <Button onClick={() => revealItemInDir(r.folder)}>{t('Buka folder')}</Button>
         <Button variant="primary" onClick={onDone}>
-          Selesai
+          {t('Selesai')}
         </Button>
       </div>
     </div>
   );
 }
+
+/** "IMG_0101.JPG: <message from Rust>" — the message part in the current language. */
+export const failedLine = (f: string) => {
+  const at = f.indexOf(': ');
+  return at < 0 ? tRust(f) : `${f.slice(0, at)}: ${tRust(f.slice(at + 2))}`;
+};
 
 const sizeRange = (a: [number, number], b: [number, number]) =>
   a[0] === b[0] && a[1] === b[1] ? `${a[0]}×${a[1]}` : `${a[0]}×${a[1]} – ${b[0]}×${b[1]}`;
@@ -232,7 +266,7 @@ export function ProgressBar({ done, total }: { done: number; total: number }) {
   return (
     <div className="flex flex-col gap-2">
       <span className="text-[13px] text-muted">
-        Membuat JPG… {num(done)} dari {num(total)}
+        {t('Membuat JPG… {done} dari {total}', { done: num(done), total: num(total) })}
       </span>
       <div className="h-2 overflow-hidden rounded-full bg-line">
         <div
@@ -284,16 +318,18 @@ export function CopyDialog({
     <div className="fixed inset-x-0 top-10 bottom-0 z-40 flex items-center justify-center bg-black/70 p-4" onMouseDown={() => !busy && onClose()}>
       <div
         role="dialog"
-        aria-label="Salin ke folder"
+        aria-label={t('Salin ke folder')}
         onMouseDown={(e) => e.stopPropagation()}
         className="flex max-h-full w-[560px] max-w-full flex-col gap-4 overflow-y-auto rounded-[18px] border border-line bg-panel p-6 shadow-2xl"
       >
         <div className="flex items-start justify-between">
           <div className="flex flex-col gap-1">
-            <h2 className="text-lg font-semibold">Salin {num(ids.length)} foto ke folder</h2>
-            <p className="text-xs text-faint">Folder baru dibuat di dalam folder sesi.</p>
+            <h2 className="text-lg font-semibold">
+              {t('Salin {count} foto ke folder', { n: ids.length, count: num(ids.length) })}
+            </h2>
+            <p className="text-xs text-faint">{t('Folder baru dibuat di dalam folder sesi.')}</p>
           </div>
-          <button type="button" onClick={onClose} aria-label="Tutup" className="text-faint hover:text-fg">
+          <button type="button" onClick={onClose} aria-label={t('Tutup')} className="text-faint hover:text-fg">
             <X size={18} />
           </button>
         </div>
@@ -306,10 +342,12 @@ export function CopyDialog({
             <CopySettingsForm value={settings} onChange={setSettings} base={base} mix={mix} />
             <div className="flex justify-end gap-2.5">
               <Button variant="plain" onClick={onClose}>
-                Batal
+                {t('Batal')}
               </Button>
               <Button variant="primary" icon={FolderInput} onClick={run} disabled={!settings.folder.trim()}>
-                {settings.format === 'jpg' ? `Buat ${num(ids.length)} JPG` : `Salin ${num(ids.length)} foto`}
+                {settings.format === 'jpg'
+                  ? t('Buat {count} JPG', { n: ids.length, count: num(ids.length) })
+                  : t('Salin {count} foto', { n: ids.length, count: num(ids.length) })}
               </Button>
             </div>
           </>

@@ -51,6 +51,21 @@ pub struct Entry {
     pub group: Option<u32>,
     /// What the AI decided, kept when the photographer overrides `status`.
     pub auto_status: Status,
+    /// The AI's stars. Older saved sessions don't have it.
+    #[serde(default)]
+    pub auto_rating: Option<u8>,
+    /// The photographer set status or stars by hand. Re-culling with other
+    /// settings leaves these photos as they are.
+    #[serde(default)]
+    pub manual: bool,
+}
+
+impl Entry {
+    /// Changed by hand (sessions saved before `manual` existed only show it
+    /// as a status different from the AI's).
+    pub fn is_manual(&self) -> bool {
+        self.manual || self.status != self.auto_status
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -62,7 +77,9 @@ pub struct Session {
     pub created_at: u64,
     pub duration_ms: u64,
     pub options: Options,
-    /// Top folders that were analyzed ("" = the session folder itself).
+    /// Folders that were analyzed, each on its own ("" = the session folder
+    /// itself, "Canon/jpg" = a nested one). Sessions saved before nested
+    /// folders could be chosen hold top folders only.
     #[serde(default = "root_only")]
     pub folders: Vec<String>,
     pub exported: bool,
@@ -116,6 +133,7 @@ impl Session {
 
     pub fn set_status(&mut self, ids: &[u32], status: Status) {
         for e in self.photos.iter_mut().filter(|e| ids.contains(&e.photo.id)) {
+            e.manual = true;
             e.status = status;
             e.rating = match status {
                 Status::Pick => e.rating.max(4),
@@ -131,6 +149,8 @@ impl Session {
             if let Some(e) = self.photos.iter_mut().find(|e| e.photo.id == m.id) {
                 e.status = m.status;
                 e.rating = m.rating.min(5);
+                // Undoing back to the AI's own verdict makes it the AI's again.
+                e.manual = e.status != e.auto_status || e.auto_rating.is_some_and(|r| r != e.rating);
             }
         }
     }
@@ -138,9 +158,45 @@ impl Session {
     /// Stars 0–5, as the photographer sets them; status stays as it is.
     pub fn set_rating(&mut self, ids: &[u32], rating: u8) {
         for e in self.photos.iter_mut().filter(|e| ids.contains(&e.photo.id)) {
+            e.manual = true;
             e.rating = rating.min(5);
         }
     }
+
+    /// Decides again with other settings, from the measurements already
+    /// saved — no file is read. Photos changed by hand keep their status and
+    /// stars; their reasons and groups are updated. Face checks can only use
+    /// faces that were read in the first analysis.
+    pub fn recull(&mut self, options: Options) {
+        let inputs: Vec<Input> = self.photos.iter().filter_map(input_of).collect();
+        let mut verdicts: std::collections::HashMap<u32, Verdict> =
+            cull::cull(&inputs, &options).into_iter().map(|v| (v.id, v)).collect();
+        drop(inputs);
+        for e in &mut self.photos {
+            // Unreadable files have nothing to decide from.
+            let Some(v) = verdicts.remove(&e.photo.id) else { continue };
+            if !e.is_manual() {
+                e.status = v.status;
+                e.rating = v.rating;
+            }
+            e.manual = e.is_manual();
+            e.reasons = v.reasons;
+            e.group = v.group;
+            e.auto_status = v.status;
+            e.auto_rating = Some(v.rating);
+        }
+        self.options = options;
+    }
+}
+
+fn input_of(e: &Entry) -> Option<Input<'_>> {
+    e.metrics.map(|metrics| Input {
+        id: e.photo.id,
+        taken_at: e.taken_at,
+        metrics,
+        faces: &e.faces,
+        frame: e.photo.frame(),
+    })
 }
 
 #[derive(Debug, Clone, Copy, Deserialize)]
@@ -261,7 +317,8 @@ pub fn analyze(
             // A first opinion from this photo alone; bursts are judged once
             // every frame is in.
             let early = m.metrics.map(|metrics| {
-                cull::cull(&[Input { id: m.photo.id, taken_at: None, metrics, faces: &m.faces }], &options).remove(0)
+                cull::cull(&[Input { id: m.photo.id, taken_at: None, metrics, faces: &m.faces, frame: None }], &options)
+                    .remove(0)
             });
             let n = done.fetch_add(1, Ordering::Relaxed) + 1;
             progress(Progress::Photo {
@@ -280,10 +337,6 @@ pub fn analyze(
     if cancel.load(Ordering::Relaxed) {
         return Err(SessionError::Cancelled);
     }
-
-    if cancel.load(Ordering::Relaxed) {
-        return Err(SessionError::Cancelled);
-    }
     progress(Progress::Grouping);
 
     let inputs: Vec<Input> = measured
@@ -294,6 +347,7 @@ pub fn analyze(
                 taken_at: m.info.as_ref().and_then(|i| i.taken_at),
                 metrics,
                 faces: &m.faces,
+                frame: m.photo.frame(),
             })
         })
         .collect();
@@ -312,6 +366,7 @@ pub fn analyze(
                 reasons: vec![],
                 group: None,
             });
+            let auto_rating = m.metrics.is_some().then_some(v.rating);
             Entry {
                 name: m.photo.display_name(),
                 photo: m.photo,
@@ -326,6 +381,8 @@ pub fn analyze(
                 reasons: v.reasons,
                 group: v.group,
                 auto_status: v.status,
+                auto_rating,
+                manual: false,
             }
         })
         .collect();
@@ -439,7 +496,7 @@ pub fn relink(sessions_dir: &Path, thumbs_dir: &Path, mut s: Session, new_root: 
     });
     for e in &mut s.photos {
         for r in &mut e.reasons {
-            if let Reason::Duplicate { of } = r {
+            if let Reason::Duplicate { of } | Reason::Similar { of } = r {
                 *of = ids.get(of).copied().unwrap_or(*of);
             }
         }
@@ -538,6 +595,17 @@ mod tests {
         let first = s.photos[0].photo.id;
         s.set_rating(&[first], 9);
         assert_eq!(s.photos[0].rating, 5);
+
+        // Re-culling with other settings keeps what was changed by hand.
+        let blurry = s.photos.iter().position(|p| p.name == "IMG_0002.JPG").unwrap();
+        let id2 = s.photos[blurry].photo.id;
+        s.set_status(&[id2], Status::Pick);
+        s.recull(Options { strictness: cull::Strictness::Strict, ..Options::default() });
+        assert_eq!((s.photos[0].rating, s.photos[blurry].status), (5, Status::Pick), "manual changes are kept");
+        assert_eq!(s.photos[blurry].auto_status, Status::Reject);
+        assert_eq!(s.options.strictness, cull::Strictness::Strict);
+        s.set_marks(&[Mark { id: id2, status: Status::Reject, rating: 1 }]);
+        assert!(!s.photos[blurry].manual, "undone back to the AI's verdict");
         assert!(load(&dir, "../etc").is_none());
 
         let thumbs = tmp.path().join("thumbs");

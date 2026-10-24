@@ -7,6 +7,17 @@ import { Channel, convertFileSrc, invoke } from '@tauri-apps/api/core';
 
 export type Status = 'pick' | 'maybe' | 'reject';
 export type Strictness = 'loose' | 'balanced' | 'strict';
+/** Mirrors `cull::ShootType`. */
+export type ShootType =
+  | 'auto'
+  | 'wedding'
+  | 'prewedding'
+  | 'lamaran'
+  | 'wisuda'
+  | 'event'
+  | 'keluarga'
+  | 'portrait'
+  | 'lainnya';
 
 export type Reason =
   | { kind: 'blur' }
@@ -16,7 +27,9 @@ export type Reason =
   | { kind: 'bright' }
   | { kind: 'duplicate'; of: number }
   | { kind: 'eyesClosed'; closed: number; faces: number }
-  | { kind: 'bestInGroup' };
+  | { kind: 'bestInGroup' }
+  /** Same pose as `of`, shot again after a pause. */
+  | { kind: 'similar'; of: number };
 
 export interface Metrics {
   sharpness: number;
@@ -77,10 +90,18 @@ export interface PhotoEntry extends Photo {
   reasons: Reason[];
   group: number | null;
   autoStatus: Status;
+  /** The AI's stars; absent in older sessions. */
+  autoRating?: number | null;
+  /** Status or stars set by hand; absent in older sessions. */
+  manual?: boolean;
 }
+
+/** Changed by hand (older sessions only show it as a status different from the AI's). */
+export const isManual = (p: PhotoEntry) => !!p.manual || p.status !== p.autoStatus;
 
 export interface Options {
   strictness: Strictness;
+  shootType: ShootType;
   checkBlur: boolean;
   checkExposure: boolean;
   checkDuplicates: boolean;
@@ -158,7 +179,18 @@ export interface ExportReport {
   written: number;
   skippedExisting: number;
   skippedJpeg: number;
+  /** JPEG-only photos copied with the marks written inside. */
+  markedJpeg: number;
+  markedFolder: string | null;
   failed: string[];
+}
+
+export interface CacheInfo {
+  dir: string;
+  previews: number;
+  full: number;
+  thumbs: number;
+  unusedThumbs: number;
 }
 
 export interface JpegOptions {
@@ -199,6 +231,11 @@ export const api = {
   setStatus: (ids: number[], status: Status) => invoke<void>('set_status', { ids, status }),
   setRating: (ids: number[], rating: number) => invoke<void>('set_rating', { ids, rating }),
   setMarks: (marks: { id: number; status: Status; rating: number }[]) => invoke<void>('set_marks', { marks }),
+  /** Decides the open session again with other settings; hand-made changes stay. */
+  recull: (options: Options) => invoke<Session>('recull', { options }),
+  cacheInfo: () => invoke<CacheInfo>('cache_info'),
+  /** Frees previews, full-size pictures and unused thumbnails; returns bytes freed. */
+  clearCache: () => invoke<number>('clear_cache'),
   previewImage: (root: string, id: number) => invoke<string>('preview_image', { root, id }),
   fullResSupported: () => invoke<boolean>('full_res_supported'),
   fullResImage: (root: string, id: number) =>
@@ -208,8 +245,8 @@ export const api = {
     invoke<Record<number, string | null>>('thumbnails', { root, ids }),
   resolveClientPicks: (root: string, folders: string[], text: string) =>
     invoke<PickResult>('resolve_client_picks', { root, folders, text }),
-  exportXmp: (existing: 'skip' | 'overwrite', withReasons: boolean) =>
-    invoke<ExportReport>('export_xmp', { existing, withReasons }),
+  exportXmp: (existing: 'skip' | 'overwrite', withReasons: boolean, jpegCopies: boolean) =>
+    invoke<ExportReport>('export_xmp', { existing, withReasons, jpegCopies }),
   copyToFolder: (root: string, ids: number[], folderName: string) =>
     invoke<CopyReport>('copy_to_folder', { root, ids, folderName }),
   exportJpegs: (

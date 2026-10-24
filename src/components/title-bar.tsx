@@ -1,6 +1,7 @@
 import { House, Settings } from 'lucide-react';
 import type { ReactNode } from 'react';
 
+import { t } from '../lib/i18n';
 import { useApp } from '../store';
 import { cx } from './ui';
 
@@ -27,8 +28,8 @@ export function TitleBar({ title = 'pilihfotomu', right }: { title?: ReactNode; 
           <button
             type="button"
             onClick={() => go({ name: 'home' })}
-            title="Beranda"
-            aria-label="Beranda"
+            title={t('Beranda')}
+            aria-label={t('Beranda')}
             className="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-faint hover:bg-raised hover:text-fg"
           >
             <House size={14} /> Beranda
@@ -44,8 +45,8 @@ export function TitleBar({ title = 'pilihfotomu', right }: { title?: ReactNode; 
           <button
             type="button"
             onClick={() => go({ name: 'settings', back: screen })}
-            title={`Pengaturan (${isMac ? '⌘' : 'Ctrl+'},)`}
-            aria-label="Pengaturan"
+            title={`${t('Pengaturan')} (${isMac ? '⌘' : 'Ctrl+'},)`}
+            aria-label={t('Pengaturan')}
             className="inline-flex size-7 items-center justify-center rounded-md text-faint hover:bg-raised hover:text-fg"
           >
             <Settings size={15} />

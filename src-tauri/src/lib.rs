@@ -193,6 +193,84 @@ fn set_marks(app: AppHandle, state: State<'_, AppState>, marks: Vec<session::Mar
     with_current(&app, &state, |s| s.set_marks(&marks))
 }
 
+/// Decides the open session again with other settings, from the saved
+/// measurements (instant; no file is read). Hand-made changes stay.
+#[tauri::command]
+fn recull(app: AppHandle, state: State<'_, AppState>, options: Options) -> CmdResult<Session> {
+    with_current(&app, &state, |s| {
+        s.recull(options);
+        s.clone()
+    })
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CacheInfo {
+    dir: PathBuf,
+    /// Loupe previews and full-resolution pictures: made again on demand.
+    previews: u64,
+    full: u64,
+    /// Thumbnails of saved sessions (kept: the grid shows them).
+    thumbs: u64,
+    /// Thumbnails no saved session uses (deleted sessions, folders opened
+    /// only for client picks).
+    unused_thumbs: u64,
+}
+
+fn dir_size(dir: &Path) -> u64 {
+    let Ok(entries) = std::fs::read_dir(dir) else { return 0 };
+    entries
+        .filter_map(|e| e.ok())
+        .map(|e| match e.file_type() {
+            Ok(t) if t.is_dir() => dir_size(&e.path()),
+            Ok(_) => e.metadata().map(|m| m.len()).unwrap_or(0),
+            Err(_) => 0,
+        })
+        .sum()
+}
+
+/// Thumbnail folders (one per session id) no saved session uses.
+fn unused_thumb_dirs(app: &AppHandle) -> CmdResult<Vec<PathBuf>> {
+    let sessions = sessions_dir(app)?;
+    let Ok(entries) = std::fs::read_dir(thumbs_dir(app)?) else { return Ok(vec![]) };
+    Ok(entries
+        .filter_map(|e| e.ok())
+        .filter(|e| !sessions.join(format!("{}.json", e.file_name().to_string_lossy())).exists())
+        .map(|e| e.path())
+        .collect())
+}
+
+#[tauri::command]
+fn cache_info(app: AppHandle) -> CmdResult<CacheInfo> {
+    let dir = app.path().app_cache_dir().map_err(|e| e.to_string())?;
+    let unused_thumbs = unused_thumb_dirs(&app)?.iter().map(|d| dir_size(d)).sum();
+    Ok(CacheInfo {
+        previews: dir_size(&previews_dir(&app)?),
+        full: dir_size(&dir.join("full")),
+        thumbs: dir_size(&thumbs_dir(&app)?) - unused_thumbs,
+        unused_thumbs,
+        dir,
+    })
+}
+
+/// Frees what is made again when needed: loupe previews, full-resolution
+/// pictures, unused thumbnails. Thumbnails of saved sessions stay. Returns
+/// the bytes freed.
+#[tauri::command]
+fn clear_cache(app: AppHandle) -> CmdResult<u64> {
+    let full = app.path().app_cache_dir().map_err(|e| e.to_string())?.join("full");
+    let mut dirs = vec![previews_dir(&app)?, full];
+    dirs.extend(unused_thumb_dirs(&app)?);
+    let mut freed = 0;
+    for d in dirs {
+        let size = dir_size(&d);
+        if std::fs::remove_dir_all(&d).is_ok() {
+            freed += size;
+        }
+    }
+    Ok(freed)
+}
+
 #[tauri::command]
 fn set_rating(app: AppHandle, state: State<'_, AppState>, ids: Vec<u32>, rating: u8) -> CmdResult<()> {
     with_current(&app, &state, |s| s.set_rating(&ids, rating))
@@ -303,15 +381,17 @@ fn export_xmp(
     state: State<'_, AppState>,
     existing: export::Existing,
     with_reasons: bool,
+    jpeg_copies: bool,
 ) -> CmdResult<export::ExportReport> {
     with_current(&app, &state, |s| {
+        let copies = jpeg_copies.then(|| s.root.join(scan::JPEG_MARKED_DIR));
         let marks: Vec<export::Mark> = s
             .photos
             .iter()
             .map(|e| export::Mark { photo: &e.photo, status: e.status, rating: e.rating, reasons: &e.reasons })
             .collect();
-        let report = export::write_xmp(&marks, existing, with_reasons);
-        if report.written > 0 {
+        let report = export::write_xmp(&marks, existing, with_reasons, copies.as_deref());
+        if report.written + report.marked_jpeg > 0 {
             s.exported = true;
         }
         report
@@ -358,6 +438,13 @@ async fn export_jpegs(
     .map_err(|e| e.to_string())
 }
 
+/// The UI's language ("id" / "en"): rebuilds the menu bar in it.
+#[tauri::command]
+fn set_language(app: AppHandle, lang: String) -> CmdResult<()> {
+    let menu = menu::build_in(&app, lang == "en").map_err(|e| e.to_string())?;
+    app.set_menu(menu).map(|_| ()).map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -377,6 +464,10 @@ pub fn run() {
             set_status,
             set_rating,
             set_marks,
+            recull,
+            set_language,
+            cache_info,
+            clear_cache,
             preview_image,
             full_res_supported,
             full_res_image,

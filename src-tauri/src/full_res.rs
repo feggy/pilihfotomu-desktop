@@ -6,13 +6,14 @@
 //! the sensor data — about a second for 24 MP, no extra library to ship.
 //! The result is written once as a high-quality JPEG and cached.
 //!
-//! Windows has no built-in equivalent yet; `supported()` says so and the UI
-//! keeps showing the preview.
+//! On Windows the same job goes to WIC, the system imaging component, which
+//! reads RAW through Microsoft's free "Raw Image Extension" (Microsoft
+//! Store). Without it Windows can't open the RAW and the loupe says so.
 
 use std::path::Path;
 
 pub fn supported() -> bool {
-    cfg!(target_os = "macos")
+    cfg!(any(target_os = "macos", windows))
 }
 
 /// Decodes `source` (RAW or JPEG) at full size, upright, into `dest` (JPEG).
@@ -23,7 +24,7 @@ pub fn supported() -> bool {
 /// preview — is given, each colour channel is scaled so the full picture's
 /// average matches it: same look, more pixels.
 pub fn render(source: &Path, dest: &Path, reference: Option<&image::DynamicImage>) -> Result<(), String> {
-    imp::render(source, dest)?;
+    imp::render(source, dest, reference)?;
     if let Some(r) = reference {
         match_brightness(dest, r)?;
     }
@@ -128,7 +129,7 @@ mod imp {
         CFURL::from_path(p, false).ok_or_else(|| format!("path tidak valid: {}", p.display()))
     }
 
-    pub fn render(source: &Path, dest: &Path) -> Result<(), String> {
+    pub fn render(source: &Path, dest: &Path, _reference: Option<&image::DynamicImage>) -> Result<(), String> {
         let src_url = url(source)?;
         let src = Owned(unsafe { CGImageSourceCreateWithURL(src_url.as_concrete_TypeRef(), std::ptr::null()) });
         if src.0.is_null() {
@@ -179,12 +180,129 @@ mod imp {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+/// Writes `img` to `dest` as a high-quality JPEG, through a temporary file.
+#[cfg_attr(target_os = "macos", allow(dead_code))]
+fn save(img: &image::RgbImage, dest: &Path) -> Result<(), String> {
+    use image::ImageEncoder;
+    let mut out = Vec::new();
+    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, 90)
+        .write_image(img, img.width(), img.height(), image::ExtendedColorType::Rgb8)
+        .map_err(|e| e.to_string())?;
+    let tmp = dest.with_extension("jpg.pilihfotomu-tmp");
+    std::fs::write(&tmp, out).and_then(|_| std::fs::rename(&tmp, dest)).map_err(|e| e.to_string())
+}
+
+/// Turns sensor-orientation pixels upright. A quarter turn is only applied
+/// when the picture's shape disagrees with the (upright) camera preview, in
+/// case a RAW codec already turned it.
+#[cfg_attr(target_os = "macos", allow(dead_code))]
+fn upright(
+    img: image::DynamicImage,
+    orientation: Option<u8>,
+    reference: Option<&image::DynamicImage>,
+) -> image::DynamicImage {
+    let Some(o) = orientation.and_then(image::metadata::Orientation::from_exif) else { return img };
+    let quarter = matches!(orientation, Some(5..=8));
+    if quarter
+        && let Some(r) = reference
+        && (img.width() > img.height()) == (r.width() > r.height())
+    {
+        return img;
+    }
+    let mut img = img;
+    img.apply_orientation(o);
+    img
+}
+
+#[cfg(windows)]
 mod imp {
     use std::path::Path;
 
-    pub fn render(_source: &Path, _dest: &Path) -> Result<(), String> {
+    use windows::Win32::Foundation::GENERIC_READ;
+    use windows::Win32::Graphics::Imaging::{
+        CLSID_WICImagingFactory, GUID_WICPixelFormat24bppRGB, IWICImagingFactory, WICBitmapDitherTypeNone,
+        WICBitmapPaletteTypeCustom, WICDecodeMetadataCacheOnDemand,
+    };
+    use windows::Win32::System::Com::{CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED, CoCreateInstance, CoInitializeEx};
+    use windows::core::HSTRING;
+
+    /// WINCODEC_ERR_COMPONENTNOTFOUND: no codec for this file type.
+    const NO_CODEC: i32 = 0x88982F50_u32 as i32;
+
+    pub fn render(source: &Path, dest: &Path, reference: Option<&image::DynamicImage>) -> Result<(), String> {
+        let is_jpeg =
+            source.extension().is_some_and(|e| e.eq_ignore_ascii_case("jpg") || e.eq_ignore_ascii_case("jpeg"));
+        if is_jpeg {
+            // A camera JPEG is already full size; no system codec needed.
+            let loaded = crate::preview::load(source, u32::MAX).map_err(|e| e.to_string())?;
+            return super::save(&loaded.image.to_rgb8(), dest);
+        }
+        let (w, h, pixels) = decode(source).map_err(|e| {
+            if e.code().0 == NO_CODEC {
+                "Windows belum bisa membaca RAW ini. Pasang “Raw Image Extension” (gratis) dari Microsoft Store, lalu coba lagi."
+                    .to_string()
+            } else {
+                format!("RAW tidak bisa di-decode oleh Windows: {}", e.message())
+            }
+        })?;
+        let img = image::RgbImage::from_raw(w, h, pixels).ok_or("hasil decode tidak lengkap")?;
+        let orientation = crate::preview::orientation(source);
+        let img = super::upright(image::DynamicImage::ImageRgb8(img), orientation, reference);
+        super::save(&img.to_rgb8(), dest)
+    }
+
+    fn decode(source: &Path) -> windows::core::Result<(u32, u32, Vec<u8>)> {
+        unsafe {
+            // Already initialised on this thread (any mode) is fine too.
+            let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+            let factory: IWICImagingFactory = CoCreateInstance(&CLSID_WICImagingFactory, None, CLSCTX_INPROC_SERVER)?;
+            let path = HSTRING::from(source.as_os_str());
+            let decoder =
+                factory.CreateDecoderFromFilename(&path, None, GENERIC_READ, WICDecodeMetadataCacheOnDemand)?;
+            let frame = decoder.GetFrame(0)?;
+            let converter = factory.CreateFormatConverter()?;
+            converter.Initialize(
+                &frame,
+                &GUID_WICPixelFormat24bppRGB,
+                WICBitmapDitherTypeNone,
+                None,
+                0.0,
+                WICBitmapPaletteTypeCustom,
+            )?;
+            let (mut w, mut h) = (0, 0);
+            converter.GetSize(&mut w, &mut h)?;
+            let stride = w * 3;
+            let mut pixels = vec![0u8; stride as usize * h as usize];
+            converter.CopyPixels(std::ptr::null(), stride, &mut pixels)?;
+            Ok((w, h, pixels))
+        }
+    }
+}
+
+#[cfg(not(any(target_os = "macos", windows)))]
+mod imp {
+    use std::path::Path;
+
+    pub fn render(_source: &Path, _dest: &Path, _reference: Option<&image::DynamicImage>) -> Result<(), String> {
         Err("Kualitas penuh belum tersedia di sistem operasi ini.".into())
+    }
+}
+
+#[cfg(test)]
+mod orientation_tests {
+    use super::*;
+
+    #[test]
+    fn turns_upright_once() {
+        let sensor = image::DynamicImage::new_rgb8(60, 40);
+        let preview_portrait = image::DynamicImage::new_rgb8(20, 30);
+        let turned = upright(sensor.clone(), Some(6), Some(&preview_portrait));
+        assert_eq!((turned.width(), turned.height()), (40, 60));
+        // Codec already turned it: shape matches the preview, left alone.
+        let already = image::DynamicImage::new_rgb8(40, 60);
+        let same = upright(already, Some(6), Some(&preview_portrait));
+        assert_eq!((same.width(), same.height()), (40, 60));
+        assert_eq!(upright(sensor, None, None).width(), 60);
     }
 }
 

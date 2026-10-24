@@ -32,6 +32,11 @@ pub enum Reason {
         faces: u8,
     },
     BestInGroup,
+    /// Same pose as `of`, shot again after a pause (not a burst): the
+    /// photographer may want only one of them.
+    Similar {
+        of: u32,
+    },
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -43,10 +48,30 @@ pub enum Strictness {
     Strict,
 }
 
+/// What kind of shoot this is. It decides whose eyes and focus matter.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum ShootType {
+    #[default]
+    Auto,
+    Wedding,
+    Prewedding,
+    Lamaran,
+    Wisuda,
+    Event,
+    Keluarga,
+    Portrait,
+    /// Products, food, places: no people to judge.
+    Lainnya,
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Options {
     pub strictness: Strictness,
+    /// Sessions saved before shoot types mattered don't have the field.
+    #[serde(default)]
+    pub shoot_type: ShootType,
     pub check_blur: bool,
     pub check_exposure: bool,
     pub check_duplicates: bool,
@@ -67,6 +92,7 @@ impl Default for Options {
     fn default() -> Self {
         Self {
             strictness: Strictness::Balanced,
+            shoot_type: ShootType::Auto,
             check_blur: true,
             check_exposure: true,
             check_duplicates: true,
@@ -83,11 +109,41 @@ pub struct Input<'a> {
     pub taken_at: Option<f64>,
     pub metrics: Metrics,
     pub faces: &'a [Face],
+    /// (series, frame number) from the file name — `IMG_0101` in one folder
+    /// is series hash(folder + "IMG_"), frame 101. Groups bursts when the
+    /// file has no capture time.
+    pub frame: Option<(u64, u32)>,
+}
+
+/// Whose face counts, per shoot type.
+#[derive(Debug, Clone, Copy)]
+struct Profile {
+    /// Read faces at all (off for products, food, places).
+    faces: bool,
+    /// A face at least this share of the largest one is a main subject.
+    main_share: f32,
+    /// Closed eyes of the other people (guests in the background) count.
+    guests: bool,
+}
+
+fn profile(t: ShootType) -> Profile {
+    match t {
+        ShootType::Auto => Profile { faces: true, main_share: 0.4, guests: true },
+        // The couple / the person posing matters; guests and passers-by
+        // blinking in the background are ignored.
+        ShootType::Wedding | ShootType::Lamaran | ShootType::Event | ShootType::Prewedding | ShootType::Portrait => {
+            Profile { faces: true, main_share: 0.4, guests: false }
+        }
+        // Group photos: the grandmother at the edge matters as much as the
+        // graduate in the middle, even when her face is smaller.
+        ShootType::Wisuda | ShootType::Keluarga => Profile { faces: true, main_share: 0.15, guests: true },
+        ShootType::Lainnya => Profile { faces: false, main_share: 0.4, guests: false },
+    }
 }
 
 /// Closed-eye counts, split into the people the photo is about (faces at
-/// least 40 % the size of the largest — the couple, the graduate) and
-/// everyone else (guests in the background).
+/// least `Profile::main_share` the size of the largest — the couple, the
+/// graduate) and everyone else (guests in the background).
 #[derive(Debug, Clone, Copy, Default)]
 struct Eyes {
     main_closed: u8,
@@ -97,17 +153,17 @@ struct Eyes {
     main_smiling: u8,
 }
 
-/// Faces at least 40 % the size of the largest: the people the photo is about.
-fn main_faces(faces: &[Face]) -> impl Iterator<Item = &Face> {
+/// Faces at least `share` the size of the largest: the people the photo is about.
+fn main_faces(faces: &[Face], share: f32) -> impl Iterator<Item = &Face> {
     let largest = faces.iter().map(|f| f.w * f.h).fold(0.0, f32::max);
-    faces.iter().filter(move |f| f.w * f.h >= largest * 0.4)
+    faces.iter().filter(move |f| f.w * f.h >= largest * share)
 }
 
-fn eyes(faces: &[Face]) -> Eyes {
+fn eyes(faces: &[Face], share: f32) -> Eyes {
     let largest = faces.iter().map(|f| f.w * f.h).fold(0.0, f32::max);
     let mut e = Eyes::default();
     for f in faces {
-        let main = f.w * f.h >= largest * 0.4;
+        let main = f.w * f.h >= largest * share;
         if f.eyes_closed() {
             if main {
                 e.main_closed += 1;
@@ -178,12 +234,24 @@ const SHARP_SLACK: f32 = 12.0;
 /// Frames this close in time, and this alike, are one burst.
 const BURST_SECONDS: f64 = 2.5;
 const BURST_HAMMING: u32 = 12;
+/// Without a capture time: consecutive frame numbers, and more alike, since
+/// the numbers alone say nothing about the moment.
+const BURST_FRAMES: u32 = 2;
+const BURST_HAMMING_NO_TIME: u32 = 8;
+/// The same pose shot again after a pause: within this long, and far more
+/// alike than a burst needs to be (a burst moves, a repeat is posed again).
+const SIMILAR_SECONDS: f64 = 90.0;
+const SIMILAR_HAMMING: u32 = 6;
 
 pub fn cull(inputs: &[Input], opts: &Options) -> Vec<Verdict> {
     let t = thresholds(opts.strictness);
+    let prof = profile(opts.shoot_type);
+    let share = prof.main_share;
+    let faces: Vec<&[Face]> = inputs.iter().map(|p| if prof.faces { p.faces } else { &[][..] }).collect();
     let mut out: Vec<Verdict> = inputs
         .iter()
-        .map(|p| {
+        .zip(&faces)
+        .map(|(p, &pf)| {
             let m = &p.metrics;
             let mut status = Status::Pick;
             let mut reasons = Vec::new();
@@ -212,7 +280,7 @@ pub fn cull(inputs: &[Input], opts: &Options) -> Vec<Verdict> {
             }
             // Focus on the background, not the person: only main faces big
             // enough to judge (see `faces::SHARP_MIN_PX`).
-            if opts.check_blur && main_faces(p.faces).any(|f| f.soft()) && !reasons.contains(&Reason::Blur) {
+            if opts.check_blur && main_faces(pf, share).any(|f| f.soft()) && !reasons.contains(&Reason::Blur) {
                 reasons.push(Reason::SubjectSoft);
                 if t.reject_eyes {
                     status = Status::Reject;
@@ -221,10 +289,10 @@ pub fn cull(inputs: &[Input], opts: &Options) -> Vec<Verdict> {
                 }
             }
             if opts.check_eyes {
-                let e = eyes(p.faces);
-                let closed = e.main_closed + e.other_closed;
+                let e = eyes(pf, share);
+                let closed = e.main_closed + if prof.guests { e.other_closed } else { 0 };
                 if closed > 0 {
-                    reasons.push(Reason::EyesClosed { closed, faces: p.faces.len() as u8 });
+                    reasons.push(Reason::EyesClosed { closed, faces: pf.len() as u8 });
                     // Eye calls aren't certain (narrow eyes, squints), so they
                     // only reject in Strict; otherwise the photographer decides.
                     if e.main_closed > 0 && t.reject_eyes {
@@ -243,12 +311,12 @@ pub fn cull(inputs: &[Input], opts: &Options) -> Vec<Verdict> {
             // The keeper, among frames not already rejected: everyone's eyes
             // open first; then, among frames about as sharp as the sharpest,
             // the one where most of the main subjects smile; then sharpness.
-            let open = |i: usize| !opts.check_eyes || eyes(inputs[i].faces).main_closed == 0;
-            let smiles = |i: usize| if opts.check_smile { eyes(inputs[i].faces).main_smiling } else { 0 };
+            let open = |i: usize| !opts.check_eyes || eyes(faces[i], share).main_closed == 0;
+            let smiles = |i: usize| if opts.check_smile { eyes(faces[i], share).main_smiling } else { 0 };
             // Sharpness that matters is the subject's: when every frame has a
             // readable main face, compare faces (0–100 against the group's
             // sharpest face) — the background may be crisp in all of them.
-            let face = |i: usize| subject_sharpness(inputs[i].faces);
+            let face = |i: usize| subject_sharpness(faces[i]);
             let by_face = group.iter().all(|&i| face(i).is_some());
             let best_face = group.iter().filter_map(|&i| face(i)).fold(0.0, f32::max).max(1e-3);
             let sharp = |i: usize| {
@@ -288,8 +356,12 @@ pub fn cull(inputs: &[Input], opts: &Options) -> Vec<Verdict> {
         }
     }
 
+    if opts.check_duplicates {
+        mark_similar(inputs, &faces, &mut out, opts, share);
+    }
+
     for (i, v) in out.iter_mut().enumerate() {
-        let smiling = opts.check_smile && eyes(inputs[i].faces).all_smiling();
+        let smiling = opts.check_smile && eyes(faces[i], share).all_smiling();
         v.rating = match v.status {
             Status::Pick if v.reasons.contains(&Reason::BestInGroup) || smiling => 5,
             Status::Pick => 4,
@@ -300,21 +372,83 @@ pub fn cull(inputs: &[Input], opts: &Options) -> Vec<Verdict> {
     out
 }
 
-/// Indices (into `inputs`) of photos that form bursts of 2+ frames.
+/// Repeats of the same pose a little later: among photos still in the
+/// running (singles and burst keepers), the best of each set stays, the rest
+/// are marked `Similar`. Only Strict moves them out of Pick — a repeated pose
+/// is often on purpose, with a different expression.
+fn mark_similar(inputs: &[Input], faces: &[&[Face]], out: &mut [Verdict], opts: &Options, share: f32) {
+    let in_running = |i: usize| {
+        out[i].status != Status::Reject && !out[i].reasons.iter().any(|r| matches!(r, Reason::Duplicate { .. }))
+    };
+    let mut order: Vec<usize> = (0..inputs.len()).filter(|&i| inputs[i].taken_at.is_some() && in_running(i)).collect();
+    order.sort_by(|&a, &b| inputs[a].taken_at.unwrap().total_cmp(&inputs[b].taken_at.unwrap()));
+    let mut sets: Vec<Vec<usize>> = Vec::new();
+    for i in order {
+        let t = inputs[i].taken_at.unwrap();
+        let home = sets.iter_mut().rev().find(|s| {
+            let last = *s.last().unwrap();
+            t - inputs[last].taken_at.unwrap() <= SIMILAR_SECONDS
+                && out[last].group.is_none_or(|g| out[i].group != Some(g))
+                && s.iter().any(|&j| hamming(inputs[i].metrics.dhash, inputs[j].metrics.dhash) <= SIMILAR_HAMMING)
+        });
+        match home {
+            Some(s) => s.push(i),
+            None => sets.push(vec![i]),
+        }
+    }
+    let open = |i: usize| !opts.check_eyes || eyes(faces[i], share).main_closed == 0;
+    for s in sets.into_iter().filter(|s| s.len() > 1) {
+        let best = s
+            .iter()
+            .copied()
+            .max_by(|&a, &b| {
+                (out[a].status == Status::Pick)
+                    .cmp(&(out[b].status == Status::Pick))
+                    .then(open(a).cmp(&open(b)))
+                    .then(inputs[a].metrics.sharpness.total_cmp(&inputs[b].metrics.sharpness))
+            })
+            .unwrap();
+        for &i in s.iter().filter(|&&i| i != best) {
+            out[i].reasons.push(Reason::Similar { of: inputs[best].id });
+            if opts.strictness == Strictness::Strict && out[i].status == Status::Pick {
+                out[i].status = Status::Maybe;
+            }
+        }
+    }
+}
+
+/// Indices (into `inputs`) of photos that form bursts of 2+ frames: by
+/// capture time when the file has one, else by consecutive frame numbers.
 fn bursts(inputs: &[Input]) -> Vec<Vec<usize>> {
     let mut order: Vec<usize> = (0..inputs.len()).filter(|&i| inputs[i].taken_at.is_some()).collect();
     order.sort_by(|&a, &b| inputs[a].taken_at.unwrap().total_cmp(&inputs[b].taken_at.unwrap()));
+    let mut groups = chain(&order, |prev, i| {
+        inputs[i].taken_at.unwrap() - inputs[prev].taken_at.unwrap() <= BURST_SECONDS
+            && hamming(inputs[i].metrics.dhash, inputs[prev].metrics.dhash) <= BURST_HAMMING
+    });
+
+    let mut untimed: Vec<usize> =
+        (0..inputs.len()).filter(|&i| inputs[i].taken_at.is_none() && inputs[i].frame.is_some()).collect();
+    untimed.sort_by_key(|&i| inputs[i].frame.unwrap());
+    groups.extend(chain(&untimed, |prev, i| {
+        let ((sa, na), (sb, nb)) = (inputs[prev].frame.unwrap(), inputs[i].frame.unwrap());
+        sa == sb
+            && nb.saturating_sub(na) <= BURST_FRAMES
+            && hamming(inputs[i].metrics.dhash, inputs[prev].metrics.dhash) <= BURST_HAMMING_NO_TIME
+    }));
+    groups
+}
+
+/// Splits `order` into runs where each item `joins` the one before; keeps runs of 2+.
+fn chain(order: &[usize], joins: impl Fn(usize, usize) -> bool) -> Vec<Vec<usize>> {
     let mut groups = Vec::new();
     let mut current: Vec<usize> = Vec::new();
-    for i in order {
-        let joins = current.last().is_some_and(|&prev| {
-            inputs[i].taken_at.unwrap() - inputs[prev].taken_at.unwrap() <= BURST_SECONDS
-                && hamming(inputs[i].metrics.dhash, inputs[prev].metrics.dhash) <= BURST_HAMMING
-        });
-        if !joins && current.len() > 1 {
+    for &i in order {
+        let joined = current.last().is_some_and(|&prev| joins(prev, i));
+        if !joined && current.len() > 1 {
             groups.push(std::mem::take(&mut current));
         }
-        if !joins {
+        if !joined {
             current.clear();
         }
         current.push(i);
@@ -335,6 +469,7 @@ mod tests {
             taken_at: Some(t),
             metrics: Metrics { sharpness, brightness: 120.0, shadows_clipped: 0.0, highlights_clipped: 0.0, dhash },
             faces: &[],
+            frame: None,
         }
     }
 
@@ -460,6 +595,50 @@ mod tests {
         let inputs = [photo(1, 0.0, 70.0, 0), photo(2, 0.5, 90.0, 0)];
         let v = cull(&inputs, &Options { strictness: Strictness::Loose, ..Options::default() });
         assert_eq!(v[0].status, Status::Maybe);
+    }
+
+    #[test]
+    fn shoot_type_decides_whose_eyes_count() {
+        let guest_blink = [face(0.2, 0.3), face(0.08, 0.01)];
+        let inputs = [Input { faces: &guest_blink, ..photo(1, 0.0, 80.0, 0) }];
+        let with = |shoot_type| cull(&inputs, &Options { shoot_type, ..Options::default() }).remove(0);
+        assert_eq!(with(ShootType::Auto).status, Status::Maybe);
+        // Wedding: a guest blinking in the background is not the photographer's problem.
+        assert_eq!((with(ShootType::Wedding).status, with(ShootType::Wedding).reasons), (Status::Pick, vec![]));
+        // Family: the small face at the edge is family too — a main subject.
+        let strict = Options { shoot_type: ShootType::Keluarga, strictness: Strictness::Strict, ..Options::default() };
+        assert_eq!(cull(&inputs, &strict)[0].status, Status::Reject);
+        // Products: faces aren't judged at all.
+        let soft = [Face { sharpness: Some(5.0), px: 300.0, ..face(0.2, 0.01) }];
+        let inputs = [Input { faces: &soft, ..photo(1, 0.0, 80.0, 0) }];
+        let v = cull(&inputs, &Options { shoot_type: ShootType::Lainnya, ..Options::default() });
+        assert_eq!((v[0].status, v[0].reasons.clone()), (Status::Pick, vec![]));
+    }
+
+    #[test]
+    fn groups_bursts_by_frame_number_without_capture_time() {
+        let untimed =
+            |id, n, sharpness, dhash| Input { taken_at: None, frame: Some((7, n)), ..photo(id, 0.0, sharpness, dhash) };
+        let inputs = [
+            untimed(1, 101, 70.0, 0b11),
+            untimed(2, 102, 90.0, 0b10),
+            untimed(3, 110, 80.0, 0b11),                                    // later frame
+            Input { frame: Some((8, 103)), ..untimed(4, 103, 60.0, 0b11) }, // other camera
+        ];
+        let v = cull(&inputs, &Options::default());
+        assert_eq!(v[0].reasons, vec![Reason::Duplicate { of: 2 }]);
+        assert!(v[1].reasons.contains(&Reason::BestInGroup));
+        assert_eq!((v[2].group, v[3].group), (None, None));
+    }
+
+    #[test]
+    fn repeated_pose_after_a_pause_is_marked_similar() {
+        let inputs = [photo(1, 0.0, 70.0, 0b1), photo(2, 30.0, 90.0, 0b11), photo(3, 300.0, 90.0, 0b1)];
+        let v = cull(&inputs, &Options::default());
+        assert_eq!((v[0].status, v[0].reasons.clone()), (Status::Pick, vec![Reason::Similar { of: 2 }]));
+        assert!(v[1].reasons.is_empty() && v[2].reasons.is_empty(), "too far apart");
+        let strict = cull(&inputs, &Options { strictness: Strictness::Strict, ..Options::default() });
+        assert_eq!(strict[0].status, Status::Maybe);
     }
 
     #[test]

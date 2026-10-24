@@ -11,7 +11,7 @@ export type Screen =
   | { name: 'compare'; group?: number; ids?: number[] }
   /** Client picks on any folder; uses the open session's thumbnails when it is that folder. */
   | { name: 'picks'; root: string; back: Screen }
-  | { name: 'settings'; back: Screen; section?: 'license' | 'keys' | 'about' };
+  | { name: 'settings'; back: Screen; section?: 'license' | 'language' | 'analysis' | 'storage' | 'keys' | 'about' };
 
 export interface RecentPhoto {
   id: number;
@@ -58,6 +58,11 @@ interface AppState {
   openSession: (id: string) => Promise<void>;
   setStatus: (ids: number[], status: Status) => Promise<void>;
   setRating: (ids: number[], rating: number) => Promise<void>;
+  /** Decides the open session again with other settings (no file is read). */
+  recull: (options: Options) => Promise<void>;
+  /** Show the session summary (after an analysis, or from the sidebar). */
+  summary: boolean;
+  showSummary: (on: boolean) => void;
   markExported: () => void;
 }
 
@@ -79,8 +84,10 @@ export const useApp = create<AppState>((set, get) => ({
   error: null,
   undoStack: [],
   redoStack: [],
+  summary: false,
 
   go: (screen) => set({ screen }),
+  showSummary: (summary) => set({ summary }),
   fail: (error) => set({ error: message(error) }),
   dismissError: () => set({ error: null }),
   select: (selectedId) => set({ selectedId, selection: [] }),
@@ -149,7 +156,16 @@ export const useApp = create<AppState>((set, get) => ({
       });
     try {
       const session = await api.analyzeFolder(folder.root, folders, options, onProgress);
-      set({ session, run: null, screen: { name: 'review' }, selectedId: session.photos[0]?.id ?? null, selection: [], undoStack: [], redoStack: [] });
+      set({
+        session,
+        run: null,
+        screen: { name: 'review' },
+        selectedId: session.photos[0]?.id ?? null,
+        selection: [],
+        undoStack: [],
+        redoStack: [],
+        summary: true,
+      });
     } catch (e) {
       const cancelled = message(e) === 'Dibatalkan.';
       set({ run: null, screen: { name: 'setup', folder }, error: cancelled ? null : message(e) });
@@ -161,7 +177,7 @@ export const useApp = create<AppState>((set, get) => ({
   openSession: async (id) => {
     try {
       const session = await api.openSession(id);
-      set({ session, screen: { name: 'review' }, selectedId: session.photos[0]?.id ?? null, selection: [], undoStack: [], redoStack: [] });
+      set({ session, screen: { name: 'review' }, selectedId: session.photos[0]?.id ?? null, selection: [], undoStack: [], redoStack: [], summary: false });
     } catch (e) {
       get().fail(e);
     }
@@ -174,7 +190,7 @@ export const useApp = create<AppState>((set, get) => ({
     // Optimistic: keyboard culling has to feel instant.
     const photos = session.photos.map((p) =>
       ids.includes(p.id)
-        ? { ...p, status, rating: status === 'pick' ? Math.max(p.rating, 4) : status === 'maybe' ? 3 : 1 }
+        ? { ...p, status, manual: true, rating: status === 'pick' ? Math.max(p.rating, 4) : status === 'maybe' ? 3 : 1 }
         : p,
     );
     record(before.photos, photos, ids);
@@ -191,13 +207,24 @@ export const useApp = create<AppState>((set, get) => ({
     const { session } = get();
     if (!session || ids.length === 0) return;
     const before = session;
-    const photos = session.photos.map((p) => (ids.includes(p.id) ? { ...p, rating } : p));
+    const photos = session.photos.map((p) => (ids.includes(p.id) ? { ...p, rating, manual: true } : p));
     record(before.photos, photos, ids);
     set({ session: { ...session, photos } });
     try {
       await api.setRating(ids, rating);
     } catch (e) {
       set({ session: before });
+      get().fail(e);
+    }
+  },
+
+  recull: async (options) => {
+    try {
+      const session = await api.recull(options);
+      // Undo steps refer to verdicts that no longer exist; picking the old
+      // setting again brings them back (hand-made changes are kept anyway).
+      set({ session, undoStack: [], redoStack: [] });
+    } catch (e) {
       get().fail(e);
     }
   },
@@ -223,7 +250,13 @@ function applyMarks(marks: Mark[]) {
   useApp.setState({
     session: {
       ...session,
-      photos: session.photos.map((p) => (by.has(p.id) ? { ...p, status: by.get(p.id)!.status, rating: by.get(p.id)!.rating } : p)),
+      photos: session.photos.map((p) => {
+        const m = by.get(p.id);
+        if (!m) return p;
+        // Same rule as `Session::set_marks`: back to the AI's verdict is the AI's again.
+        const manual = m.status !== p.autoStatus || (p.autoRating != null && m.rating !== p.autoRating);
+        return { ...p, status: m.status, rating: m.rating, manual };
+      }),
     },
     // Show what was undone.
     selectedId: marks[0]?.id ?? useApp.getState().selectedId,

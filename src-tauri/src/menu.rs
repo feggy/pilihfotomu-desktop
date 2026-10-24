@@ -1,4 +1,5 @@
-//! The native menu bar (macOS top bar, Windows window menu), in Indonesian.
+//! The native menu bar (macOS top bar, Windows window menu), in Indonesian
+//! or English — the UI says which (`set_language`) and the bar is rebuilt.
 //! App-specific items don't act here: they emit `menu` with their id and the
 //! UI decides, since only it knows which screen is open.
 
@@ -34,8 +35,14 @@ pub fn hide_system_edit_items() {
 #[cfg(not(target_os = "macos"))]
 pub fn hide_system_edit_items() {}
 
+/// Built in Indonesian at start; the UI switches it right after loading.
 pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
+    build_in(app, false)
+}
+
+pub fn build_in<R: Runtime>(app: &AppHandle<R>, en: bool) -> tauri::Result<Menu<R>> {
     hide_system_edit_items();
+    let l = |id: &'static str, english: &'static str| if en { english } else { id };
     let item = |id: &str, text: &str, accel: Option<&str>| {
         let b = MenuItemBuilder::with_id(id, text);
         match accel {
@@ -46,54 +53,56 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
     let about = AboutMetadataBuilder::new()
         .name(Some("pilihfotomu"))
         .version(Some(app.package_info().version.to_string()))
-        .comments(Some("Pilih foto otomatis, offline."))
+        .comments(Some(l("Pilih foto otomatis, offline.", "Automatic photo culling, offline.")))
         .build();
 
     let app_menu = SubmenuBuilder::new(app, "pilihfotomu")
-        .item(&PredefinedMenuItem::about(app, Some("Tentang pilihfotomu"), Some(about))?)
+        .item(&PredefinedMenuItem::about(app, Some(l("Tentang pilihfotomu", "About pilihfotomu")), Some(about))?)
         .separator()
-        .item(&item("settings", "Pengaturan…", Some("CmdOrCtrl+,"))?)
+        .item(&item("settings", l("Pengaturan…", "Settings…"), Some("CmdOrCtrl+,"))?)
         .separator()
-        .item(&PredefinedMenuItem::hide(app, Some("Sembunyikan pilihfotomu"))?)
-        .item(&PredefinedMenuItem::hide_others(app, Some("Sembunyikan yang lain"))?)
-        .item(&PredefinedMenuItem::show_all(app, Some("Tampilkan semua"))?)
+        .item(&PredefinedMenuItem::hide(app, Some(l("Sembunyikan pilihfotomu", "Hide pilihfotomu")))?)
+        .item(&PredefinedMenuItem::hide_others(app, Some(l("Sembunyikan yang lain", "Hide Others")))?)
+        .item(&PredefinedMenuItem::show_all(app, Some(l("Tampilkan semua", "Show All")))?)
         .separator()
-        .item(&PredefinedMenuItem::quit(app, Some("Keluar dari pilihfotomu"))?)
+        .item(&PredefinedMenuItem::quit(app, Some(l("Keluar dari pilihfotomu", "Quit pilihfotomu")))?)
         .build()?;
 
     let file = SubmenuBuilder::new(app, "File")
-        .item(&item("open-folder", "Buka folder sesi…", Some("CmdOrCtrl+O"))?)
-        .item(&item("client-picks", "Tempel pilihan klien…", Some("CmdOrCtrl+Shift+V"))?)
-        .item(&item("export", "Ekspor…", Some("CmdOrCtrl+E"))?)
+        .item(&item("open-folder", l("Buka folder sesi…", "Open Session Folder…"), Some("CmdOrCtrl+O"))?)
+        .item(&item("client-picks", l("Tempel pilihan klien…", "Paste Client Picks…"), Some("CmdOrCtrl+Shift+V"))?)
+        .item(&item("export", l("Ekspor…", "Export…"), Some("CmdOrCtrl+E"))?)
         .separator()
-        .item(&item("home", "Beranda", Some("CmdOrCtrl+Shift+H"))?)
+        .item(&item("home", l("Beranda", "Home"), Some("CmdOrCtrl+Shift+H"))?)
         .separator()
-        .item(&PredefinedMenuItem::close_window(app, Some("Tutup jendela"))?)
+        .item(&PredefinedMenuItem::close_window(app, Some(l("Tutup jendela", "Close Window")))?)
         .build()?;
 
     // Without these, ⌘C / ⌘V / ⌘A don't work in text fields on macOS.
     let edit = SubmenuBuilder::new(app, "Edit")
         // Custom, not the system items: in a text field they undo typing,
         // elsewhere they undo status and star changes (the UI decides).
-        .item(&item("undo", "Urungkan", Some("CmdOrCtrl+Z"))?)
-        .item(&item("redo", "Ulangi", Some("CmdOrCtrl+Shift+Z"))?)
+        .item(&item("undo", l("Urungkan", "Undo"), Some("CmdOrCtrl+Z"))?)
+        .item(&item("redo", l("Ulangi", "Redo"), Some("CmdOrCtrl+Shift+Z"))?)
         .separator()
-        .item(&PredefinedMenuItem::cut(app, Some("Potong"))?)
-        .item(&PredefinedMenuItem::copy(app, Some("Salin"))?)
-        .item(&PredefinedMenuItem::paste(app, Some("Tempel"))?)
-        .item(&PredefinedMenuItem::select_all(app, Some("Pilih semua"))?)
+        .item(&PredefinedMenuItem::cut(app, Some(l("Potong", "Cut")))?)
+        .item(&PredefinedMenuItem::copy(app, Some(l("Salin", "Copy")))?)
+        .item(&PredefinedMenuItem::paste(app, Some(l("Tempel", "Paste")))?)
+        .item(&PredefinedMenuItem::select_all(app, Some(l("Pilih semua", "Select All")))?)
         .build()?;
 
-    let view = SubmenuBuilder::new(app, "Tampilan")
-        .item(&PredefinedMenuItem::fullscreen(app, Some("Layar penuh"))?)
+    let view = SubmenuBuilder::new(app, l("Tampilan", "View"))
+        .item(&PredefinedMenuItem::fullscreen(app, Some(l("Layar penuh", "Enter Full Screen")))?)
         .build()?;
 
-    let window = SubmenuBuilder::new(app, "Jendela")
-        .item(&PredefinedMenuItem::minimize(app, Some("Kecilkan"))?)
-        .item(&PredefinedMenuItem::maximize(app, Some("Perbesar"))?)
+    let window = SubmenuBuilder::new(app, l("Jendela", "Window"))
+        .item(&PredefinedMenuItem::minimize(app, Some(l("Kecilkan", "Minimize")))?)
+        .item(&PredefinedMenuItem::maximize(app, Some(l("Perbesar", "Zoom")))?)
         .build()?;
 
-    let help = SubmenuBuilder::new(app, "Bantuan").item(&item("shortcuts", "Pintasan keyboard", None)?).build()?;
+    let help = SubmenuBuilder::new(app, l("Bantuan", "Help"))
+        .item(&item("shortcuts", l("Pintasan keyboard", "Keyboard Shortcuts"), None)?)
+        .build()?;
 
     Menu::with_items(app, &[&app_menu, &file, &edit, &view, &window, &help])
 }

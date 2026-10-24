@@ -1,4 +1,6 @@
-//! Getting results out: XMP sidecars for Lightroom, and copying files.
+//! Getting results out: XMP sidecars (Lightroom Classic, Capture One, Photo
+//! Mechanic all read the same file), marked copies of JPEG-only photos, and
+//! copying files.
 
 use std::fs;
 use std::io::Write;
@@ -33,6 +35,10 @@ pub struct ExportReport {
     /// JPEG-only photos: Lightroom reads their metadata from inside the
     /// file, not from a sidecar, and originals are never modified.
     pub skipped_jpeg: u32,
+    /// JPEG-only photos copied with the marks written inside
+    /// (`JPEG_MARKED_DIR`), when asked for.
+    pub marked_jpeg: u32,
+    pub marked_folder: Option<String>,
     pub failed: Vec<String>,
 }
 
@@ -71,6 +77,7 @@ fn reason_word(r: &Reason) -> Option<&'static str> {
         Reason::Duplicate { .. } => "duplikat",
         Reason::EyesClosed { .. } => "mata terpejam",
         Reason::BestInGroup => "terbaik di grup",
+        Reason::Similar { .. } => "pose mirip",
     })
 }
 
@@ -78,6 +85,9 @@ fn escape(s: &str) -> String {
     s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
 }
 
+/// The XMP packet for one photo. Lightroom and Capture One read label, stars
+/// and keywords; Photo Mechanic also its own Tagged flag (= Pick), which the
+/// others ignore.
 pub fn xmp_document(m: &Mark, with_reasons: bool) -> String {
     let mut flat = vec!["pilihfotomu".to_string()];
     let mut tree = vec![format!("pilihfotomu|{}", status_word(m.status))];
@@ -96,8 +106,10 @@ pub fn xmp_document(m: &Mark, with_reasons: bool) -> String {
     xmlns:xmp="http://ns.adobe.com/xap/1.0/"
     xmlns:dc="http://purl.org/dc/elements/1.1/"
     xmlns:lr="http://ns.adobe.com/lightroom/1.0/"
+    xmlns:photomechanic="http://ns.camerabits.com/photomechanic/1.0/"
    xmp:Rating="{rating}"
-   xmp:Label="{label}">
+   xmp:Label="{label}"
+   photomechanic:Tagged="{tagged}">
    <dc:subject>
     <rdf:Bag>
 {flat}    </rdf:Bag>
@@ -112,6 +124,7 @@ pub fn xmp_document(m: &Mark, with_reasons: bool) -> String {
 "#,
         rating = m.rating.min(5),
         label = label(m.status),
+        tagged = if m.status == Status::Pick { "True" } else { "False" },
         flat = bag(&flat),
         tree = bag(&tree),
     )
@@ -122,11 +135,23 @@ pub fn sidecar_path(raw: &Path) -> PathBuf {
     raw.with_extension("xmp")
 }
 
-pub fn write_xmp(marks: &[Mark], existing: Existing, with_reasons: bool) -> ExportReport {
+/// Writes a sidecar next to every RAW. JPEG-only photos can't have one that
+/// Lightroom reads; with `jpeg_copies` (a folder) they are copied there with
+/// the marks written inside the copy instead.
+pub fn write_xmp(marks: &[Mark], existing: Existing, with_reasons: bool, jpeg_copies: Option<&Path>) -> ExportReport {
     let mut report = ExportReport::default();
     for m in marks {
         let Some(raw) = &m.photo.raw else {
-            report.skipped_jpeg += 1;
+            match (jpeg_copies, &m.photo.jpeg) {
+                (Some(dir), Some(jpeg)) => {
+                    report.marked_folder = Some(dir.display().to_string());
+                    match write_marked_copy(jpeg, dir, &xmp_document(m, with_reasons)) {
+                        Ok(()) => report.marked_jpeg += 1,
+                        Err(e) => report.failed.push(format!("{}: {e}", m.photo.display_name())),
+                    }
+                }
+                _ => report.skipped_jpeg += 1,
+            }
             continue;
         };
         let path = sidecar_path(raw);
@@ -152,6 +177,101 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
         f.sync_all()?;
     }
     fs::rename(&tmp, path)
+}
+
+/// Marker of a file this app wrote; only such copies are ever replaced.
+const OUR_XMP: &[u8] = br#"x:xmptk="pilihfotomu""#;
+
+/// Copies `jpeg` into `dir` with `xmp` embedded. A copy from an earlier
+/// export is replaced (the marks may have changed since); a file with the
+/// same name that this app didn't write is left alone.
+fn write_marked_copy(jpeg: &Path, dir: &Path, xmp: &str) -> Result<(), String> {
+    let name = jpeg.file_name().ok_or("nama file tidak valid")?;
+    let target = dir.join(name);
+    if let Ok(old) = fs::read(&target)
+        && !old.windows(OUR_XMP.len()).any(|w| w == OUR_XMP)
+    {
+        return Err("sudah ada file lain dengan nama sama di folder tujuan".into());
+    }
+    fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    let data = fs::read(jpeg).map_err(|e| e.to_string())?;
+    let out = jpeg_with_xmp(&data, xmp).ok_or("bukan file JPEG yang bisa dibaca")?;
+    let tmp = target.with_extension("jpg.pilihfotomu-tmp");
+    fs::write(&tmp, out).and_then(|_| fs::rename(&tmp, &target)).map_err(|e| e.to_string())
+}
+
+const XMP_SIG: &[u8] = b"http://ns.adobe.com/xap/1.0/\0";
+const EXIF_SIG: &[u8] = b"Exif\0\0";
+
+/// (marker, whole segment incl. FF xx + length).
+type Segment<'a> = (u8, &'a [u8]);
+
+/// Header segments of a JPEG, up to the first one that isn't an APPn/COM;
+/// and where the rest starts.
+fn header_segments(d: &[u8]) -> Option<(Vec<Segment<'_>>, usize)> {
+    if !d.starts_with(&[0xFF, 0xD8]) {
+        return None;
+    }
+    let mut segs = Vec::new();
+    let mut p = 2;
+    while p + 4 <= d.len() && d[p] == 0xFF && (matches!(d[p + 1], 0xE0..=0xEF) || d[p + 1] == 0xFE) {
+        let len = u16::from_be_bytes([d[p + 2], d[p + 3]]) as usize;
+        if len < 2 || p + 2 + len > d.len() {
+            return None;
+        }
+        segs.push((d[p + 1], &d[p..p + 2 + len]));
+        p += 2 + len;
+    }
+    Some((segs, p))
+}
+
+fn app1(sig: &[u8], payload: &[u8]) -> Option<Vec<u8>> {
+    let len = u16::try_from(2 + sig.len() + payload.len()).ok()?;
+    let mut seg = vec![0xFF, 0xE1];
+    seg.extend(len.to_be_bytes());
+    seg.extend(sig);
+    seg.extend(payload);
+    Some(seg)
+}
+
+/// Rebuilds a JPEG's header: JFIF first, then `exif` (or the file's own
+/// EXIF when None), then `xmp` (or the file's own), then everything else.
+/// The image data is copied untouched.
+fn rebuild_header(d: &[u8], exif: Option<&[u8]>, xmp: Option<&[u8]>) -> Option<Vec<u8>> {
+    let (segs, rest) = header_segments(d)?;
+    let is = |seg: &[u8], sig: &[u8]| seg.len() > 4 && seg[4..].starts_with(sig);
+    let mut out = vec![0xFF, 0xD8];
+    for (m, seg) in &segs {
+        if *m == 0xE0 {
+            out.extend(*seg);
+        }
+    }
+    match exif {
+        Some(e) => out.extend(app1(EXIF_SIG, e)?),
+        None => segs.iter().filter(|(m, s)| *m == 0xE1 && is(s, EXIF_SIG)).for_each(|(_, s)| out.extend(*s)),
+    }
+    match xmp {
+        Some(x) => out.extend(app1(XMP_SIG, x)?),
+        None => segs.iter().filter(|(m, s)| *m == 0xE1 && is(s, XMP_SIG)).for_each(|(_, s)| out.extend(*s)),
+    }
+    for (m, seg) in &segs {
+        if *m != 0xE0 && !(*m == 0xE1 && (is(seg, EXIF_SIG) || is(seg, XMP_SIG))) {
+            out.extend(*seg);
+        }
+    }
+    out.extend(&d[rest..]);
+    Some(out)
+}
+
+/// `jpeg` with `xmp` as its XMP packet (any older one replaced).
+pub fn jpeg_with_xmp(jpeg: &[u8], xmp: &str) -> Option<Vec<u8>> {
+    let packet = format!("<?xpacket begin=\"\u{feff}\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>\n{xmp}<?xpacket end=\"w\"?>");
+    rebuild_header(jpeg, None, Some(packet.as_bytes()))
+}
+
+/// `jpeg` with `tiff` (an EXIF TIFF block) as its EXIF.
+pub fn jpeg_with_exif(jpeg: &[u8], tiff: &[u8]) -> Option<Vec<u8>> {
+    rebuild_header(jpeg, Some(tiff), None)
 }
 
 #[derive(Debug, Default, Serialize)]
@@ -259,7 +379,13 @@ pub fn export_jpegs(
 }
 
 fn render_jpeg(p: &Photo, target: &Path, scale: u32, quality: u8) -> Result<(u32, u32), String> {
-    let loaded = crate::preview::load(p.source(), u32::MAX).map_err(|e| e.to_string())?;
+    let (loaded, exif) = crate::preview::load_with_exif(p.source(), u32::MAX).map_err(|e| e.to_string())?;
+    // A RAW + JPEG pair: the RAW's EXIF when the camera JPEG has none.
+    let exif = if exif.is_empty() && p.jpeg.is_some() {
+        p.raw.as_deref().and_then(|r| fs::read(r).ok()).map(|d| crate::preview::exif_fields(&d)).unwrap_or_default()
+    } else {
+        exif
+    };
     let mut img = loaded.image;
     if scale < 100 {
         let w = (img.width() * scale / 100).max(1);
@@ -271,6 +397,13 @@ fn render_jpeg(p: &Photo, target: &Path, scale: u32, quality: u8) -> Result<(u32
     JpegEncoder::new_with_quality(&mut out, quality)
         .write_image(&rgb, rgb.width(), rgb.height(), image::ExtendedColorType::Rgb8)
         .map_err(|e| e.to_string())?;
+    // Date, camera, lens and settings travel along: galleries sort by them.
+    // A JPEG without them is still a good JPEG.
+    if let Some(tiff) = crate::preview::exif_block(&exif, rgb.width(), rgb.height())
+        && let Some(with) = jpeg_with_exif(&out, &tiff)
+    {
+        out = with;
+    }
     let tmp = target.with_extension("jpg.pilihfotomu-tmp");
     fs::write(&tmp, out).and_then(|_| fs::rename(&tmp, target)).map_err(|e| e.to_string())?;
     Ok((rgb.width(), rgb.height()))
@@ -306,17 +439,94 @@ mod tests {
         let reasons = [Reason::Duplicate { of: 3 }];
         let mark = Mark { photo: &p, status: Status::Reject, rating: 1, reasons: &reasons };
 
-        let r = write_xmp(std::slice::from_ref(&mark), Existing::Skip, true);
+        let r = write_xmp(std::slice::from_ref(&mark), Existing::Skip, true, None);
         assert_eq!(r.written, 1);
         let xml = fs::read_to_string(tmp.path().join("IMG_0001.xmp")).unwrap();
         assert!(xml.contains(r#"xmp:Rating="1""#));
         assert!(xml.contains(r#"xmp:Label="Red""#));
         assert!(xml.contains("<rdf:li>pilihfotomu|lewati|duplikat</rdf:li>"));
+        assert!(xml.contains(r#"photomechanic:Tagged="False""#));
 
         fs::write(tmp.path().join("IMG_0001.xmp"), "edits from lightroom").unwrap();
-        let r = write_xmp(&[mark], Existing::Skip, true);
+        let r = write_xmp(&[mark], Existing::Skip, true, None);
         assert_eq!((r.written, r.skipped_existing), (0, 1));
         assert_eq!(fs::read_to_string(tmp.path().join("IMG_0001.xmp")).unwrap(), "edits from lightroom");
+    }
+
+    fn real_jpeg(path: &Path) {
+        let img = image::RgbImage::from_pixel(40, 30, image::Rgb([120, 80, 40]));
+        let mut bytes = Vec::new();
+        JpegEncoder::new_with_quality(&mut bytes, 90)
+            .write_image(&img, 40, 30, image::ExtendedColorType::Rgb8)
+            .unwrap();
+        fs::write(path, bytes).unwrap();
+    }
+
+    #[test]
+    fn jpeg_only_photos_get_a_marked_copy() {
+        let tmp = tempfile::tempdir().unwrap();
+        let src = tmp.path().join("IMG_0005.JPG");
+        real_jpeg(&src);
+        let original = fs::read(&src).unwrap();
+        let p = Photo { raw: None, jpeg: Some(src.clone()), ..photo(tmp.path(), "IMG_0005", false) };
+        let mark = Mark { photo: &p, status: Status::Pick, rating: 5, reasons: &[] };
+        let dir = tmp.path().join(crate::scan::JPEG_MARKED_DIR);
+
+        let r = write_xmp(std::slice::from_ref(&mark), Existing::Skip, true, Some(&dir));
+        assert_eq!((r.marked_jpeg, r.skipped_jpeg), (1, 0));
+        let copy = fs::read(dir.join("IMG_0005.JPG")).unwrap();
+        let text = String::from_utf8_lossy(&copy);
+        assert!(text.contains(r#"xmp:Rating="5""#) && text.contains(r#"photomechanic:Tagged="True""#));
+        assert_eq!(image::load_from_memory(&copy).unwrap().width(), 40, "still a valid JPEG");
+        assert_eq!(fs::read(&src).unwrap(), original, "original untouched");
+
+        // A second export replaces our own copy, never someone else's file.
+        let lewati = Mark { status: Status::Reject, rating: 1, ..mark };
+        assert_eq!(write_xmp(std::slice::from_ref(&lewati), Existing::Skip, true, Some(&dir)).marked_jpeg, 1);
+        let again = String::from_utf8_lossy(&fs::read(dir.join("IMG_0005.JPG")).unwrap()).into_owned();
+        assert!(again.contains(r#"xmp:Rating="1""#) && again.matches("xpacket begin").count() == 1);
+        fs::write(dir.join("IMG_0005.JPG"), b"someone else's").unwrap();
+        assert_eq!(write_xmp(&[lewati], Existing::Skip, true, Some(&dir)).failed.len(), 1);
+        // Without the option they are skipped, as before.
+        assert_eq!(write_xmp(&[mark], Existing::Skip, true, None).skipped_jpeg, 1);
+    }
+
+    #[test]
+    fn new_jpegs_keep_the_camera_exif() {
+        use exif::{Field, In, Tag, Value};
+        let tmp = tempfile::tempdir().unwrap();
+        let src = tmp.path().join("IMG_0006.JPG");
+        real_jpeg(&src);
+        let fields = [
+            Field { tag: Tag::Model, ifd_num: In::PRIMARY, value: Value::Ascii(vec![b"Canon EOS R6".to_vec()]) },
+            Field { tag: Tag::Orientation, ifd_num: In::PRIMARY, value: Value::Short(vec![6]) },
+            Field {
+                tag: Tag::DateTimeOriginal,
+                ifd_num: In::PRIMARY,
+                value: Value::Ascii(vec![b"2026:10:12 14:03:22".to_vec()]),
+            },
+        ];
+        let mut w = exif::experimental::Writer::new();
+        fields.iter().for_each(|f| w.push_field(f));
+        let mut tiff = std::io::Cursor::new(Vec::new());
+        w.write(&mut tiff, false).unwrap();
+        fs::write(&src, jpeg_with_exif(&fs::read(&src).unwrap(), tiff.get_ref()).unwrap()).unwrap();
+
+        let p = Photo { raw: None, jpeg: Some(src), ..photo(tmp.path(), "IMG_0006", false) };
+        let r =
+            export_jpegs(&[&p], &tmp.path().join("out"), JpegOptions { scale_percent: 100, quality: 85 }, |_, _| {});
+        assert_eq!(r.smallest, Some((30, 40)), "turned upright");
+        let out = fs::read(tmp.path().join("out/IMG_0006.jpg")).unwrap();
+        let e = exif::Reader::new().read_from_container(&mut std::io::Cursor::new(&out)).unwrap();
+        let text = |t| e.get_field(t, In::PRIMARY).unwrap().display_value().to_string();
+        assert_eq!(text(Tag::Model), "\"Canon EOS R6\"");
+        assert!(text(Tag::DateTimeOriginal).starts_with("2026-10-12 14:03:22"));
+        assert_eq!(
+            e.get_field(Tag::Orientation, In::PRIMARY).unwrap().value.get_uint(0),
+            Some(1),
+            "pixels already upright"
+        );
+        assert!(image::load_from_memory(&out).is_ok());
     }
 
     #[test]

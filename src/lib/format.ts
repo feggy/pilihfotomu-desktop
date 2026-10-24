@@ -4,6 +4,7 @@ import {
   Crown,
   EyeOff,
   Focus,
+  Images,
   Moon,
   ScanEye,
   UserRound,
@@ -12,9 +13,9 @@ import {
 } from 'lucide-react';
 
 import { eyesClosed, smiling, type PhotoEntry, type Reason, type Status } from './api';
+import { locale, t } from './i18n';
 
-const nf = new Intl.NumberFormat('id-ID');
-export const num = (n: number) => nf.format(n);
+export const num = (n: number) => new Intl.NumberFormat(locale()).format(n);
 
 export function bytes(n: number) {
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -23,18 +24,18 @@ export function bytes(n: number) {
     n /= 1024;
     i++;
   }
-  return `${new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 }).format(n)} ${units[i]}`;
+  return `${new Intl.NumberFormat(locale(), { maximumFractionDigits: 1 }).format(n)} ${units[i]}`;
 }
 
 export function duration(ms: number) {
   const s = Math.round(ms / 1000);
-  if (s < 60) return `${s} dtk`;
+  if (s < 60) return t('{s} dtk', { s });
   const m = Math.floor(s / 60);
-  return s % 60 ? `${m} mnt ${s % 60} dtk` : `${m} mnt`;
+  return s % 60 ? t('{m} mnt {s} dtk', { m, s: s % 60 }) : t('{m} mnt', { m });
 }
 
 export const date = (unixSeconds: number) =>
-  new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }).format(
+  new Intl.DateTimeFormat(locale(), { day: 'numeric', month: 'short', year: 'numeric' }).format(
     new Date(unixSeconds * 1000),
   );
 
@@ -50,27 +51,48 @@ export const clock = (takenAt: number | null) => {
 export const shotDate = (takenAt: number | null) =>
   takenAt == null
     ? null
-    : new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(
+    : new Intl.DateTimeFormat(locale(), { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(
         new Date(takenAt * 1000),
       );
 
-export const STATUS: Record<Status, { label: string; one: string; color: string; key: string }> = {
-  pick: { label: 'Dipilih', one: 'Pilih', color: 'var(--color-pick)', key: 'P' },
-  maybe: { label: 'Dicek', one: 'Cek', color: 'var(--color-maybe)', key: 'U' },
-  reject: { label: 'Dilewati', one: 'Lewati', color: 'var(--color-reject)', key: 'X' },
+/** Labels are getters: read in the current language. */
+const status = (label: string, one: string, color: string, key: string) => ({
+  get label() {
+    return t(label);
+  },
+  get one() {
+    return t(one);
+  },
+  color,
+  key,
+});
+
+export const STATUS: Record<Status, { readonly label: string; readonly one: string; color: string; key: string }> = {
+  pick: status('Dipilih', 'Pilih', 'var(--color-pick)', 'P'),
+  maybe: status('Dicek', 'Cek', 'var(--color-maybe)', 'U'),
+  reject: status('Dilewati', 'Lewati', 'var(--color-reject)', 'X'),
 };
 
 export type ReasonKind = Reason['kind'];
 
-export const REASON: Record<ReasonKind, { label: string; icon: LucideIcon; tone: Status | 'gold' }> = {
-  blur: { label: 'Blur', icon: Focus, tone: 'reject' },
-  softFocus: { label: 'Kurang tajam', icon: ScanEye, tone: 'maybe' },
-  subjectSoft: { label: 'Subjek kurang tajam', icon: UserRound, tone: 'maybe' },
-  dark: { label: 'Terlalu gelap', icon: Moon, tone: 'maybe' },
-  bright: { label: 'Terlalu terang', icon: Sun, tone: 'maybe' },
-  duplicate: { label: 'Duplikat', icon: Copy, tone: 'reject' },
-  eyesClosed: { label: 'Terdeteksi terpejam', icon: EyeOff, tone: 'maybe' },
-  bestInGroup: { label: 'Terbaik di grup', icon: Crown, tone: 'gold' },
+const reason = (label: string, icon: LucideIcon, tone: Status | 'gold') => ({
+  get label() {
+    return t(label);
+  },
+  icon,
+  tone,
+});
+
+export const REASON: Record<ReasonKind, { readonly label: string; icon: LucideIcon; tone: Status | 'gold' }> = {
+  blur: reason('Blur', Focus, 'reject'),
+  softFocus: reason('Kurang tajam', ScanEye, 'maybe'),
+  subjectSoft: reason('Subjek kurang tajam', UserRound, 'maybe'),
+  dark: reason('Terlalu gelap', Moon, 'maybe'),
+  bright: reason('Terlalu terang', Sun, 'maybe'),
+  duplicate: reason('Duplikat', Copy, 'reject'),
+  eyesClosed: reason('Terdeteksi terpejam', EyeOff, 'maybe'),
+  bestInGroup: reason('Terbaik di grup', Crown, 'gold'),
+  similar: reason('Pose mirip', Images, 'maybe'),
 };
 
 export const toneColor = (tone: Status | 'gold') =>
@@ -83,8 +105,11 @@ export function smileSummary(p: PhotoEntry): { label: string; tone: Status | 'go
   const read = (p.faces ?? []).filter((f) => f.smile != null);
   if (!read.length) return null;
   const n = read.filter(smiling).length;
-  if (read.length === 1) return n ? { label: 'Tersenyum', tone: 'gold' } : { label: 'Netral', tone: 'pick' };
-  return { label: n ? `${n} dari ${read.length} tersenyum` : 'Semua netral', tone: n ? 'gold' : 'pick' };
+  if (read.length === 1) return n ? { label: t('Tersenyum'), tone: 'gold' } : { label: t('Netral'), tone: 'pick' };
+  return {
+    label: n ? t('{n} dari {total} tersenyum', { n, total: read.length }) : t('Semua netral'),
+    tone: n ? 'gold' : 'pick',
+  };
 }
 
 /** Photo has someone smiling (for the sidebar filter). */
@@ -95,6 +120,6 @@ export function eyeSummary(p: PhotoEntry): { label: string; tone: Status } | nul
   if (!p.faces?.length) return null;
   const closed = p.faces.filter(eyesClosed).length;
   return closed
-    ? { label: `${closed} dari ${p.faces.length} terpejam`, tone: 'maybe' }
-    : { label: p.faces.length === 1 ? 'Terbuka' : `${p.faces.length} wajah terbuka`, tone: 'pick' };
+    ? { label: t('{n} dari {total} terpejam', { n: closed, total: p.faces.length }), tone: 'maybe' }
+    : { label: p.faces.length === 1 ? t('Terbuka') : t('{n} wajah terbuka', { n: p.faces.length }), tone: 'pick' };
 }

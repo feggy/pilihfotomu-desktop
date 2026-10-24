@@ -52,13 +52,22 @@ pub struct Loaded {
 
 /// Reads `path` (RAW or JPEG) and returns its preview, upright and shrunk.
 pub fn load(path: &Path, max_side: u32) -> Result<Loaded, PreviewError> {
+    load_data(&fs::read(path)?, max_side)
+}
+
+/// `load`, plus the EXIF fields worth carrying into a new JPEG (`exif_block`).
+pub fn load_with_exif(path: &Path, max_side: u32) -> Result<(Loaded, Vec<exif::Field>), PreviewError> {
     let data = fs::read(path)?;
+    Ok((load_data(&data, max_side)?, exif_fields(&data)))
+}
+
+fn load_data(data: &[u8], max_side: u32) -> Result<Loaded, PreviewError> {
     let is_jpeg = data.starts_with(&[0xFF, 0xD8]);
-    let jpeg = if is_jpeg { &data[..] } else { largest_embedded_jpeg(&data).ok_or(PreviewError::NoPreview)? };
+    let jpeg = if is_jpeg { data } else { largest_embedded_jpeg(data).ok_or(PreviewError::NoPreview)? };
 
     // The RAW container holds the real EXIF; embedded previews often have
     // none, or a copy without orientation.
-    let info = if is_jpeg { ShotInfo::default() } else { raw_shot_info(&data) }.or(exif_info(jpeg));
+    let info = if is_jpeg { ShotInfo::default() } else { raw_shot_info(data) }.or(exif_info(jpeg));
 
     let mut image = image::load_from_memory_with_format(jpeg, ImageFormat::Jpeg)?;
     if image.width().max(image.height()) > max_side {
@@ -142,6 +151,90 @@ fn walk_jpeg(d: &[u8]) -> Option<(usize, u16, u16)> {
             }
         }
     }
+}
+
+/// Fields a JPEG made from this photo should keep: when, with what, how.
+/// Orientation and sizes are left out — they describe the new pixels, and
+/// `exif_block` writes them fresh.
+const KEEP: &[Tag] = &[
+    Tag::Make,
+    Tag::Model,
+    Tag::Artist,
+    Tag::Copyright,
+    Tag::DateTime,
+    Tag::DateTimeOriginal,
+    Tag::DateTimeDigitized,
+    Tag::SubSecTimeOriginal,
+    Tag::OffsetTimeOriginal,
+    Tag::ExposureTime,
+    Tag::FNumber,
+    Tag::ExposureProgram,
+    Tag::PhotographicSensitivity,
+    Tag::ExposureBiasValue,
+    Tag::MeteringMode,
+    Tag::Flash,
+    Tag::FocalLength,
+    Tag::FocalLengthIn35mmFilm,
+    Tag::WhiteBalance,
+    Tag::LensMake,
+    Tag::LensModel,
+    Tag::BodySerialNumber,
+];
+
+/// The `KEEP` fields of a RAW or JPEG file. CR3 keeps them in two TIFF
+/// blocks (CMT1, CMT2) whose tags all read as IFD0, so fields are matched
+/// by number and given their proper tag back.
+pub fn exif_fields(data: &[u8]) -> Vec<exif::Field> {
+    let mut sources = Vec::new();
+    if let Ok(e) = Reader::new().read_from_container(&mut Cursor::new(data)) {
+        sources.push(e);
+    } else if !data.starts_with(&[0xFF, 0xD8]) {
+        let head = &data[..data.len().min(1 << 20)];
+        for name in [b"CMT1", b"CMT2"] {
+            if let Some(tiff) = iso_box(head, name)
+                && let Ok(e) = Reader::new().read_raw(tiff.to_vec())
+            {
+                sources.push(e);
+            }
+        }
+    }
+    let mut out: Vec<exif::Field> = Vec::new();
+    for e in &sources {
+        for f in e.fields().filter(|f| f.ifd_num == In::PRIMARY) {
+            let Some(&tag) = KEEP.iter().find(|t| t.number() == f.tag.number()) else { continue };
+            if !out.iter().any(|o| o.tag == tag) {
+                out.push(exif::Field { tag, ifd_num: In::PRIMARY, value: f.value.clone() });
+            }
+        }
+    }
+    out
+}
+
+/// An EXIF TIFF block for a new `width`×`height` upright JPEG with `fields`;
+/// None when there is nothing to say.
+pub fn exif_block(fields: &[exif::Field], width: u32, height: u32) -> Option<Vec<u8>> {
+    if fields.is_empty() {
+        return None;
+    }
+    let extra = [
+        exif::Field { tag: Tag::Orientation, ifd_num: In::PRIMARY, value: Value::Short(vec![1]) },
+        exif::Field { tag: Tag::PixelXDimension, ifd_num: In::PRIMARY, value: Value::Long(vec![width]) },
+        exif::Field { tag: Tag::PixelYDimension, ifd_num: In::PRIMARY, value: Value::Long(vec![height]) },
+    ];
+    let mut w = exif::experimental::Writer::new();
+    for f in fields.iter().chain(&extra) {
+        w.push_field(f);
+    }
+    let mut buf = Cursor::new(Vec::new());
+    w.write(&mut buf, false).ok()?;
+    Some(buf.into_inner())
+}
+
+/// EXIF orientation (1–8) of a RAW or JPEG file.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub fn orientation(path: &Path) -> Option<u8> {
+    let data = fs::read(path).ok()?;
+    if data.starts_with(&[0xFF, 0xD8]) { exif_info(&data) } else { raw_shot_info(&data) }.orientation
 }
 
 /// Shot metadata from the RAW container itself.

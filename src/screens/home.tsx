@@ -6,10 +6,11 @@ import { TitleBar } from '../components/title-bar';
 import { Button, Chip, Dot } from '../components/ui';
 import { api, thumbUrl, type SessionSummary } from '../lib/api';
 import { date, duration, num, STATUS } from '../lib/format';
+import { t, tRust } from '../lib/i18n';
 import { useApp } from '../store';
 
 const pickFolder = async () => {
-  const picked = await open({ directory: true, title: 'Pilih folder sesi' });
+  const picked = await open({ directory: true, title: t('Pilih folder sesi') });
   return typeof picked === 'string' ? picked : null;
 };
 
@@ -93,8 +94,8 @@ export function Home({ dragging }: { dragging: boolean }) {
           <div className="flex items-center gap-4">
             <img src="/brand-icon.png" alt="" className="size-12 rounded-[14px]" />
             <div className="flex flex-col gap-1">
-              <h1 className="text-2xl font-semibold lg:text-[28px]">Mulai sesi baru</h1>
-              <p className="text-sm text-muted">Pilih folder sesi, biar pilihfotomu yang memilah foto terbaiknya.</p>
+              <h1 className="text-2xl font-semibold lg:text-[28px]">{t('Mulai sesi baru')}</h1>
+              <p className="text-sm text-muted">{t('Pilih folder sesi, biar pilihfotomu yang memilah foto terbaiknya.')}</p>
             </div>
           </div>
 
@@ -110,10 +111,10 @@ export function Home({ dragging }: { dragging: boolean }) {
               <span className="flex size-14 items-center justify-center rounded-2xl bg-gold/15 text-gold-text">
                 <FolderOpen size={26} />
               </span>
-              <span className="text-base font-semibold">{dragging ? 'Lepas untuk membuka folder' : 'Seret folder sesi ke sini'}</span>
+              <span className="text-base font-semibold">{dragging ? t('Lepas untuk membuka folder') : t('Seret folder sesi ke sini')}</span>
               <span className="text-center text-xs text-faint">RAW Canon, Nikon, Sony, Fujifilm · JPEG</span>
               <span className="mt-1 inline-flex h-[34px] items-center gap-2 rounded-[10px] bg-gold-gradient px-3.5 font-medium text-white">
-                <Folder size={15} /> Pilih folder &amp; pilah otomatis
+                <Folder size={15} /> {t('Pilih folder & pilah otomatis')}
               </span>
             </button>
 
@@ -121,23 +122,22 @@ export function Home({ dragging }: { dragging: boolean }) {
               <span className="flex size-10 items-center justify-center rounded-xl bg-raised text-gold-text">
                 <Clipboard size={20} />
               </span>
-              <h2 className="text-[15px] font-semibold">Klien kirim daftar foto?</h2>
+              <h2 className="text-[15px] font-semibold">{t('Klien kirim daftar foto?')}</h2>
               <p className="text-xs text-muted">
-                Pilih folder sesinya, lalu tempel pesan WhatsApp klien. Kami carikan dan kumpulkan fotonya — tanpa perlu
-                dipilah dulu.
+                {t('Pilih folder sesinya, lalu tempel pesan WhatsApp klien. Kami carikan dan kumpulkan fotonya — tanpa perlu dipilah dulu.')}
               </p>
               <div className="flex-1" />
               <Button icon={Clipboard} className="self-start" onClick={clientPicks}>
-                Tempel pilihan klien
+                {t('Tempel pilihan klien')}
               </Button>
             </div>
           </div>
 
           <section className="flex flex-col gap-2.5">
-            <h2 className="text-sm font-semibold">Sesi terakhir</h2>
+            <h2 className="text-sm font-semibold">{t('Sesi terakhir')}</h2>
             {sessions?.length === 0 && (
               <p className="rounded-xl border border-dashed border-line px-4 py-6 text-center text-xs text-faint">
-                Belum ada sesi. Sesi yang sudah dipilah akan muncul di sini.
+                {t('Belum ada sesi. Sesi yang sudah dipilah akan muncul di sini.')}
               </p>
             )}
             {sessions?.map((s) =>
@@ -148,23 +148,23 @@ export function Home({ dragging }: { dragging: boolean }) {
                 >
                   <FolderX size={18} className="shrink-0 text-maybe" />
                   <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <span className="truncate text-sm font-semibold">Folder “{s.name}” tidak ditemukan</span>
+                    <span className="truncate text-sm font-semibold">{t('Folder “{name}” tidak ditemukan', { name: s.name })}</span>
                     <span className="truncate text-xs text-muted">
-                      Mungkin drive eksternalnya belum tersambung, atau foldernya dipindah / diganti nama. {s.root}
+                      {t('Mungkin drive eksternalnya belum tersambung, atau foldernya dipindah / diganti nama.')} {s.root}
                     </span>
-                    {relinkError && <span className="text-xs text-reject">{relinkError}</span>}
+                    {relinkError && <span className="text-xs text-reject">{tRust(relinkError)}</span>}
                   </span>
                   <Button variant="plain" onClick={() => (setMissing(null), setRelinkError(null))}>
-                    Tutup
+                    {t('Tutup')}
                   </Button>
                   <Button icon={FolderSearch} onClick={() => relink(s)}>
-                    Cari folder…
+                    {t('Cari folder…')}
                   </Button>
                   <Button icon={Trash2} onClick={() => (setMissing(null), setConfirming(s.id))}>
-                    Hapus dari daftar
+                    {t('Hapus dari daftar')}
                   </Button>
                   <Button variant="primary" icon={RotateCw} onClick={() => (reload(), open(s))}>
-                    Coba lagi
+                    {t('Coba lagi')}
                   </Button>
                 </div>
               ) : confirming === s.id ? (
@@ -174,16 +174,16 @@ export function Home({ dragging }: { dragging: boolean }) {
                 >
                   <Trash2 size={18} className="shrink-0 text-reject" />
                   <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <span className="truncate text-sm font-semibold">Hapus “{s.name}” dari daftar?</span>
+                    <span className="truncate text-sm font-semibold">{t('Hapus “{name}” dari daftar?', { name: s.name })}</span>
                     <span className="text-xs text-muted">
-                      Hasil pilah dan cache thumbnail dihapus. Foto asli, file XMP, dan folder salinan tidak disentuh.
+                      {t('Hasil pilah dan cache thumbnail dihapus. Foto asli, file XMP, dan folder salinan tidak disentuh.')}
                     </span>
                   </span>
                   <Button variant="plain" onClick={() => setConfirming(null)}>
-                    Batal
+                    {t('Batal')}
                   </Button>
                   <Button variant="danger" icon={Trash2} onClick={() => remove(s.id)}>
-                    Hapus
+                    {t('Hapus')}
                   </Button>
                 </div>
               ) : (
@@ -212,7 +212,7 @@ export function Home({ dragging }: { dragging: boolean }) {
                     <span className="flex min-w-0 flex-1 flex-col gap-1">
                       <span className="truncate text-sm font-semibold">{s.name}</span>
                       <span className="truncate text-xs text-faint">
-                        {date(s.createdAt)} · {num(s.total)} foto · diproses {duration(s.durationMs)}
+                        {t('{date} · {count} foto · diproses {time}', { date: date(s.createdAt), n: s.total, count: num(s.total), time: duration(s.durationMs) })}
                       </span>
                     </span>
                     <span className="hidden items-center gap-3.5 text-xs text-muted md:flex">
@@ -228,15 +228,15 @@ export function Home({ dragging }: { dragging: boolean }) {
                     </span>
                     {!s.available ? (
                       <Chip color="var(--color-maybe)" icon={FolderX}>
-                        Folder tidak ditemukan
+                        {t('Folder tidak ditemukan')}
                       </Chip>
                     ) : s.exported ? (
                       <Chip color={STATUS.pick.color} icon={Check}>
-                        Sudah diekspor
+                        {t('Sudah diekspor')}
                       </Chip>
                     ) : (
                       <Chip color={STATUS.maybe.color} icon={Clock}>
-                        Belum diekspor
+                        {t('Belum diekspor')}
                       </Chip>
                     )}
                     <ChevronRight size={16} className="shrink-0 text-faint" />
@@ -245,8 +245,8 @@ export function Home({ dragging }: { dragging: boolean }) {
                   <button
                     type="button"
                     onClick={() => setConfirming(s.id)}
-                    title="Hapus dari daftar"
-                    aria-label={`Hapus ${s.name} dari daftar`}
+                    title={t('Hapus dari daftar')}
+                    aria-label={t('Hapus {name} dari daftar', { name: s.name })}
                     className="absolute right-3 inline-flex size-8 items-center justify-center rounded-lg text-faint opacity-0 transition-opacity group-hover:opacity-100 hover:bg-reject/15 hover:text-reject focus-visible:opacity-100"
                   >
                     <Trash2 size={15} />

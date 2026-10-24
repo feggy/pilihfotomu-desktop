@@ -10,12 +10,20 @@ import { ProgressScreen } from './screens/progress';
 import { Review } from './screens/review';
 import { Settings } from './screens/settings';
 import { Setup } from './screens/setup';
+import { lang, syncNativeLang, t, tRust, useLang } from './lib/i18n';
 import { useApp, type Screen } from './store';
 
 export function App() {
   const screen = useApp((s) => s.screen);
   const session = useApp((s) => s.session);
   const [dragging, setDragging] = useState(false);
+  // Every screen reads the language when it renders; re-rendering from the
+  // top is what switches it.
+  const langPref = useLang((s) => s.pref);
+  useEffect(() => {
+    document.documentElement.lang = lang();
+    syncNativeLang();
+  }, [langPref]);
 
   // Dropping a folder anywhere on the home screen opens it.
   useEffect(() => {
@@ -116,8 +124,8 @@ function ErrorToast() {
   return (
     <div className="fixed bottom-10 left-1/2 z-50 flex max-w-[560px] -translate-x-1/2 items-start gap-3 rounded-xl border border-reject/60 bg-panel-2 p-3.5 shadow-2xl">
       <TriangleAlert size={16} className="mt-0.5 shrink-0 text-reject" />
-      <p className="text-[13px]">{error}</p>
-      <button type="button" onClick={dismiss} aria-label="Tutup" className="text-faint hover:text-fg">
+      <p className="text-[13px]">{tRust(error)}</p>
+      <button type="button" onClick={dismiss} aria-label={t('Tutup')} className="text-faint hover:text-fg">
         <X size={15} />
       </button>
     </div>

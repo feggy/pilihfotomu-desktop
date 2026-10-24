@@ -3,6 +3,7 @@ import type { ButtonHTMLAttributes, ReactNode } from 'react';
 
 import type { Status } from '../lib/api';
 import { STATUS } from '../lib/format';
+import { t } from '../lib/i18n';
 
 export function cx(...parts: (string | false | null | undefined)[]) {
   return parts.filter(Boolean).join(' ');
@@ -84,7 +85,7 @@ export function Chip({ color, icon: Icon, children }: { color: string; icon?: Lu
 
 export function Stars({ value, size = 10 }: { value: number; size?: number }) {
   return (
-    <span className="inline-flex gap-0.5" aria-label={`${value} bintang`}>
+    <span className="inline-flex gap-0.5" aria-label={t('{n} bintang', { n: value })}>
       {[1, 2, 3, 4, 5].map((i) => (
         <Star
           key={i}

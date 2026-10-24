@@ -31,12 +31,22 @@ data contoh (`src/dev/mock.ts`); pilihan lain: `home`, `setup`, `picks`,
 
 ```bash
 npm run check           # TypeScript
-npm run test:rust       # 29 test inti Rust
+npm run test:rust       # 35 test inti Rust
 npm run tauri build     # installer untuk OS yang sedang dipakai
 ```
 
 Installer Mac harus di-build di Mac, installer Windows di Windows (atau lewat
 GitHub Actions `tauri-action`).
+
+## Bahasa
+
+Indonesia dan Inggris (Pengaturan › Bahasa; bawaan ikut bahasa sistem —
+Indonesia kalau bahasa pertama sistem Indonesia, selain itu Inggris).
+Teks Indonesia adalah kuncinya: `t('…')` dari `src/lib/i18n.ts`, terjemahan
+Inggris di `src/locales/en/*.ts`; yang belum diterjemahkan tampil dalam bahasa
+Indonesia. Pesan dari Rust diterjemahkan di UI lewat `tRust`
+(`locales/en/errors.ts`), menu bar dibangun ulang lewat `set_language`.
+Keyword XMP tetap Indonesia supaya daftar keyword Lightroom tidak terpecah.
 
 ## Alur
 
@@ -44,6 +54,8 @@ GitHub Actions `tauri-action`).
 Beranda ─ pilih/seret folder ─▶ Atur analisis ─ Mulai ─▶ Memproses ─▶ Review
                                                                      │  P / U / X (bisa diubah), ← →, Space
                                                                      │  ⌘/Shift-klik pilih banyak · ⌘A · ⌘Z / ⇧⌘Z
+                                                                     │  Atur penilaian (ketat/jenis) tanpa scan ulang
+                                    Ringkasan sesi ◀─────────────────┤  (otomatis setelah analisis)
                                     Loupe (Space) ◀──────────────────┤  ← →, 1–5 bintang, I info
                                     Bandingkan burst ◀─ C ───────────┤
                                     Tempel pilihan klien ◀───────────┤
@@ -69,7 +81,19 @@ Beranda ─ pilih/seret folder ─▶ Atur analisis ─ Mulai ─▶ Memproses �
    untuk kemiripan.
 4. **Putuskan** (`cull.rs`) — ambang blur per tingkat Longgar/Seimbang/Ketat;
    foto ≤ 2,5 dtk berselang dan mirip (dHash ≤ 12 bit) jadi satu **grup burst**,
-   yang paling tajam disimpan, sisanya Duplikat.
+   yang paling tajam disimpan, sisanya Duplikat. File **tanpa waktu jepret**
+   dikelompokkan dari nomor frame berurutan (selisih ≤ 2, folder + awalan
+   sama) dan dHash ≤ 8 bit. **Pose mirip**: foto yang tersisa (tunggal atau
+   terbaik di burst) ≤ 90 dtk berselang dan dHash ≤ 6 bit ditandai
+   `Pose mirip`; hanya Ketat yang memindahkannya ke Cek.
+   **Jenis pemotretan** (`cull::profile`): Umum = semua wajah dihitung;
+   Wedding/Prewedding/Lamaran/Event/Portrait = kedipan tamu di latar
+   diabaikan; Wisuda/Keluarga = wajah ≥ 15 % wajah terbesar ikut subjek utama
+   (bukan 40 %); Lainnya = wajah tidak dinilai.
+   **Atur ulang di Review** (`Session::recull`) — ketat seleksi dan jenis
+   pemotretan bisa diganti setelah analisis; diputuskan ulang dari angka
+   yang tersimpan (< 1 ms untuk 242 foto), foto yang diubah manual
+   (`manual`) tidak ikut berubah.
 5. **Mata** (`faces.rs`, preview 2048 px) — YuNet mencari wajah, Face Mesh
    memberi 478 titik per wajah; *eye aspect ratio* (celah kelopak ÷ lebar
    mata) < 0,12 di **kedua** mata = terpejam. Wajah utama (≥ 40 % wajah
@@ -92,9 +116,10 @@ Beranda ─ pilih/seret folder ─▶ Atur analisis ─ Mulai ─▶ Memproses �
    `<app data>/sessions/<id>.json`, thumbnail 640 px di
    `<app cache>/thumbs/<id>/`.
 
-## Ekspor ke Lightroom
+## Ekspor ke Lightroom, Capture One, Photo Mechanic
 
-`export.rs` menulis `IMG_0101.xmp` di samping tiap RAW:
+`export.rs` menulis `IMG_0101.xmp` di samping tiap RAW — satu file yang
+dibaca ketiganya (Photo Mechanic juga membaca `photomechanic:Tagged`, = Pilih):
 
 | Status | Label | Rating | Keyword |
 |--------|-------|--------|---------|
@@ -106,7 +131,10 @@ Beranda ─ pilih/seret folder ─▶ Atur analisis ─ Mulai ─▶ Memproses �
   kecuali dicentang "Timpa".
 - Flag Pick/Reject Lightroom tidak bisa dibawa lewat XMP — itu hanya ada di
   katalog. Karena itu dipakai label warna + bintang.
-- Foto JPEG-saja dilewati: metadatanya harus ditulis ke dalam file.
+- Foto JPEG-saja tidak bisa diberi sidecar (aplikasi membacanya dari dalam
+  file). Opsi bawaan: disalin ke `JPG bertanda/` dengan XMP tertanam; ekspor
+  ulang memperbarui salinan buatan aplikasi, file lain bernama sama tidak
+  pernah ditimpa. Folder ini dilewati saat scan.
 
 ## Salin ke folder / jadikan JPG
 
@@ -119,6 +147,8 @@ Dari Ekspor (Picks atau Picks + Maybe) dan dari Tempel pilihan klien:
   layar kamera, tapi **100 % = ukuran preview itu**, bukan ukuran sensor
   (Canon/Nikon biasanya penuh; beberapa Sony/Fuji hanya ±1600 px). Hasil
   akhir menampilkan rentang ukurannya.
+- JPG baru membawa EXIF asli (tanggal, kamera, lensa, eksposur; dari RAW
+  kalau JPG kamera tidak punya), orientasi di-set 1 karena piksel sudah tegak.
 - File dengan nama sama di folder tujuan tidak pernah ditimpa.
 
 ## Tempel pilihan klien
@@ -143,25 +173,27 @@ dianggap salah ketik.
 - **Ambang mata terpejam belum dikalibrasi** dengan foto kedip sungguhan
   (`EAR_CLOSED` = 0,12 di `faces.rs`). Senyum lebar menurunkan rasio ke ±0,14,
   jadi ambangnya sengaja rendah; foto setengah terpejam belum tertangkap.
-- **Jenis pemotretan belum memengaruhi hasil.** Pilihannya sudah ada di
-  layar, tapi baru berguna setelah ada deteksi wajah.
+- **Ambang pose mirip (90 dtk, dHash ≤ 6) dan burst tanpa EXIF belum
+  dikalibrasi** dengan sesi sungguhan.
 - **Ambang ketajaman belum dikalibrasi** dengan sesi sungguhan
   (`VAR_BLURRY`/`VAR_CRISP` di `analyze.rs`, ambang per tingkat di `cull.rs`).
   Uji dengan 1–2 sesi wedding asli sebelum dipakai klien.
-- **Grup burst butuh waktu jepret dari EXIF.** File tanpa EXIF tidak pernah
-  dikelompokkan.
 - **Loupe**: preview 2048 px dulu (label *Pratinjau*). *Muat kualitas penuh* —
   atau zoom melewati resolusi preview — men-decode RAW asli lewat ImageIO
   macOS (`full_res.rs`, ±1 dtk per 24 MP, lalu di-cache di `<cache>/full/`).
-  **Belum ada di Windows** (tombolnya tidak tampil). Warna mengikuti
-  pengolahan RAW Apple, bisa sedikit beda dari JPEG kamera.
+  Di Windows lewat WIC + “Raw Image Extension” dari Microsoft Store (tanpa
+  itu muncul pesan cara memasangnya). **Kode Windows baru lolos cek kompilasi,
+  belum dicoba di mesin Windows.** Warna mengikuti pengolahan RAW sistem,
+  bisa sedikit beda dari JPEG kamera.
 - **Deteksi mata masih dari preview kamera** — Sony A7C hanya menyimpan
   1616 px, jadi wajah kecil sulit dibaca. Karena itu dugaan terpejam hanya
   Maybe (Reject hanya di mode Ketat).
-- **JPG hasil ekspor belum membawa EXIF** (tanggal, kamera, lensa).
 - **"Jadikan JPG" bukan develop RAW**: tidak ada pengolahan dari data sensor,
   jadi ukurannya terbatas pada preview kamera.
 - **Lisensi & aktivasi** (1 lisensi = 1 perangkat, update gratis selamanya)
   belum dibuat — menunggu server lisensi di `pilihfotomu-api`.
 - **Kirim ke pilihfotomu** (upload Picks ke galeri booking) tampil sebagai
-  *Segera*.
+  *Segera* — butuh server/bucket.
+- **Lokasi cache belum bisa dipindah** (Pengaturan › Penyimpanan hanya
+  menampilkan dan membersihkan pratinjau, kualitas penuh, dan thumbnail yang
+  tidak terpakai).

@@ -18,7 +18,21 @@ pub const JPEG_EXTS: &[&str] = &["jpg", "jpeg"];
 
 /// Folders the app writes into itself (copy-to-folder output). Scanning them
 /// again would count every pick twice.
-pub const SKIP_DIRS: &[&str] = &["picks", "dipilih", "dipilih jpg", "picks jpg", "pilihan klien", "pilihan klien jpg"];
+pub const SKIP_DIRS: &[&str] = &[
+    "picks",
+    "dipilih",
+    "dipilih jpg",
+    "picks jpg",
+    "pilihan klien",
+    "pilihan klien jpg",
+    "client picks",
+    "client picks jpg",
+    JPEG_MARKED_DIR_LOWER,
+];
+
+/// Where XMP export puts marked copies of JPEG-only photos (see `export`).
+pub const JPEG_MARKED_DIR: &str = "JPG bertanda";
+const JPEG_MARKED_DIR_LOWER: &str = "jpg bertanda";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -49,12 +63,6 @@ impl Photo {
         self.jpeg.as_deref().or(self.raw.as_deref()).expect("photo without files")
     }
 
-    /// First level below the session folder ("" for files in it directly).
-    /// Folder choices are made at this level: `edited/`, `jpg/`, `Canon/`.
-    pub fn top_folder(&self) -> &str {
-        self.folder.split('/').next().unwrap_or("")
-    }
-
     /// Names this photo's cached thumbnail/preview: changes when the file
     /// does, so a re-shot or replaced file never shows a stale picture.
     pub fn cache_key(&self) -> String {
@@ -64,6 +72,13 @@ impl Photo {
             meta.as_ref().and_then(|m| m.modified().ok()).and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok());
         let key = format!("{}|{}|{}", src.display(), meta.map_or(0, |m| m.len()), stamp.map_or(0, |d| d.as_secs()));
         format!("{:016x}", fnv(key.as_bytes()))
+    }
+
+    /// (series, frame number): photos of one camera in one folder share a
+    /// series, so `IMG_0101` → `IMG_0102` is the next frame.
+    pub fn frame(&self) -> Option<(u64, u32)> {
+        let series = fnv(format!("{}|{}", self.folder, self.prefix.to_lowercase()).as_bytes());
+        self.number.map(|n| (series, n))
     }
 
     pub fn display_name(&self) -> String {
@@ -150,17 +165,19 @@ pub fn fnv(bytes: &[u8]) -> u64 {
     h
 }
 
-/// Keeps the photos whose top folder is in `folders` ("" = the session
-/// folder itself). Ids are left as they are, so they mean the same photo
-/// whatever is selected.
+/// Keeps the photos sitting directly in one of `folders` ("" = the session
+/// folder itself, "Canon/jpg" = that folder at any depth). Each folder is
+/// chosen on its own: picking `Canon` doesn't pick `Canon/jpg`. Ids are left
+/// as they are, so they mean the same photo whatever is selected.
 pub fn select(photos: Vec<Photo>, folders: &[String]) -> Vec<Photo> {
-    photos.into_iter().filter(|p| folders.iter().any(|f| f == p.top_folder())).collect()
+    photos.into_iter().filter(|p| folders.contains(&p.folder)).collect()
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FolderSummary {
-    /// "" for the session folder itself.
+    /// Path below the session folder ("" for the folder itself,
+    /// "Canon/jpg" for a nested one). Counts are for photos directly in it.
     pub name: String,
     pub photos: u32,
     pub bytes: u64,
@@ -168,12 +185,13 @@ pub struct FolderSummary {
     pub formats: BTreeMap<String, u32>,
 }
 
-/// Photo counts per top folder: the session folder first, then A–Z.
+/// Photo counts per folder that holds photos, at any depth: the session
+/// folder first, then by path.
 pub fn summarize(photos: &[Photo]) -> Vec<FolderSummary> {
     let mut by: BTreeMap<String, FolderSummary> = BTreeMap::new();
     for p in photos {
-        let f = by.entry(p.top_folder().to_string()).or_insert_with(|| FolderSummary {
-            name: p.top_folder().to_string(),
+        let f = by.entry(p.folder.clone()).or_insert_with(|| FolderSummary {
+            name: p.folder.clone(),
             photos: 0,
             bytes: 0,
             formats: BTreeMap::new(),
@@ -228,22 +246,34 @@ mod tests {
         touch(d, "._IMG_0103.CR3");
         touch(d, "notes.txt");
         touch(d, "sony/DSC_0101.ARW");
+        touch(d, "sony/jpg/DSC_0101.JPG");
         touch(d, "Picks/IMG_0101.CR3");
 
         let photos = scan(d).unwrap();
         let names: Vec<_> = photos.iter().map(|p| (p.folder.as_str(), p.display_name())).collect();
         assert_eq!(
             names,
-            vec![("", "IMG_0101.CR3".into()), ("", "IMG_0102.cr3".into()), ("sony", "DSC_0101.ARW".into())]
+            vec![
+                ("", "IMG_0101.CR3".into()),
+                ("", "IMG_0102.cr3".into()),
+                ("sony", "DSC_0101.ARW".into()),
+                ("sony/jpg", "DSC_0101.JPG".into())
+            ]
         );
         assert!(photos[0].jpeg.is_some() && photos[0].raw.is_some());
         assert_eq!(photos[0].source().extension().unwrap(), "JPG");
 
         let folders: Vec<_> = summarize(&photos).into_iter().map(|f| (f.name, f.photos)).collect();
-        assert_eq!(folders, vec![("".to_string(), 2), ("sony".to_string(), 1)]);
+        assert_eq!(folders, vec![("".to_string(), 2), ("sony".to_string(), 1), ("sony/jpg".to_string(), 1)]);
         let root_only = select(photos.clone(), &["".into()]);
         assert_eq!(root_only.iter().map(|p| p.id).collect::<Vec<_>>(), vec![0, 1]);
-        let sony_only = select(photos, &["sony".into()]);
-        assert_eq!(sony_only[0].id, 2, "ids stay the same whatever is selected");
+        let sony_only = select(photos.clone(), &["sony".into()]);
+        assert_eq!(
+            sony_only.iter().map(|p| p.id).collect::<Vec<_>>(),
+            vec![2],
+            "ids stay the same; nested not included"
+        );
+        let nested = select(photos, &["sony/jpg".into()]);
+        assert_eq!(nested.iter().map(|p| p.id).collect::<Vec<_>>(), vec![3]);
     }
 }

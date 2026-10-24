@@ -32,6 +32,7 @@ import { api, eyesClosed, thumbUrl, type PhotoEntry, type Status } from '../lib/
 import { clock, eyeSummary,
   smileSummary as smileOf, num, REASON, shotDate, STATUS, toneColor } from '../lib/format';
 import { actionFor, useKey, type Action } from '../lib/keys';
+import { t, tRust } from '../lib/i18n';
 import { useApp } from '../store';
 
 const STATUS_OF: Partial<Record<Action, Status>> = { pick: 'pick', maybe: 'maybe', reject: 'reject' };
@@ -307,7 +308,7 @@ export function Loupe({
 
   return (
     // Starts under the title bar so the macOS window buttons stay clear.
-    <div className="fixed inset-x-0 top-10 bottom-0 z-50 flex flex-col bg-bg" role="dialog" aria-label="Lihat foto">
+    <div className="fixed inset-x-0 top-10 bottom-0 z-50 flex flex-col bg-bg" role="dialog" aria-label={t('Lihat foto')}>
       <header className="flex h-12 shrink-0 items-center justify-between gap-4 border-b border-line-soft bg-panel px-4">
         <div className="flex min-w-0 items-center gap-3">
           <span className="rounded-md bg-raised px-2 py-0.5 text-xs font-medium text-muted tabular-nums">
@@ -318,17 +319,17 @@ export function Loupe({
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <span className="hidden items-center gap-1.5 text-[11px] text-faint lg:flex">
-            <Kbd>← →</Kbd> pindah <Kbd>{kPick}</Kbd>
+            <Kbd>← →</Kbd> {t('pindah')} <Kbd>{kPick}</Kbd>
             <Kbd>{kMaybe}</Kbd>
-            <Kbd>{kReject}</Kbd> tandai <Kbd>{kZoom}</Kbd> zoom
+            <Kbd>{kReject}</Kbd> {t('tandai')} <Kbd>{kZoom}</Kbd> {t('zoom')}
           </span>
           <div className="flex items-center rounded-lg border border-line bg-raised">
             <button
               type="button"
               onClick={() => zoomAt(view.s / 1.5)}
               disabled={view.s <= 1}
-              aria-label="Perkecil"
-              title="Perkecil (−)"
+              aria-label={t('Perkecil')}
+              title={`${t('Perkecil')} (−)`}
               className="inline-flex size-8 items-center justify-center text-muted hover:text-fg disabled:opacity-40"
             >
               <Minus size={14} />
@@ -336,17 +337,17 @@ export function Loupe({
             <button
               type="button"
               onClick={() => (view.s > 1 ? setView(FIT) : zoomAt(3))}
-              title="Zoom / pas layar (Z)"
+              title={`${t('Zoom / pas layar')} (Z)`}
               className="h-8 min-w-12 px-1 text-xs font-medium text-muted tabular-nums hover:text-fg"
             >
-              {view.s > 1 ? `${Math.round(view.s * 100)}%` : 'Pas'}
+              {view.s > 1 ? `${Math.round(view.s * 100)}%` : t('Pas')}
             </button>
             <button
               type="button"
               onClick={() => zoomAt(view.s * 1.5)}
               disabled={view.s >= MAX_ZOOM}
-              aria-label="Perbesar"
-              title="Perbesar (+)"
+              aria-label={t('Perbesar')}
+              title={`${t('Perbesar')} (+)`}
               className="inline-flex size-8 items-center justify-center text-muted hover:text-fg disabled:opacity-40"
             >
               <Plus size={14} />
@@ -356,8 +357,8 @@ export function Loupe({
             <button
               type="button"
               onClick={() => setShowFaces((v) => !v)}
-              title="Tampilkan kotak wajah (F)"
-              aria-label="Tampilkan kotak wajah"
+              title={`${t('Tampilkan kotak wajah')} (F)`}
+              aria-label={t('Tampilkan kotak wajah')}
               aria-pressed={showFaces}
               className={cx(
                 'inline-flex size-8 items-center justify-center rounded-lg border',
@@ -370,8 +371,8 @@ export function Loupe({
           <button
             type="button"
             onClick={() => setInfo((v) => !v)}
-            title="Info foto (I)"
-            aria-label="Info foto"
+            title={`${t('Info foto')} (I)`}
+            aria-label={t('Info foto')}
             aria-pressed={info}
             className={cx(
               'inline-flex size-8 items-center justify-center rounded-lg border',
@@ -383,8 +384,8 @@ export function Loupe({
           <button
             type="button"
             onClick={onClose}
-            title="Tutup (Esc)"
-            aria-label="Tutup"
+            title={`${t('Tutup')} (Esc)`}
+            aria-label={t('Tutup')}
             className="inline-flex size-8 items-center justify-center rounded-lg border border-line bg-raised text-muted hover:text-fg"
           >
             <X size={15} />
@@ -440,7 +441,7 @@ export function Loupe({
                     <button
                       key={i}
                       type="button"
-                      title="Perbesar wajah ini"
+                      title={t('Perbesar wajah ini')}
                       onClick={(e) => {
                         e.stopPropagation();
                         if (drag.current?.moved) return;
@@ -464,7 +465,7 @@ export function Loupe({
                         <span
                           className="absolute bottom-full left-0 mb-1 rounded bg-reject px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap text-bg"
                         >
-                          Terdeteksi terpejam
+                          {t('Terdeteksi terpejam')}
                         </span>
                       )}
                     </button>
@@ -479,18 +480,18 @@ export function Loupe({
                 <button
                   type="button"
                   onClick={() => togglePreview(photo.id, true)}
-                  title="Preview dari kamera — cepat, bisa buram kalau diperbesar"
+                  title={t('Preview dari kamera — cepat, bisa buram kalau diperbesar')}
                   className={cx(
                     'h-full rounded-full px-3',
                     quality === 'preview' ? 'bg-raised text-fg' : 'text-faint hover:text-fg',
                   )}
                 >
-                  Pratinjau
+                  {t('Pratinjau')}
                 </button>
                 <button
                   type="button"
                   onClick={() => loadFull(photo.id)}
-                  title="Decode file RAW asli supaya tetap tajam saat diperbesar (±1 detik pertama kali)"
+                  title={t('Decode file RAW asli supaya tetap tajam saat diperbesar (±1 detik pertama kali)')}
                   className={cx(
                     'inline-flex h-full items-center gap-1.5 rounded-full px-3',
                     quality === 'full' ? 'bg-gold/20 text-gold-text' : 'text-faint hover:text-fg',
@@ -501,10 +502,10 @@ export function Loupe({
                   ) : quality === 'full' ? (
                     <CircleCheck size={12} />
                   ) : null}
-                  {quality === 'loading' ? 'Memuat…' : 'Kualitas penuh'}
+                  {quality === 'loading' ? t('Memuat…') : t('Kualitas penuh')}
                 </button>
               </div>
-              {fullError[photo.id] && <span className="text-xs text-maybe">{fullError[photo.id]}</span>}
+              {fullError[photo.id] && <span className="text-xs text-maybe">{tRust(fullError[photo.id])}</span>}
             </div>
           )}
           <NavButton side="left" disabled={index === 0} onClick={() => go(index - 1)} />
@@ -547,8 +548,8 @@ function NavButton({ side, disabled, onClick }: { side: 'left' | 'right'; disabl
       type="button"
       onClick={onClick}
       disabled={disabled}
-      aria-label={side === 'left' ? 'Foto sebelumnya' : 'Foto berikutnya'}
-      title={side === 'left' ? 'Sebelumnya (←)' : 'Berikutnya (→)'}
+      aria-label={side === 'left' ? t('Foto sebelumnya') : t('Foto berikutnya')}
+      title={side === 'left' ? `${t('Sebelumnya')} (←)` : `${t('Berikutnya')} (→)`}
       className={cx(
         'absolute top-1/2 flex size-11 -translate-y-1/2 items-center justify-center rounded-full border border-line bg-panel/85 text-fg shadow-lg backdrop-blur hover:bg-raised disabled:opacity-0',
         side === 'left' ? 'left-4' : 'right-4',
@@ -577,10 +578,10 @@ function InfoPanel({
   const exposure = !m
     ? null
     : m.brightness < 35 || m.shadowsClipped > 0.45
-      ? (['Gelap', 'maybe'] as const)
+      ? ([t('Gelap'), 'maybe'] as const)
       : m.brightness > 225 || m.highlightsClipped > 0.3
-        ? (['Terang', 'maybe'] as const)
-        : (['Normal', 'pick'] as const);
+        ? ([t('Terang'), 'maybe'] as const)
+        : ([t('Normal'), 'pick'] as const);
   const sharpTone: Status = !m ? 'maybe' : m.sharpness >= 42 ? 'pick' : m.sharpness >= 25 ? 'maybe' : 'reject';
   const files = [photo.raw, photo.jpeg].filter(Boolean) as string[];
   const eyes = eyeSummary(photo);
@@ -589,7 +590,7 @@ function InfoPanel({
   return (
     <aside className="flex w-[300px] shrink-0 flex-col gap-4 overflow-y-auto border-l border-line-soft bg-panel p-4">
       <section className="flex flex-col gap-2">
-        <Title>Status</Title>
+        <Title>{t('Status')}</Title>
         <div className="flex gap-1.5">
           {(['pick', 'maybe', 'reject'] as const).map((st) => {
             const Icon = STATUS_ICON[st];
@@ -613,21 +614,21 @@ function InfoPanel({
         </div>
         {photo.status !== photo.autoStatus && (
           <p className="text-[11px] text-faint">
-            Diubah manual. Saran AI:{' '}
+            {t('Diubah manual. Saran AI:')}{' '}
             <span style={{ color: STATUS[photo.autoStatus].color }}>{STATUS[photo.autoStatus].one}</span>
           </p>
         )}
       </section>
 
       <section className="flex flex-col gap-2">
-        <Title hint="tekan 1–5, 0 hapus">Bintang</Title>
+        <Title hint={t('tekan 1–5, 0 hapus')}>{t('Bintang')}</Title>
         <div className="flex items-center gap-1">
           {[1, 2, 3, 4, 5].map((n) => (
             <button
               key={n}
               type="button"
               onClick={() => setRating([photo.id], photo.rating === n ? 0 : n)}
-              aria-label={`${n} bintang`}
+              aria-label={t('{n} bintang', { n })}
               className="rounded p-0.5 hover:bg-raised"
             >
               <Star
@@ -637,31 +638,31 @@ function InfoPanel({
               />
             </button>
           ))}
-          <span className="ml-2 text-xs text-faint">{photo.rating ? `${photo.rating} dari 5` : 'Belum ada'}</span>
+          <span className="ml-2 text-xs text-faint">{photo.rating ? t('{n} dari 5', { n: photo.rating }) : t('Belum ada')}</span>
         </div>
       </section>
 
       <section className="flex flex-col gap-0.5 rounded-[10px] bg-panel-2 p-3">
         <span className="flex items-center gap-2 pb-1.5 text-xs font-semibold">
-          <Sparkles size={14} className="text-gold-text" /> Penilaian AI
+          <Sparkles size={14} className="text-gold-text" /> {t('Penilaian AI')}
         </span>
         {photo.error ? (
-          <p className="text-xs text-maybe">File tidak bisa dibaca: {photo.error}</p>
+          <p className="text-xs text-maybe">{t('File tidak bisa dibaca: {error}', { error: tRust(photo.error) })}</p>
         ) : (
           m && (
             <>
-              <Row icon={Sparkles} label="Ketajaman foto" value={`${Math.round(m.sharpness)}%`} tone={sharpTone} />
+              <Row icon={Sparkles} label={t('Ketajaman foto')} value={`${Math.round(m.sharpness)}%`} tone={sharpTone} />
               {photo.faces?.some((f) => f.sharpness != null) && (
                 <Row
                   icon={UserRound}
-                  label="Fokus di wajah"
-                  value={photo.reasons.some((r) => r.kind === 'subjectSoft') ? 'Meleset' : 'Kena'}
+                  label={t('Fokus di wajah')}
+                  value={photo.reasons.some((r) => r.kind === 'subjectSoft') ? t('Meleset') : t('Kena')}
                   tone={photo.reasons.some((r) => r.kind === 'subjectSoft') ? 'maybe' : 'pick'}
                 />
               )}
-              {exposure && <Row icon={SunMedium} label="Eksposur" value={exposure[0]} tone={exposure[1]} />}
-              {eyes && <Row icon={Eye} label="Mata" value={eyes.label} tone={eyes.tone} />}
-              {smileOf(photo) && <Row icon={Smile} label="Ekspresi" value={smileOf(photo)!.label} tone={null} />}
+              {exposure && <Row icon={SunMedium} label={t('Eksposur')} value={exposure[0]} tone={exposure[1]} />}
+              {eyes && <Row icon={Eye} label={t('Mata')} value={eyes.label} tone={eyes.tone} />}
+              {smileOf(photo) && <Row icon={Smile} label={t('Ekspresi')} value={smileOf(photo)!.label} tone={null} />}
               {photo.reasons.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 pt-2">
                   {photo.reasons.map((r, i) => (
@@ -677,13 +678,13 @@ function InfoPanel({
       </section>
 
       <section className="flex flex-col gap-2">
-        <Title>Detail</Title>
+        <Title>{t('Detail')}</Title>
         <dl className="flex flex-col text-xs">
-          <Detail label="File" value={files.map(baseName).join('\n')} />
-          <Detail label="Format" value={formats || '—'} />
-          <Detail label="Kamera" value={photo.camera ?? '—'} />
-          <Detail label="Dijepret" value={photo.takenAt != null ? `${shotDate(photo.takenAt)}, ${clock(photo.takenAt)}` : '—'} />
-          <Detail label="Folder" value={photo.folder || 'Folder utama'} />
+          <Detail label={t('File')} value={files.map(baseName).join('\n')} />
+          <Detail label={t('Format')} value={formats || '—'} />
+          <Detail label={t('Kamera')} value={photo.camera ?? '—'} />
+          <Detail label={t('Dijepret')} value={photo.takenAt != null ? `${shotDate(photo.takenAt)}, ${clock(photo.takenAt)}` : '—'} />
+          <Detail label={t('Folder')} value={photo.folder || t('Folder utama')} />
         </dl>
       </section>
 
@@ -694,15 +695,15 @@ function InfoPanel({
           className="flex items-center justify-between rounded-[10px] bg-panel-2 p-3 text-left hover:bg-raised"
         >
           <span className="flex items-center gap-2 text-xs font-semibold">
-            <Layers size={14} className="text-gold-text" /> Grup burst · {siblings} foto
+            <Layers size={14} className="text-gold-text" /> {t('Grup burst · {count} foto', { n: siblings, count: num(siblings) })}
           </span>
-          <span className="text-xs font-medium text-gold-text">Bandingkan (C)</span>
+          <span className="text-xs font-medium text-gold-text">{t('Bandingkan')} (C)</span>
         </button>
       )}
 
       {files[0] && (
         <Button icon={FolderSearch} className="self-start" onClick={() => revealItemInDir(files[0])}>
-          Tampilkan di {navigator.userAgent.includes('Mac') ? 'Finder' : 'Explorer'}
+          {t('Tampilkan di {app}', { app: navigator.userAgent.includes('Mac') ? 'Finder' : 'Explorer' })}
         </Button>
       )}
     </aside>

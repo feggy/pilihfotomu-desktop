@@ -5,6 +5,7 @@ import { TitleBar } from '../components/title-bar';
 import { Button, Dot, IconButton, Kbd, StatusBadge, cx } from '../components/ui';
 import { thumbUrl, type Status } from '../lib/api';
 import { clock, eyeSummary, num, STATUS, toneColor } from '../lib/format';
+import { t } from '../lib/i18n';
 import { actionFor, useKey, type Action } from '../lib/keys';
 import { useApp } from '../store';
 
@@ -70,25 +71,27 @@ export function Compare({ group, ids }: { group?: number; ids?: number[] }) {
       <TitleBar title={session.name} />
       <div className="flex h-14 shrink-0 items-center justify-between border-b border-line-soft px-6">
         <div className="flex items-center gap-3.5">
-          <IconButton icon={ArrowLeft} label="Kembali ke review" onClick={() => go({ name: 'review' })} />
+          <IconButton icon={ArrowLeft} label={t('Kembali ke review')} onClick={() => go({ name: 'review' })} />
           <div className="flex flex-col gap-0.5">
             <span className="text-[15px] font-semibold">
-              {manual ? `Bandingkan ${members.length} foto` : `Grup burst · ${members.length} foto`}
+              {manual
+                ? t('Bandingkan {count} foto', { n: members.length, count: num(members.length) })
+                : t('Grup burst · {count} foto', { n: members.length, count: num(members.length) })}
             </span>
             <span className="text-xs text-faint">
-              {manual ? 'Foto yang kamu pilih' : t0 && t1 ? `${t0} – ${t1}` : 'Foto berurutan yang mirip'}
+              {manual ? t('Foto yang kamu pilih') : t0 && t1 ? `${t0} – ${t1}` : t('Foto berurutan yang mirip')}
             </span>
           </div>
         </div>
         <div className={cx('flex items-center gap-2.5', manual && 'hidden')}>
-          <IconButton icon={ChevronLeft} label="Grup sebelumnya" disabled={at <= 0} onClick={() => jump(-1)} />
+          <IconButton icon={ChevronLeft} label={t('Grup sebelumnya')} disabled={at <= 0} onClick={() => jump(-1)} />
           <span className="text-[13px] text-muted tabular-nums">
-            Grup {num(at + 1)} dari {num(groups.length)}
+            {t('Grup {at} dari {total}', { at: num(at + 1), total: num(groups.length) })}
           </span>
-          <IconButton icon={ChevronRight} label="Grup berikutnya" disabled={at >= groups.length - 1} onClick={() => jump(1)} />
+          <IconButton icon={ChevronRight} label={t('Grup berikutnya')} disabled={at >= groups.length - 1} onClick={() => jump(1)} />
           <span className="mx-1 h-6 w-px bg-line" />
           <Button variant="primary" icon={Check} kbd="Enter" disabled={at >= groups.length - 1} onClick={() => jump(1)}>
-            Lanjut
+            {t('Lanjut')}
           </Button>
         </div>
       </div>
@@ -119,7 +122,7 @@ export function Compare({ group, ids }: { group?: number; ids?: number[] }) {
                 </span>
                 {best && (
                   <span className="absolute top-2.5 right-2.5 inline-flex h-6 items-center gap-1 rounded-full bg-gold px-2 text-[11px] font-semibold text-bg">
-                    <Crown size={12} /> Terbaik
+                    <Crown size={12} /> {t('Terbaik')}
                   </span>
                 )}
               </div>
@@ -129,7 +132,7 @@ export function Compare({ group, ids }: { group?: number; ids?: number[] }) {
               </span>
               {eyeSummary(p) && (
                 <span className="flex items-center justify-between text-[11px]">
-                  <span className="text-faint">Mata</span>
+                  <span className="text-faint">{t('Mata')}</span>
                   <span className="flex items-center gap-1.5 font-medium">
                     <Dot size={6} color={toneColor(eyeSummary(p)!.tone)} />
                     {eyeSummary(p)!.label}
@@ -137,7 +140,7 @@ export function Compare({ group, ids }: { group?: number; ids?: number[] }) {
                 </span>
               )}
               <span className="flex items-center justify-between text-[11px]">
-                <span className="text-faint">Ketajaman</span>
+                <span className="text-faint">{t('Ketajaman')}</span>
                 <span className="flex items-center gap-1.5 font-medium">
                   <Dot
                     size={6}
@@ -155,11 +158,11 @@ export function Compare({ group, ids }: { group?: number; ids?: number[] }) {
 
       <footer className="flex h-[30px] shrink-0 items-center gap-3.5 border-t border-line-soft bg-panel px-4 text-[11px] text-faint">
         {[
-          [`1-${members.length}`, 'Pilih foto'],
-          [kPick, 'Pilih'],
-          [kReject, 'Lewati'],
-          ['Enter', 'Grup berikutnya'],
-          ['Esc', 'Kembali'],
+          [`1-${members.length}`, t('Pilih foto')],
+          [kPick, t('Pilih')],
+          [kReject, t('Lewati')],
+          ['Enter', t('Grup berikutnya')],
+          ['Esc', t('Kembali')],
         ].map(([k, l]) => (
           <span key={k} className="flex items-center gap-1.5">
             <Kbd>{k}</Kbd>

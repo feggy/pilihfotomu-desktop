@@ -7,6 +7,8 @@ import {
   CopySettingsForm,
   ProgressBar,
   defaultCopySettings,
+  failedLine,
+  picksFolder,
   runCopy,
   sourceMix,
   type CopyResult,
@@ -14,10 +16,34 @@ import {
 import { Button, Chip, Dot, Segmented, Stars, cx } from '../components/ui';
 import { api, type ExportReport } from '../lib/api';
 import { num, STATUS } from '../lib/format';
+import { t } from '../lib/i18n';
 import { useApp } from '../store';
+
+/** Mirrors `scan::JPEG_MARKED_DIR` (fixed in Rust, same in every language). */
+const JPEG_MARKED_DIR = 'JPG bertanda';
 
 type Target = 'xmp' | 'copy';
 type Which = 'pick' | 'pickMaybe';
+type App = 'lightroom' | 'captureOne' | 'photoMechanic';
+
+/** One .xmp works for all three; what differs is how each app picks it up. `tip` is an i18n key. */
+const APPS: { value: App; label: string; tip: string }[] = [
+  {
+    value: 'lightroom',
+    label: 'Lightroom Classic',
+    tip: 'Terbaca otomatis saat import. Foto sudah terlanjur di-import? Pilih semua fotonya lalu klik Metadata › Read Metadata from Files.',
+  },
+  {
+    value: 'captureOne',
+    label: 'Capture One',
+    tip: 'Nyalakan Settings › Image › Metadata › Auto Sync Sidecar XMP: Load (atau Full Sync). Label warna jadi Color Tag, bintang jadi Rating. Foto yang sudah ada di katalog: muat ulang metadatanya dari menu Image.',
+  },
+  {
+    value: 'photoMechanic',
+    label: 'Photo Mechanic',
+    tip: 'Foto Pilih otomatis ber-Tag, bintang terbaca. Label warna dibaca dari namanya (Green / Yellow / Red): samakan nama Color Class di Photo Mechanic supaya warnanya tampil.',
+  },
+];
 
 export function ExportDialog({ onClose }: { onClose: () => void }) {
   const session = useApp((s) => s.session)!;
@@ -26,8 +52,10 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
   const [target, setTarget] = useState<Target>('xmp');
   const [withReasons, setWithReasons] = useState(true);
   const [overwrite, setOverwrite] = useState(false);
+  const [jpegCopies, setJpegCopies] = useState(true);
+  const [app, setApp] = useState<App>('lightroom');
   const [which, setWhich] = useState<Which>('pick');
-  const [copy, setCopy] = useState(() => defaultCopySettings('Dipilih'));
+  const [copy, setCopy] = useState(() => defaultCopySettings(picksFolder()));
   const [busy, setBusy] = useState<{ done: number; total: number } | null>(null);
   const [xmpDone, setXmpDone] = useState<ExportReport | null>(null);
   const [copyDone, setCopyDone] = useState<CopyResult | null>(null);
@@ -41,6 +69,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
   const counts = { pick: 0, maybe: 0, reject: 0 };
   for (const p of session.photos) counts[p.status]++;
   const rawCount = session.photos.filter((p) => p.raw).length;
+  const jpegOnly = session.photos.length - rawCount;
   const toCopy = session.photos.filter((p) => p.status === 'pick' || (which === 'pickMaybe' && p.status === 'maybe'));
   const copyIds = toCopy.map((p) => p.id);
 
@@ -48,8 +77,8 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
     setBusy({ done: 0, total: target === 'copy' ? copyIds.length : 0 });
     try {
       if (target === 'xmp') {
-        const xmp = await api.exportXmp(overwrite ? 'overwrite' : 'skip', withReasons);
-        if (xmp.written) markExported();
+        const xmp = await api.exportXmp(overwrite ? 'overwrite' : 'skip', withReasons, jpegOnly > 0 && jpegCopies);
+        if (xmp.written || xmp.markedJpeg) markExported();
         setXmpDone(xmp);
       } else {
         setCopyDone(await runCopy(session.root, copyIds, copy, (done, total) => setBusy({ done, total })));
@@ -63,27 +92,35 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
 
   const label =
     target === 'xmp'
-      ? `Ekspor ${num(rawCount)} file XMP`
+      ? rawCount
+        ? t('Ekspor {count} file XMP', { n: rawCount, count: num(rawCount) }) +
+          (jpegOnly && jpegCopies ? ` + ${num(jpegOnly)} JPG` : '')
+        : t('Salin {count} JPG bertanda', { n: jpegOnly, count: num(jpegOnly) })
       : copy.format === 'jpg'
-        ? `Buat ${num(copyIds.length)} JPG`
-        : `Salin ${num(copyIds.length)} foto`;
+        ? t('Buat {count} JPG', { n: copyIds.length, count: num(copyIds.length) })
+        : t('Salin {count} foto', { n: copyIds.length, count: num(copyIds.length) });
 
   return (
     <div className="fixed inset-x-0 top-10 bottom-0 z-40 flex items-center justify-center bg-black/70 p-4" onMouseDown={() => !busy && onClose()}>
       <div
         role="dialog"
-        aria-label="Ekspor hasil pilihan"
+        aria-label={t('Ekspor hasil pilihan')}
         onMouseDown={(e) => e.stopPropagation()}
         className="flex max-h-full w-[640px] max-w-full flex-col gap-4 overflow-y-auto rounded-[18px] border border-line bg-panel p-7 shadow-2xl"
       >
         <div className="flex items-start justify-between">
           <div className="flex flex-col gap-1">
-            <h2 className="text-xl font-semibold">Ekspor hasil pilihan</h2>
+            <h2 className="text-xl font-semibold">{t('Ekspor hasil pilihan')}</h2>
             <p className="text-xs text-faint">
-              {session.name} · {num(counts.pick)} dipilih · {num(counts.maybe)} dicek · {num(counts.reject)} dilewati
+              {session.name} ·{' '}
+              {t('{pick} dipilih · {maybe} dicek · {reject} dilewati', {
+                pick: num(counts.pick),
+                maybe: num(counts.maybe),
+                reject: num(counts.reject),
+              })}
             </p>
           </div>
-          <button type="button" onClick={onClose} aria-label="Tutup" className="text-faint hover:text-fg">
+          <button type="button" onClick={onClose} aria-label={t('Tutup')} className="text-faint hover:text-fg">
             <X size={18} />
           </button>
         </div>
@@ -98,8 +135,8 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
           <>
             <Option
               icon={Aperture}
-              title="Lightroom Classic (XMP)"
-              sub="Buat file .xmp di samping tiap RAW. File asli tidak disentuh, langsung terbaca saat import."
+              title="Lightroom · Capture One · Photo Mechanic (XMP)"
+              sub={t('Buat file .xmp di samping tiap RAW. Satu file terbaca di ketiga aplikasi. File asli tidak disentuh.')}
               active={target === 'xmp'}
               onClick={() => setTarget('xmp')}
             >
@@ -118,77 +155,92 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
                     <span className="text-faint">→</span>
                     <span className="flex items-center gap-2.5 text-xs text-muted">
                       <span className="size-3.5 rounded-[3px]" style={{ background: STATUS[st].color }} />
-                      {lbl}
+                      {t(lbl)}
                       <Stars value={stars} size={11} />
                     </span>
                   </div>
                 ))}
                 <div className="flex flex-wrap gap-x-5 gap-y-2 pt-1.5">
                   <Checkbox on={withReasons} onChange={setWithReasons}>
-                    Tambah keyword alasan (blur, duplikat…)
+                    {t('Tambah keyword alasan (blur, duplikat…)')}
                   </Checkbox>
                   <Checkbox on={overwrite} onChange={setOverwrite}>
-                    Timpa file .xmp yang sudah ada
+                    {t('Timpa file .xmp yang sudah ada')}
                   </Checkbox>
                 </div>
-                {overwrite && <p className="text-[11px] text-reject">Edit Lightroom yang tersimpan di file .xmp lama akan hilang.</p>}
-                {rawCount < session.photos.length && (
-                  <p className="text-[11px] text-faint">
-                    {num(session.photos.length - rawCount)} foto hanya JPEG dan dilewati: metadatanya harus ditulis ke dalam
-                    file, dan file asli tidak diubah.
-                  </p>
+                {overwrite && <p className="text-[11px] text-reject">{t('Edit Lightroom yang tersimpan di file .xmp lama akan hilang.')}</p>}
+                {jpegOnly > 0 && (
+                  <div className="flex flex-col gap-1 rounded-lg bg-panel-2 p-2.5">
+                    <Checkbox on={jpegCopies} onChange={setJpegCopies}>
+                      {t('{count} foto hanya JPEG: salin ke folder “{folder}” dengan label & bintang di dalamnya', {
+                        n: jpegOnly,
+                        count: num(jpegOnly),
+                        folder: JPEG_MARKED_DIR,
+                      })}
+                    </Checkbox>
+                    <p className="pl-6 text-[11px] text-faint">
+                      {t(
+                        'Aplikasi foto membaca label JPEG dari dalam file, bukan dari .xmp, dan file asli tidak pernah diubah. Import folder itu sebagai ganti JPEG aslinya. Ekspor ulang memperbarui salinannya.',
+                      )}
+                      {!jpegCopies && ` ${t('Kalau tidak dicentang, foto JPEG dilewati.')}`}
+                    </p>
+                  </div>
                 )}
               </div>
             </Option>
             <Option
               icon={FolderInput}
-              title="Salin ke folder"
-              sub="Salin file asli, atau buat JPG baru dengan ukuran yang bisa diatur."
+              title={t('Salin ke folder')}
+              sub={t('Salin file asli, atau buat JPG baru dengan ukuran yang bisa diatur.')}
               active={target === 'copy'}
               onClick={() => setTarget('copy')}
             >
               <div className="flex flex-col gap-3 pt-2.5" onClick={(e) => e.stopPropagation()}>
                 <div className="flex flex-col gap-1.5">
-                  <span className="text-xs font-medium text-muted">Foto</span>
+                  <span className="text-xs font-medium text-muted">{t('Foto')}</span>
                   <Segmented<Which>
                     value={which}
                     onChange={setWhich}
                     options={[
-                      { value: 'pick', label: `Dipilih (${num(counts.pick)})` },
-                      { value: 'pickMaybe', label: `Dipilih + Dicek (${num(counts.pick + counts.maybe)})` },
+                      { value: 'pick', label: `${STATUS.pick.label} (${num(counts.pick)})` },
+                      { value: 'pickMaybe', label: `${STATUS.pick.label} + ${STATUS.maybe.label} (${num(counts.pick + counts.maybe)})` },
                     ]}
                   />
                 </div>
-                <CopySettingsForm value={copy} onChange={setCopy} base="Dipilih" mix={sourceMix(toCopy)} />
+                <CopySettingsForm value={copy} onChange={setCopy} base={picksFolder()} mix={sourceMix(toCopy)} />
               </div>
             </Option>
             <Option
               icon={CloudUpload}
-              title="Kirim ke pilihfotomu"
-              sub="Upload foto yang dipilih ke galeri booking supaya klien memilih dari foto yang sudah bersih. Butuh internet."
+              title={t('Kirim ke pilihfotomu')}
+              sub={t('Upload foto yang dipilih ke galeri booking supaya klien memilih dari foto yang sudah bersih. Butuh internet.')}
               active={false}
               disabled
             />
             {target === 'xmp' && (
-              <div className="flex items-start gap-2.5 rounded-[10px] bg-maybe/10 p-3">
-                <Info size={16} className="shrink-0 text-maybe" />
-                <p className="text-xs text-muted">
-                  Foto sudah terlanjur di-import ke Lightroom? Pilih semua fotonya lalu klik Metadata › Read Metadata from
-                  Files.
+              <div className="flex flex-col gap-2.5 rounded-[10px] bg-maybe/10 p-3">
+                <Segmented<App> value={app} onChange={setApp} options={APPS.map(({ value, label }) => ({ value, label }))} />
+                <p className="flex items-start gap-2.5 text-xs text-muted">
+                  <Info size={16} className="shrink-0 text-maybe" />
+                  {t(APPS.find((a) => a.value === app)!.tip)}
                 </p>
               </div>
             )}
             <div className="flex justify-end gap-2.5">
               <Button variant="plain" onClick={onClose} disabled={!!busy}>
-                Batal
+                {t('Batal')}
               </Button>
               <Button
                 variant="primary"
                 icon={Upload}
                 onClick={run}
-                disabled={!!busy || (target === 'copy' && (!copyIds.length || !copy.folder.trim()))}
+                disabled={
+                  !!busy ||
+                  (target === 'copy' && (!copyIds.length || !copy.folder.trim())) ||
+                  (target === 'xmp' && !rawCount && !jpegCopies)
+                }
               >
-                {busy ? 'Mengekspor…' : label}
+                {busy ? t('Mengekspor…') : label}
               </Button>
             </div>
           </>
@@ -200,9 +252,18 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
 
 function XmpResult({ report, root, onClose }: { report: ExportReport; root: string; onClose: () => void }) {
   const lines = [
-    `${num(report.written)} file XMP ditulis.`,
-    report.skippedExisting ? `${num(report.skippedExisting)} dilewati karena file .xmp sudah ada.` : '',
-    report.skippedJpeg ? `${num(report.skippedJpeg)} foto JPEG-saja dilewati.` : '',
+    t('{count} file XMP ditulis.', { n: report.written, count: num(report.written) }),
+    report.skippedExisting
+      ? t('{count} dilewati karena file .xmp sudah ada.', { n: report.skippedExisting, count: num(report.skippedExisting) })
+      : '',
+    report.markedJpeg
+      ? t('{count} JPG disalin dengan label & bintang ke “{folder}”.', {
+          n: report.markedJpeg,
+          count: num(report.markedJpeg),
+          folder: JPEG_MARKED_DIR,
+        })
+      : '',
+    report.skippedJpeg ? t('{count} foto JPEG-saja dilewati.', { n: report.skippedJpeg, count: num(report.skippedJpeg) }) : '',
   ].filter(Boolean);
   return (
     <div className="flex flex-col gap-4">
@@ -216,16 +277,16 @@ function XmpResult({ report, root, onClose }: { report: ExportReport; root: stri
       </div>
       {report.failed.length > 0 && (
         <div className="max-h-32 overflow-y-auto rounded-xl bg-reject/10 p-3 text-xs text-reject">
-          <p className="mb-1 font-semibold">{num(report.failed.length)} gagal:</p>
+          <p className="mb-1 font-semibold">{t('{count} gagal:', { count: num(report.failed.length) })}</p>
           {report.failed.map((f) => (
-            <p key={f}>{f}</p>
+            <p key={f}>{failedLine(f)}</p>
           ))}
         </div>
       )}
       <div className="flex justify-end gap-2.5">
-        <Button onClick={() => revealItemInDir(root)}>Buka folder</Button>
+        <Button onClick={() => revealItemInDir(report.markedFolder ?? root)}>{t('Buka folder')}</Button>
         <Button variant="primary" onClick={onClose}>
-          Selesai
+          {t('Selesai')}
         </Button>
       </div>
     </div>
@@ -268,7 +329,7 @@ function Option({
       </span>
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="flex items-center gap-2 text-sm font-semibold">
-          {title} {disabled && <Chip color="var(--color-faint)">Segera</Chip>}
+          {title} {disabled && <Chip color="var(--color-faint)">{t('Segera')}</Chip>}
         </span>
         <span className="text-xs text-muted">{sub}</span>
         {active && children}
