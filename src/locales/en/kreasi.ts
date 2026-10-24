@@ -245,4 +245,5 @@ export default {
   'Mulai dari kanvas kosong: susun foto, teks, dan elemen sendiri, lalu simpan jadi template saya.': 'Start from a blank canvas: arrange photos, text and elements yourself, then save it as your template.',
   'Atau pakai template': 'Or use a template',
   'Mulai desain': 'Start a design',
+  'Semua template': 'All templates',
 } as Record<string, string | [string, string]>;

@@ -116,7 +116,6 @@ export function Gallery({ onBack }: { onBack: () => void }) {
     return c;
   }, [bundled, tab]);
 
-  const mineCount = mine.filter((tp) => tab === 'semua' || tp.format === tab).length;
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
     return (all ?? []).filter(
@@ -153,11 +152,8 @@ export function Gallery({ onBack }: { onBack: () => void }) {
             ))}
           </FilterGroup>
           <FilterGroup title={t('Kategori')}>
-            <FilterItem on={!category} onClick={() => setCategory(null)}>
+            <FilterItem on={!category || category === 'saya'} onClick={() => setCategory(null)}>
               {t('Semua')}
-            </FilterItem>
-            <FilterItem on={category === 'saya'} onClick={() => setCategory('saya')} count={mineCount} icon={<Bookmark size={13} className="text-gold-text" />}>
-              {t('Template saya')}
             </FilterItem>
             {CATEGORIES.filter((c) => counts.get(c.id)).map((c) => (
               <FilterItem key={c.id} on={category === c.id} onClick={() => setCategory(c.id)} count={counts.get(c.id)!}>
@@ -186,32 +182,30 @@ export function Gallery({ onBack }: { onBack: () => void }) {
 
         <section className="flex min-w-0 flex-1 flex-col gap-6 overflow-y-auto px-6 pt-5 pb-10 lg:px-8">
           {/* First: a design of one's own — the way to a template of one's own too. */}
-          {category !== 'saya' && (
-            <section className="flex shrink-0 flex-col gap-3">
-              <div className="flex flex-col gap-0.5">
-                <h2 className="text-[17px] font-semibold">{t('Buat desain sendiri')}</h2>
-                <p className="text-xs text-muted">{t('Mulai dari kanvas kosong: susun foto, teks, dan elemen sendiri, lalu simpan jadi template saya.')}</p>
-              </div>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                {BLANK_FORMATS.map((f) => (
-                  <button
-                    key={f}
-                    type="button"
-                    onClick={() => start(blankTemplate(f))}
-                    className="group flex h-[132px] flex-col items-center justify-center gap-3 rounded-xl border border-line bg-panel text-muted transition-colors hover:border-gold hover:bg-gold/[0.06] hover:text-fg"
-                  >
-                    <span className="flex items-center justify-center rounded-[4px] border-[1.5px] border-current" style={blankShape(f, 1.3)}>
-                      <Plus size={16} className="text-gold-text" />
-                    </span>
-                    <span className="flex flex-col items-center gap-0.5">
-                      <span className="text-[13px] font-semibold text-fg">{t(TABS.find((x) => x.id === f)?.label ?? '')}</span>
-                      <span className="text-[11px] text-faint">{t('Kanvas kosong')}</span>
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </section>
-          )}
+          <section className="flex shrink-0 flex-col gap-3">
+            <div className="flex flex-col gap-0.5">
+              <h2 className="text-[17px] font-semibold">{t('Buat desain sendiri')}</h2>
+              <p className="text-xs text-muted">{t('Mulai dari kanvas kosong: susun foto, teks, dan elemen sendiri, lalu simpan jadi template saya.')}</p>
+            </div>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {BLANK_FORMATS.map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  onClick={() => start(blankTemplate(f))}
+                  className="group flex h-[132px] flex-col items-center justify-center gap-3 rounded-xl border border-line bg-panel text-muted transition-colors hover:border-gold hover:bg-gold/[0.06] hover:text-fg"
+                >
+                  <span className="flex items-center justify-center rounded-[4px] border-[1.5px] border-current" style={blankShape(f, 1.3)}>
+                    <Plus size={16} className="text-gold-text" />
+                  </span>
+                  <span className="flex flex-col items-center gap-0.5">
+                    <span className="text-[13px] font-semibold text-fg">{t(TABS.find((x) => x.id === f)?.label ?? '')}</span>
+                    <span className="text-[11px] text-faint">{t('Kanvas kosong')}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </section>
 
           {drafts.length > 0 && !query && (
             <section className="flex flex-col gap-2.5">
@@ -245,9 +239,30 @@ export function Gallery({ onBack }: { onBack: () => void }) {
 
           <section className="flex flex-col gap-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-[17px] font-semibold">
-                {category === 'saya' ? t('Template saya') : t('Atau pakai template')} <span className="text-[13px] font-normal text-faint">{num(shown.length)}</span>
-              </h2>
+              <div className="flex items-center gap-4">
+                <h2 className="text-[17px] font-semibold">{t('Atau pakai template')}</h2>
+                {/* Ready-made, or the photographer's own: two collections, not a category. */}
+                <div className="flex gap-0.5 rounded-[10px] bg-panel p-[3px]">
+                  {(
+                    [
+                      [false, t('Semua template'), bundled?.length ?? 0],
+                      [true, t('Template saya'), mine.length],
+                    ] as const
+                  ).map(([own, label, n]) => (
+                    <button
+                      key={String(own)}
+                      type="button"
+                      onClick={() => setCategory(own ? 'saya' : null)}
+                      className={cx(
+                        'flex h-[30px] items-center gap-1.5 rounded-lg px-3 text-xs',
+                        (category === 'saya') === own ? 'border border-line bg-raised font-semibold text-fg' : 'font-medium text-muted hover:text-fg',
+                      )}
+                    >
+                      {own && <Bookmark size={12} className="text-gold-text" />} {label} <span className="font-normal text-faint">{num(n)}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
               <label className="flex h-9 w-64 items-center gap-2 rounded-[10px] border border-line bg-panel px-3 focus-within:border-gold">
                 <Search size={14} className="shrink-0 text-faint" />
                 <input
