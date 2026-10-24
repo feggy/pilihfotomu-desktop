@@ -402,6 +402,21 @@ pub fn analyze(
 
 /// Thumbnail for one file outside an analysis (client picks on a folder
 /// that was never culled).
+/// Makes again the thumbnails of `s` whose files are gone (the cache was
+/// cleared, by the app or by macOS) from the photos themselves; how many.
+/// Photos whose files can't be read stay without one.
+pub fn restore_thumbs(s: &Session) -> usize {
+    let gone: Vec<_> = s
+        .photos
+        .iter()
+        .filter_map(|e| e.thumb.as_ref().filter(|t| !t.exists()).map(|t| (e.photo.source(), t)))
+        .collect();
+    if let Some(dir) = gone.first().and_then(|(_, t)| t.parent()) {
+        let _ = fs::create_dir_all(dir);
+    }
+    gone.par_iter().filter(|(src, t)| src.is_file() && make_thumb(src, t).is_ok()).count()
+}
+
 pub fn make_thumb(source: &Path, path: &Path) -> Result<(), String> {
     let loaded = preview::load(source, THUMB_SIDE).map_err(|e| e.to_string())?;
     save_thumb(&loaded.image, path).map_err(|e| e.to_string())
@@ -627,6 +642,15 @@ mod tests {
         assert!(r.photos[0].photo.source().starts_with(&moved));
         assert!(load(&dir, &old_id).is_none() && load(&dir, &r.id).is_some());
         assert!(r.photos.iter().filter_map(|p| p.thumb.as_ref()).all(|t| t.exists()));
+
+        // Cache cleared: thumbnails are made again from the photos.
+        fs::remove_dir_all(thumbs.join(&r.id)).unwrap();
+        let had = r.photos.iter().filter(|p| p.thumb.is_some()).count();
+        assert!(had > 0);
+        assert_eq!(restore_thumbs(&r), had);
+        assert!(r.photos.iter().filter_map(|p| p.thumb.as_ref()).all(|t| t.exists()));
+        assert_eq!(restore_thumbs(&r), 0, "nothing left to make");
+
         let other = tmp.path().join("other");
         fs::create_dir(&other).unwrap();
         fs::write(other.join("DSC_9999.JPG"), b"x").unwrap();

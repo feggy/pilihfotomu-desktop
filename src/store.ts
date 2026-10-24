@@ -181,6 +181,8 @@ export const useApp = create<AppState>((set, get) => ({
 
   openSession: async (id) => {
     try {
+      // Thumbnails the cache lost come back first, so the grid isn't blank.
+      await api.restoreThumbs(id).catch(() => 0);
       const session = await api.openSession(id);
       set({ session, screen: { name: 'review' }, selectedId: session.photos[0]?.id ?? null, selection: [], undoStack: [], redoStack: [], summary: false });
     } catch (e) {

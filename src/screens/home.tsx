@@ -112,7 +112,7 @@ function ModeCard({
  * was cleared, the folder moved) shows a quiet tile, not the browser's
  * broken-image mark.
  */
-function Cover({ id, i }: { id: string | undefined; i: number }) {
+function Cover({ id, i, v, onMissing }: { id: string | undefined; i: number; v?: number; onMissing: () => void }) {
   const [broken, setBroken] = useState(false);
   const style = { left: i * 9, opacity: i ? 0.75 - i * 0.15 : 1 };
   if (!id || broken)
@@ -123,9 +123,10 @@ function Cover({ id, i }: { id: string | undefined; i: number }) {
     );
   return (
     <img
-      src={thumbUrl(id)}
+      // `v` changes once a lost thumbnail is made again: load it afresh.
+      src={v ? `${thumbUrl(id)}?v=${v}` : thumbUrl(id)}
       alt=""
-      onError={() => setBroken(true)}
+      onError={() => (setBroken(true), onMissing())}
       className="absolute top-0 h-11 w-14 rounded-md object-cover ring-2 ring-panel"
       style={style}
     />
@@ -138,7 +139,7 @@ export function Home({ dragging }: { dragging: boolean }) {
   const go = useApp((s) => s.go);
 
   const [confirming, setConfirming] = useState<string | null>(null);
-  // Session whose folder couldn't be found when clicked.
+  // Session whose folder still couldn't be found on "Coba lagi".
   const [missing, setMissing] = useState<string | null>(null);
 
   const reload = () => api.listSessions().then(setSessions, () => setSessions([]));
@@ -170,9 +171,28 @@ export function Home({ dragging }: { dragging: boolean }) {
   };
   const fail = useApp((s) => s.fail);
 
+  // Read again when the window comes back and every few seconds: a drive
+  // plugged in (or out) shows at once.
   useEffect(() => {
-    api.listSessions().then(setSessions, () => setSessions([]));
+    reload();
+    const again = () => document.visibilityState === 'visible' && reload();
+    const timer = setInterval(again, 5000);
+    window.addEventListener('focus', again);
+    document.addEventListener('visibilitychange', again);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('focus', again);
+      document.removeEventListener('visibilitychange', again);
+    };
   }, []);
+
+  // Covers whose cache files are gone are made again from the photos, once per session.
+  const [restored, setRestored] = useState<Record<string, number>>({});
+  const restore = (s: SessionSummary) => {
+    if (!s.available || s.id in restored) return;
+    setRestored((r) => ({ ...r, [s.id]: 0 }));
+    api.restoreThumbs(s.id).then((n) => n > 0 && setRestored((r) => ({ ...r, [s.id]: Date.now() })), () => {});
+  };
 
   const remove = async (id: string) => {
     try {
@@ -242,7 +262,7 @@ export function Home({ dragging }: { dragging: boolean }) {
               </p>
             )}
             {sessions?.map((s) =>
-              missing === s.id ? (
+              !s.available ? (
                 <div
                   key={s.id}
                   className="flex flex-wrap items-center gap-3 rounded-xl border border-maybe/60 bg-maybe/[0.06] p-3"
@@ -253,11 +273,9 @@ export function Home({ dragging }: { dragging: boolean }) {
                     <span className="truncate text-xs text-muted">
                       {t('Mungkin drive eksternalnya belum tersambung, atau foldernya dipindah / diganti nama.')} {s.root}
                     </span>
+                    {missing === s.id && <span className="text-xs text-maybe">{t('Masih belum ditemukan. Pastikan drive-nya sudah tersambung.')}</span>}
                     {relinkError && <span className="text-xs text-reject">{tRust(relinkError)}</span>}
                   </span>
-                  <Button variant="plain" onClick={() => (setMissing(null), setRelinkError(null))}>
-                    {t('Tutup')}
-                  </Button>
                   <Button icon={FolderSearch} onClick={() => relink(s)}>
                     {t('Cari folder…')}
                   </Button>
@@ -297,7 +315,7 @@ export function Home({ dragging }: { dragging: boolean }) {
                     {/* A small stack of covers: three photos, fanned, in the space of one. */}
                     <span className="relative hidden h-11 w-[74px] shrink-0 sm:block">
                       {[2, 1, 0].map((i) =>
-                        s.covers[i] || i === 0 ? <Cover key={i} id={s.covers[i]} i={i} /> : null,
+                        s.covers[i] || i === 0 ? <Cover key={`${i}-${s.available}-${restored[s.id] ?? ''}`} id={s.covers[i]} v={restored[s.id]} i={i} onMissing={() => restore(s)} /> : null,
                       )}
                     </span>
                     <span className="flex min-w-0 flex-1 flex-col gap-1">

@@ -144,4 +144,5 @@ export default {
   'Pesan klien': 'Client’s message',
   'Cari foto': 'Find photos',
   'Biasanya folder JPG yang dikirim ke klien. Bisa diganti lagi di halaman berikutnya.': 'Usually the JPG folder the client was sent. You can change it on the next page.',
+  'Masih belum ditemukan. Pastikan drive-nya sudah tersambung.': 'Still not found. Make sure the drive is connected.',
 } as Record<string, string | [string, string]>;

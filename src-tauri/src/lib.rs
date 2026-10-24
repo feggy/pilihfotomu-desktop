@@ -149,6 +149,17 @@ fn open_session(app: AppHandle, state: State<'_, AppState>, id: String) -> CmdRe
     Ok(s)
 }
 
+/// Thumbnails of a saved session made again where their cache files are gone;
+/// nothing to do while its folder is unreachable.
+#[tauri::command]
+async fn restore_thumbs(app: AppHandle, id: String) -> CmdResult<usize> {
+    let s = session::load(&sessions_dir(&app)?, &id).ok_or("Sesi tidak ditemukan.")?;
+    if !s.root.is_dir() {
+        return Ok(0);
+    }
+    tauri::async_runtime::spawn_blocking(move || session::restore_thumbs(&s)).await.map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 fn delete_session(app: AppHandle, state: State<'_, AppState>, id: String) -> CmdResult<()> {
     let mut current = state.current.lock().unwrap();
@@ -601,6 +612,7 @@ pub fn run() {
             cancel_analysis,
             list_sessions,
             open_session,
+            restore_thumbs,
             delete_session,
             relink_session,
             set_status,

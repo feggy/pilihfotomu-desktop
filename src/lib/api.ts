@@ -224,6 +224,8 @@ export const api = {
   cancelAnalysis: () => invoke<void>('cancel_analysis'),
   listSessions: () => invoke<SessionSummary[]>('list_sessions'),
   openSession: (id: string) => invoke<Session>('open_session', { id }),
+  /** Remakes a session's thumbnails whose cache files are gone; how many. */
+  restoreThumbs: (id: string) => invoke<number>('restore_thumbs', { id }),
   /** Forgets the session; the photos and any exported files stay. */
   deleteSession: (id: string) => invoke<void>('delete_session', { id }),
   /** Points a session at the folder it was moved to (photos matched by name). */
