@@ -64,7 +64,8 @@ export function Editor() {
   // "Atur ukuran" (⌘T, double-click): the photo place whose whole picture is out to drag and resize.
   const [cropping, setCropping] = useState<number | null>(null);
   if (cropping != null && (selection?.kind !== 'cell' || selection.index !== cropping || !doc?.slots[cropping])) setCropping(null);
-  const select = (s: Selection) => (setSelection(s), setEditingText(null));
+  // Picking something else closes the change being made to the last one (one undo step).
+  const select = (s: Selection) => (commit(), setSelection(s), setEditingText(null));
 
   // ⌘E from the menu bar: this design's export, not the session's.
   useEffect(() => {
@@ -131,7 +132,7 @@ export function Editor() {
       if (mod && e.key === '0') return (e.preventDefault(), setView(1));
       if (mod && !e.shiftKey && e.key.toLowerCase() === 'y') return (e.preventDefault(), redo());
       if (cropping != null && (e.key === 'Escape' || e.key === 'Enter')) return (e.preventDefault(), setCropping(null));
-      if (e.key === 'Escape') return setSelection(null);
+      if (e.key === 'Escape') return select(null);
       if (mod && e.key.toLowerCase() === 't') {
         // Photos get their picture out; texts and elements already show their handles.
         e.preventDefault();
@@ -281,7 +282,7 @@ export function Editor() {
           ))}
         </nav>
         <aside className="flex w-64 shrink-0 flex-col gap-1 overflow-y-auto border-r border-line-soft bg-panel p-3.5">
-          {panel === 'lapisan' && <LayersPanel doc={doc} selection={selection} images={images} onSelect={setSelection} edit={edit} />}
+          {panel === 'lapisan' && <LayersPanel doc={doc} selection={selection} images={images} onSelect={select} edit={edit} />}
           {panel === 'teks' && <TextPanel onAdd={added} />}
           {panel === 'elemen' && <ElementsPanel onAdd={added} />}
           {panel === 'latar' && <BackgroundPanel doc={doc} images={images} edit={edit} />}
@@ -290,7 +291,7 @@ export function Editor() {
         <div className="flex min-w-0 flex-1 flex-col bg-[#08100d]">
           <div ref={stageRef} className="min-h-0 flex-1 overflow-auto">
             {/* Centred while it fits; scrollable from its edges once zoomed past the window. Room above for the quick bar. */}
-            <div className="flex min-h-full w-max min-w-full items-center justify-center px-8 pt-16 pb-8" onPointerDown={(e) => e.target === e.currentTarget && setSelection(null)}>
+            <div className="flex min-h-full w-max min-w-full items-center justify-center px-8 pt-16 pb-8" onPointerDown={(e) => e.target === e.currentTarget && select(null)}>
               {stage.w > 0 && (
                 <DocCanvas
                   doc={doc}

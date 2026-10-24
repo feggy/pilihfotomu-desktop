@@ -217,15 +217,20 @@ export const useKreasi = create<KreasiState>((set, get) => ({
   live: (fn) => set(({ doc, gesture }) => (doc ? { doc: fn(doc), gesture: gesture ?? doc } : {})),
   commit: () =>
     set(({ gesture, past }) => (gesture ? { gesture: null, past: [...past, gesture].slice(-HISTORY), future: [] } : {})),
+  // A change still in progress (typing in a box that went away without a
+  // blur, say) is closed first, so undo takes back exactly that.
   undo: () =>
-    set(({ doc, past, future }) => {
+    set(({ doc, past: done, future, gesture }) => {
+      const past = gesture && gesture !== doc ? [...done, gesture] : done;
       const prev = past[past.length - 1];
-      return prev && doc ? { doc: prev, past: past.slice(0, -1), future: [doc, ...future] } : {};
+      return prev && doc ? { doc: prev, past: past.slice(0, -1), future: [doc, ...(gesture && gesture !== doc ? [] : future)], gesture: null } : { gesture: null };
     }),
   redo: () =>
-    set(({ doc, past, future }) => {
+    set(({ doc, past, future, gesture }) => {
+      // Something changed since the undo: there is nothing to redo any more.
+      if (gesture && gesture !== doc) return { gesture: null, past: [...past, gesture].slice(-HISTORY), future: [] };
       const next = future[0];
-      return next && doc ? { doc: next, past: [...past, doc], future: future.slice(1) } : {};
+      return next && doc ? { doc: next, past: [...past, doc], future: future.slice(1), gesture: null } : { gesture: null };
     }),
   reset: () => set({ step: 'galeri', template: null, doc: null, active: 0, past: [], future: [], draftId: null, name: '', savedAt: null }),
 }));
