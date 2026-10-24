@@ -236,4 +236,10 @@ export default {
   'Rata atas': 'Align top',
   'Rata tengah (tegak)': 'Align middle',
   'Rata bawah': 'Align bottom',
+  'Buat desain sendiri': 'Create your own',
+  'Mulai dari kanvas kosong, simpan jadi template saya': 'Start from a blank canvas, save it as your template',
+  'Kanvas kosong · bisa disimpan jadi template saya': 'Blank canvas · can be saved as your template',
+  'Belum ada template sendiri': 'No templates of your own yet',
+  'Buat desain dari kanvas kosong, atau ubah template mana pun, lalu klik Simpan template di editor. Template itu muncul di sini untuk dipakai lagi dengan foto lain.':
+    'Design from a blank canvas, or change any template, then click Save template in the editor. It shows up here to use again with other photos.',
 } as Record<string, string | [string, string]>;

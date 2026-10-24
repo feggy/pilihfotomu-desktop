@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, Plus, Search, Trash2, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Bookmark, Plus, Search, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
 import { cx } from '../components/ui';
@@ -157,11 +157,9 @@ export function Gallery({ onBack }: { onBack: () => void }) {
             <FilterItem on={!category} onClick={() => setCategory(null)}>
               {t('Semua')}
             </FilterItem>
-            {mineCount > 0 && (
-              <FilterItem on={category === 'saya'} onClick={() => setCategory('saya')} count={mineCount}>
-                {t('Template saya')}
-              </FilterItem>
-            )}
+            <FilterItem on={category === 'saya'} onClick={() => setCategory('saya')} count={mineCount} icon={<Bookmark size={13} className="text-gold-text" />}>
+              {t('Template saya')}
+            </FilterItem>
             {CATEGORIES.filter((c) => counts.get(c.id)).map((c) => (
               <FilterItem key={c.id} on={category === c.id} onClick={() => setCategory(c.id)} count={counts.get(c.id)!}>
                 {t(c.label)}
@@ -188,20 +186,23 @@ export function Gallery({ onBack }: { onBack: () => void }) {
         </nav>
 
         <section className="flex min-w-0 flex-1 flex-col gap-6 overflow-y-auto px-6 pt-5 pb-10 lg:px-8">
-          <label className="flex h-10 w-full max-w-[520px] shrink-0 items-center gap-2 rounded-[10px] border border-line bg-panel px-3 focus-within:border-gold">
-            <Search size={15} className="shrink-0 text-faint" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={t('Cari template…')}
-              className="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-faint"
-            />
-            {query && (
-              <button type="button" onClick={() => setQuery('')} aria-label={t('Hapus')}>
-                <X size={14} className="text-faint" />
-              </button>
-            )}
-          </label>
+          <div className="flex shrink-0 flex-wrap items-center gap-3">
+            <label className="flex h-10 min-w-0 flex-1 basis-72 items-center gap-2 rounded-[10px] border border-line bg-panel px-3 focus-within:border-gold">
+              <Search size={15} className="shrink-0 text-faint" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={t('Cari template…')}
+                className="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-faint"
+              />
+              {query && (
+                <button type="button" onClick={() => setQuery('')} aria-label={t('Hapus')}>
+                  <X size={14} className="text-faint" />
+                </button>
+              )}
+            </label>
+            <NewDesignButton formats={BLANK_FORMATS} onStart={(f) => start(blankTemplate(f))} />
+          </div>
 
           {drafts.length > 0 && !query && (
             <section className="flex flex-col gap-2.5">
@@ -272,7 +273,18 @@ export function Gallery({ onBack }: { onBack: () => void }) {
                 );
               })}
             </div>
-            {all && shown.length === 0 && <p className="py-16 text-center text-sm text-faint">{t('Tidak ada template yang cocok.')}</p>}
+            {all && shown.length === 0 && category === 'saya' && !query ? (
+              <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-line px-6 py-12 text-center">
+                <Bookmark size={22} className="text-gold-text" />
+                <span className="text-[15px] font-semibold">{t('Belum ada template sendiri')}</span>
+                <p className="max-w-[440px] text-xs text-muted">
+                  {t('Buat desain dari kanvas kosong, atau ubah template mana pun, lalu klik Simpan template di editor. Template itu muncul di sini untuk dipakai lagi dengan foto lain.')}
+                </p>
+                <NewDesignButton formats={BLANK_FORMATS} onStart={(f) => start(blankTemplate(f))} />
+              </div>
+            ) : (
+              all && shown.length === 0 && <p className="py-16 text-center text-sm text-faint">{t('Tidak ada template yang cocok.')}</p>
+            )}
           </section>
         </section>
       </div>
@@ -349,9 +361,45 @@ function BlankCard({ formats, onStart }: { formats: FormatId[]; onStart: (f: For
         )}
       </div>
       <span className="flex flex-col gap-0.5 px-0.5">
-        <span className="truncate text-[13px] font-medium">{t('Kanvas kosong')}</span>
-        <span className="text-[11px] text-faint">{t('Susun foto dan teks sendiri')}</span>
+        <span className="truncate text-[13px] font-medium">{t('Buat desain sendiri')}</span>
+        <span className="text-[11px] text-faint">{t('Mulai dari kanvas kosong, simpan jadi template saya')}</span>
       </span>
+    </div>
+  );
+}
+
+/** "Buat desain sendiri": the canvases to start from, in a small menu. */
+function NewDesignButton({ formats, onStart }: { formats: FormatId[]; onStart: (f: FormatId) => void }) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    window.addEventListener('mousedown', close);
+    return () => window.removeEventListener('mousedown', close);
+  }, [open]);
+  return (
+    <div className="relative" onMouseDown={(e) => e.stopPropagation()}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex h-10 items-center gap-2 rounded-[10px] bg-gold-gradient px-4 text-[13px] font-semibold text-white"
+      >
+        <Plus size={16} /> {t('Buat desain sendiri')}
+      </button>
+      {open && (
+        <div className="absolute top-12 right-0 z-30 flex w-64 flex-col gap-0.5 rounded-xl border border-line bg-panel-2 p-1.5 text-left shadow-2xl">
+          <span className="px-2.5 pt-1.5 pb-1 text-[11px] text-faint">{t('Kanvas kosong · bisa disimpan jadi template saya')}</span>
+          {formats.map((f) => (
+            <button key={f} type="button" onClick={() => (setOpen(false), onStart(f))} className="flex items-center gap-3 rounded-lg p-2.5 text-[13px] hover:bg-raised">
+              <span className="flex w-6 justify-center text-muted">
+                <span className="block rounded-[2px] border-[1.5px] border-current" style={blankShape(f, 0.6)} />
+              </span>
+              {t(TABS.find((x) => x.id === f)?.label ?? '')}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
