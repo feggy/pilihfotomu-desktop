@@ -1,10 +1,13 @@
-import { ArrowLeft, ArrowRight, Search, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Search, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
 import { cx } from '../components/ui';
 import { num } from '../lib/format';
 import { t } from '../lib/i18n';
 import type { FormatId } from './engine/document';
+import { api } from '../lib/api';
+import { useApp } from '../store';
+import { listDrafts, reopenSource, templateOfDraft, type Draft } from './drafts';
 import { CATEGORIES, formatLabel, loadTemplates, slotShapes, templateDoc, type Template, type TemplateCategory } from './kit';
 import { useKreasi } from './store';
 import { DocPicture, SHAPE_LABEL, ShapeIcon, Steps } from './ui';
@@ -36,9 +39,33 @@ export function Gallery({ onBack }: { onBack: () => void }) {
   const [query, setQuery] = useState('');
   const [picked, setPicked] = useState<string | null>(null);
 
+  const [drafts, setDrafts] = useState<Draft[]>([]);
+  const fail = useApp((s) => s.fail);
   useEffect(() => {
     loadTemplates().then(setAll, (e) => setError(String(e)));
+    listDrafts().then(setDrafts);
   }, []);
+
+  const resume = async (d: Draft) => {
+    const tp = all && templateOfDraft(all, d);
+    if (!tp) return fail(t('Template draf ini tidak ditemukan.'));
+    try {
+      const source = await reopenSource(d.source);
+      useKreasi.getState().openDraft({ ...d, source, savedAt: d.updatedAt }, tp);
+    } catch (e) {
+      fail(e);
+    }
+  };
+  // Deleting asks once more: a draft is the photographer's work.
+  const [confirming, setConfirming] = useState<string | null>(null);
+  const forget = async (d: Draft) => {
+    if (confirming !== d.id) return setConfirming(d.id);
+    await api.deleteDraft(d.id).catch(fail);
+    setDrafts((list) => list.filter((x) => x.id !== d.id));
+    setConfirming(null);
+  };
+  const [photoFilter, setPhotoFilter] = useState<number | null>(null);
+  const filterCount = (n: number) => photoFilter === null || (photoFilter === 4 ? n >= 4 : n === photoFilter);
 
   const counts = useMemo(() => {
     const c = new Map<TemplateCategory, number>();
@@ -52,9 +79,10 @@ export function Gallery({ onBack }: { onBack: () => void }) {
       (tp) =>
         (tab === 'semua' || tp.format === tab) &&
         (!category || tp.category === category) &&
+        filterCount(countOf(tp)) &&
         (!q || tp.name.toLowerCase().includes(q) || tp.description.toLowerCase().includes(q)),
     );
-  }, [all, tab, category, query]);
+  }, [all, tab, category, query, photoFilter]);
 
   const current = shown.find((tp) => tp.id === picked) ?? shown[0] ?? null;
 
@@ -113,6 +141,53 @@ export function Gallery({ onBack }: { onBack: () => void }) {
             </Chip>
           ))}
         </div>
+
+        <div className="-mt-1 flex items-center gap-2 text-xs text-faint">
+          {t('Jumlah foto')}
+          {[1, 2, 3, 4].map((n) => (
+            <button
+              key={n}
+              type="button"
+              onClick={() => setPhotoFilter(photoFilter === n ? null : n)}
+              className={cx(
+                'h-6 min-w-8 rounded-md px-2 font-medium',
+                photoFilter === n ? 'bg-raised text-fg ring-1 ring-gold' : 'bg-panel-2 text-muted hover:text-fg',
+              )}
+            >
+              {n === 4 ? '4+' : n}
+            </button>
+          ))}
+        </div>
+
+        {drafts.length > 0 && !query && (
+          <section className="flex flex-col gap-2.5">
+            <h2 className="text-[13px] font-semibold">{t('Lanjutkan desain')}</h2>
+            <div className="flex gap-3 overflow-x-auto pb-1">
+              {drafts.map((d) => (
+                <div key={d.id} className="group relative flex w-[150px] shrink-0 flex-col gap-1.5">
+                  <button type="button" onClick={() => resume(d)} className="flex h-[150px] items-center justify-center rounded-xl bg-panel-2 p-2.5 ring-1 ring-line-soft hover:ring-gold">
+                    {d.cover ? <img src={d.cover} alt="" className="max-h-full max-w-full rounded-[3px] object-contain" /> : null}
+                  </button>
+                  <span className="truncate text-xs font-medium">{d.name}</span>
+                  <span className="text-[11px] text-faint">{new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(d.updatedAt)}</span>
+                  <button
+                    type="button"
+                    onClick={() => forget(d)}
+                    onMouseLeave={() => setConfirming(null)}
+                    title={t('Hapus draf')}
+                    aria-label={t('Hapus draf')}
+                    className={cx(
+                      'absolute top-1.5 right-1.5 h-7 items-center justify-center gap-1 rounded-lg px-1.5 text-[11px] font-medium group-hover:flex',
+                      confirming === d.id ? 'flex bg-reject text-white' : 'hidden bg-bg/85 text-faint hover:text-reject',
+                    )}
+                  >
+                    <Trash2 size={13} /> {confirming === d.id && t('Hapus?')}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {error && <p className="text-sm text-reject">{error}</p>}
         {all && shown.length === 0 && (

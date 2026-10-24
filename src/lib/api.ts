@@ -256,6 +256,10 @@ export const api = {
     invoke<string>('save_export', bytes, {
       headers: { root: encodeURIComponent(root), folder: encodeURIComponent(folder), name: encodeURIComponent(name) },
     }),
+  saveDraft: (id: string, json: string) => invoke<void>('save_draft', { id, json }),
+  loadDraft: (id: string) => invoke<string>('load_draft', { id }),
+  listDrafts: () => invoke<string[]>('list_drafts'),
+  deleteDraft: (id: string) => invoke<void>('delete_draft', { id }),
   exportJpegs: (
     root: string,
     ids: number[],

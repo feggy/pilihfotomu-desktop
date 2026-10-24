@@ -472,6 +472,55 @@ async fn export_jpegs(
     .map_err(|e| e.to_string())
 }
 
+fn drafts_dir(app: &AppHandle) -> CmdResult<PathBuf> {
+    app.path().app_data_dir().map(|d| d.join("kreasi")).map_err(|e| e.to_string())
+}
+
+/// Draft ids are made by the UI; anything but [a-z0-9-] is refused so an id
+/// can never point outside the drafts folder.
+fn draft_path(app: &AppHandle, id: &str) -> CmdResult<PathBuf> {
+    if id.is_empty() || id.len() > 64 || !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+        return Err("Id draf tidak valid.".into());
+    }
+    Ok(drafts_dir(app)?.join(format!("{id}.json")))
+}
+
+/// Saves a Buat konten design (JSON made by the UI) as `<app data>/kreasi/<id>.json`.
+#[tauri::command]
+fn save_draft(app: AppHandle, id: String, json: String) -> CmdResult<()> {
+    let path = draft_path(&app, &id)?;
+    std::fs::create_dir_all(path.parent().unwrap()).map_err(|e| e.to_string())?;
+    let tmp = path.with_extension("json.tmp");
+    std::fs::write(&tmp, json).and_then(|_| std::fs::rename(&tmp, &path)).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn load_draft(app: AppHandle, id: String) -> CmdResult<String> {
+    std::fs::read_to_string(draft_path(&app, &id)?).map_err(|_| "Draf tidak ditemukan.".to_string())
+}
+
+/// Every saved draft as its JSON text, newest first (the UI reads the summary fields).
+#[tauri::command]
+fn list_drafts(app: AppHandle) -> CmdResult<Vec<String>> {
+    let Ok(entries) = std::fs::read_dir(drafts_dir(&app)?) else { return Ok(vec![]) };
+    let mut files: Vec<(std::time::SystemTime, PathBuf)> = entries
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|x| x == "json"))
+        .filter_map(|p| Some((std::fs::metadata(&p).ok()?.modified().ok()?, p)))
+        .collect();
+    files.sort_by_key(|f| std::cmp::Reverse(f.0));
+    Ok(files.into_iter().filter_map(|(_, p)| std::fs::read_to_string(p).ok()).collect())
+}
+
+#[tauri::command]
+fn delete_draft(app: AppHandle, id: String) -> CmdResult<()> {
+    match std::fs::remove_file(draft_path(&app, &id)?) {
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e.to_string()),
+        _ => Ok(()),
+    }
+}
+
 /// Saves a picture made in the UI (Buat konten export) into `<root>/<folder>/`.
 /// The bytes come as the raw request body; root, folder and file name as
 /// URI-encoded headers. Never overwrites: a name already taken gets " (2)".
@@ -560,6 +609,10 @@ pub fn run() {
             recull,
             set_language,
             save_export,
+            save_draft,
+            load_draft,
+            list_drafts,
+            delete_draft,
             cache_info,
             clear_cache,
             preview_image,

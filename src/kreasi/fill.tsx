@@ -1,3 +1,4 @@
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { open } from '@tauri-apps/plugin-dialog';
 import { ArrowLeft, ArrowRight, Folder, ImageOff, ImagePlus, Images, MousePointerClick, Sparkles, Star, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -63,6 +64,7 @@ async function filesSource(): Promise<Source | null> {
     root: got.root,
     name: t('{count} foto dipilih', { n: got.photos.length, count: num(got.photos.length) }),
     saveDir: got.dir,
+    files: paths,
     photos: got.photos.map((p) => ({ id: p.id, name: fileName(p), thumb: null })),
   };
 }
@@ -78,6 +80,7 @@ export function Fill() {
   const [filter, setFilter] = useState<Filter>('pick');
   const [onlyFit, setOnlyFit] = useState(true);
   const [stageRef, stage] = useBox<HTMLDivElement>();
+  const gridRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!useKreasi.getState().source) setSource(sessionSource());
@@ -258,7 +261,7 @@ export function Fill() {
         </div>
 
         {/* Room on every side for the selected photo's ring, which the scroll area would clip. */}
-        <div className="-mx-1 -mt-1 min-h-0 flex-1 overflow-y-auto px-1 pt-1 pb-8">
+        <div ref={gridRef} className="-mx-1 -mt-1 min-h-0 flex-1 overflow-y-auto px-1 pt-1 pb-8">
           {!source ? (
             <div className="flex flex-col items-center gap-3 py-20 text-center text-sm text-muted">
               <ImagePlus size={28} className="text-faint" />
@@ -282,11 +285,7 @@ export function Fill() {
               onTemplate={() => setStep('galeri')}
             />
           ) : (
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3">
-              {photos.map((p) => (
-                <PhotoTile key={p.id} photo={p} slot={slotOf.get(p.id)} onClick={() => place(active, p)} onSeen={seen} />
-              ))}
-            </div>
+            <PhotoGrid scroller={gridRef} photos={photos} render={(p) => <PhotoTile key={p.id} photo={p} slot={slotOf.get(p.id)} onClick={() => place(active, p)} onSeen={seen} />} />
           )}
         </div>
       </section>
@@ -304,7 +303,14 @@ export function Fill() {
               box={{ w: stage.w - 32, h: stage.h - 32 }}
               selection={{ kind: 'cell', index: active }}
               numbered
-              handlers={{ onSelect: (s) => s?.kind === 'cell' && setActive(s.index) }}
+              handlers={{
+                onSelect: (s) => s?.kind === 'cell' && setActive(s.index),
+                // A photo dragged from the list onto a place fills that place.
+                onDropPhoto: (i, id) => {
+                  const p = source?.photos.find((x) => x.id === id);
+                  if (p) place(i, p);
+                },
+              }}
             />
           )}
         </div>
@@ -380,6 +386,38 @@ export function Fill() {
   );
 }
 
+/**
+ * The photo list, only the rows in view rendered (a session can have
+ * thousands): tiles at least 150 px wide, 3:2, 12 px apart.
+ */
+function PhotoGrid({ scroller, photos, render }: { scroller: React.RefObject<HTMLDivElement | null>; photos: SourcePhoto[]; render: (p: SourcePhoto) => React.ReactNode }) {
+  const [width, setWidth] = useState(0);
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setWidth(e.contentRect.width - 8));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [scroller]);
+  const GAP = 12;
+  const cols = Math.max(1, Math.floor((width + GAP) / (150 + GAP)));
+  const tileW = (width - GAP * (cols - 1)) / cols;
+  const rowH = tileW * (2 / 3) + GAP;
+  const rows = Math.ceil(photos.length / cols);
+  const v = useVirtualizer({ count: rows, getScrollElement: () => scroller.current, estimateSize: () => rowH, overscan: 4 });
+  useEffect(() => v.measure(), [rowH, v]);
+  if (!width) return null;
+  return (
+    <div className="relative" style={{ height: v.getTotalSize() }}>
+      {v.getVirtualItems().map((row) => (
+        <div key={row.key} className="absolute inset-x-0 grid" style={{ top: row.start, gap: GAP, gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
+          {photos.slice(row.index * cols, row.index * cols + cols).map(render)}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function PhotoTile({
   photo: p,
   slot,
@@ -396,7 +434,12 @@ function PhotoTile({
       type="button"
       onClick={onClick}
       title={p.name}
-      className={cx('relative aspect-[3/2] overflow-hidden rounded-lg bg-raised', slot != null ? 'ring-2 ring-gold' : 'hover:ring-1 hover:ring-line')}
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData('application/x-pilihfotomu-foto', String(p.id));
+        e.dataTransfer.effectAllowed = 'copy';
+      }}
+      className={cx('relative aspect-[3/2] w-full overflow-hidden rounded-lg bg-raised', slot != null ? 'ring-2 ring-gold' : 'hover:ring-1 hover:ring-line')}
     >
       {p.thumb ? (
         <img

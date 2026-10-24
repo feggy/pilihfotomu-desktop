@@ -6,6 +6,7 @@
 import { create } from 'zustand';
 
 import { emptyPhotoFile, slotsFor, templateOf, withSlot, type CollageDoc, type Slot } from './engine/document';
+import { newDraftId } from './drafts';
 import { photoFile, slotShapes, shapeOf, templateDoc, type Shape, type Template } from './kit';
 
 /** A photo the design can use: from the open session, or a folder scanned for this. */
@@ -30,6 +31,8 @@ export interface Source {
   photos: SourcePhoto[];
   /** Real folder the exported pictures go into (`<saveDir>/Konten`). */
   saveDir: string;
+  /** Picked file by file: their paths, to register them again after a restart. */
+  files?: string[];
 }
 
 type Step = 'galeri' | 'isi' | 'edit';
@@ -45,9 +48,17 @@ interface KreasiState {
   future: CollageDoc[];
   /** The design when a drag began; one undo step for the whole drag. */
   gesture: CollageDoc | null;
+  /** The draft this design is saved as, its name, and when it last reached disk. */
+  draftId: string | null;
+  name: string;
+  savedAt: number | null;
 
   setStep: (step: Step) => void;
   choose: (t: Template) => void;
+  /** Opens a saved draft where it was left: in the editor. */
+  openDraft: (d: { id: string; name: string; doc: CollageDoc; source: Source | null; savedAt: number }, t: Template) => void;
+  setName: (name: string) => void;
+  setSavedAt: (at: number) => void;
   setSource: (s: Source | null) => void;
   setRatios: (r: Map<number, number>) => void;
   setActive: (i: number) => void;
@@ -116,9 +127,27 @@ export const useKreasi = create<KreasiState>((set, get) => ({
   past: [],
   future: [],
   gesture: null,
+  draftId: null,
+  name: '',
+  savedAt: null,
 
   setStep: (step) => set({ step }),
-  choose: (template) => set({ template, doc: structuredClone(templateDoc(template)), active: 0, past: [], future: [], step: 'isi' }),
+  choose: (template) =>
+    set({
+      template,
+      doc: structuredClone(templateDoc(template)),
+      active: 0,
+      past: [],
+      future: [],
+      step: 'isi',
+      draftId: newDraftId(),
+      name: template.name,
+      savedAt: null,
+    }),
+  openDraft: (d, template) =>
+    set({ template, doc: d.doc, source: d.source, draftId: d.id, name: d.name, savedAt: d.savedAt, active: 0, past: [], future: [], step: 'edit' }),
+  setName: (name) => set({ name }),
+  setSavedAt: (savedAt) => set({ savedAt }),
   setSource: (source) => set({ source }),
   setRatios: (r) =>
     set(({ source }) =>
@@ -198,5 +227,5 @@ export const useKreasi = create<KreasiState>((set, get) => ({
       const next = future[0];
       return next && doc ? { doc: next, past: [...past, doc], future: future.slice(1) } : {};
     }),
-  reset: () => set({ step: 'galeri', template: null, doc: null, active: 0, past: [], future: [] }),
+  reset: () => set({ step: 'galeri', template: null, doc: null, active: 0, past: [], future: [], draftId: null, name: '', savedAt: null }),
 }));

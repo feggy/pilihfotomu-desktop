@@ -6,6 +6,7 @@
  */
 
 import { templateOf, type CollageDoc } from './engine/document';
+import { itemBounds } from './engine/bounds';
 import { drawCollage, frameOf, type DrawAssets } from './engine/render';
 import { fontFamilies, loadDocFonts } from './kit';
 
@@ -53,6 +54,47 @@ export function previewOf(key: string, doc: CollageDoc, width: number, numbered 
       // Let the window breathe between thumbnails.
       await new Promise((r) => setTimeout(r, 0));
       return canvas.toDataURL('image/jpeg', 0.86);
+    })) as Promise<string>;
+    cache.set(k, p);
+  }
+  return p;
+}
+
+/**
+ * A picture of the texts and elements of `doc` only, cropped to them with a
+ * little room and fitted into a `side`-px square — previews of presets,
+ * stickers and shapes, where the thing itself should fill the tile.
+ */
+export function itemPreviewOf(key: string, doc: CollageDoc, side: number): Promise<string> {
+  const k = `${key}@item${side}`;
+  let p = cache.get(k);
+  if (!p) {
+    p = (queue = queue.then(async () => {
+      await loadDocFonts(doc);
+      const W = 600;
+      const f = frameOf(doc, W);
+      const big = document.createElement('canvas');
+      big.width = W;
+      big.height = Math.round(f.height);
+      const ctx = big.getContext('2d')!;
+      drawCollage(ctx, { width: W, doc, template: templateOf(doc), assets: emptyAssets() });
+      const boxes = itemBounds(doc, templateOf(doc), f, fontFamilies(), ctx);
+      const l = Math.min(...boxes.map((b) => b.l)), r = Math.max(...boxes.map((b) => b.r));
+      const t = Math.min(...boxes.map((b) => b.t)), b = Math.max(...boxes.map((b) => b.b));
+      // A thin line is wide but barely tall: give it room to read as a line.
+      const w = Math.max(r - l, 20), h = Math.max(b - t, 20);
+      const pad = Math.max(w, h) * 0.12;
+      const size = Math.max(w, h) + 2 * pad;
+      const sx = (l + r) / 2 - size / 2, sy = (t + b) / 2 - size / 2;
+      const out = document.createElement('canvas');
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      out.width = out.height = Math.round(side * dpr);
+      const o = out.getContext('2d')!;
+      o.fillStyle = doc.style.background;
+      o.fillRect(0, 0, out.width, out.height);
+      o.drawImage(big, sx, sy, size, size, 0, 0, out.width, out.height);
+      await new Promise((res) => setTimeout(res, 0));
+      return out.toDataURL('image/png');
     })) as Promise<string>;
     cache.set(k, p);
   }

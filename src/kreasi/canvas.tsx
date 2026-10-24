@@ -2,8 +2,20 @@ import { convertFileSrc } from '@tauri-apps/api/core';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { api } from '../lib/api';
-import { slotsFor, templateOf, type CollageDoc } from './engine/document';
-import { cellLayouts, drawCollage, frameOf, hitCell, placeImage, textBox, type Selection } from './engine/render';
+import {
+  isFreeLayout,
+  isLayerHidden,
+  isLayerLocked,
+  layerKeys,
+  slotsFor,
+  stickerLayerKey,
+  templateOf,
+  textLayerKey,
+  type CollageDoc,
+} from './engine/document';
+import { itemBounds } from './engine/bounds';
+import { safeArea } from './engine/instagram';
+import { cellLayouts, drawCollage, frameOf, hitCell, placeImage, stickerBox, textBox, type Selection } from './engine/render';
 import { fontFamilies, loadDocFonts, loadLocalImage, photoIdOf } from './kit';
 import { emptyAssets } from './preview';
 
@@ -57,38 +69,136 @@ export interface CanvasHandlers {
   onSelect?: (s: Selection) => void;
   /** Dragging inside a photo: its new pan. */
   onPan?: (index: number, ox: number, oy: number) => void;
-  /** Wheel over a photo: its new zoom. */
+  /** ⌥ + wheel over a photo: its new zoom. */
   onZoom?: (index: number, zoom: number) => void;
-  /** Dragging a text: its new centre (fractions of the canvas). */
-  onMoveText?: (id: string, x: number, y: number) => void;
+  /** A text or element moved, resized or turned (live, during the drag). */
+  onPatch?: (sel: Extract<Selection, { kind: 'text' | 'sticker' }>, patch: { x?: number; y?: number; size?: number; rotate?: number }) => void;
+  /** Double-click on a text: edit it in place. */
+  onEditText?: (id: string) => void;
+  /** Typing in the in-place text box. */
+  onTextInput?: (id: string, text: string) => void;
+  onEndEdit?: () => void;
+  /** A photo dropped from the photo list onto a place. */
+  onDropPhoto?: (index: number, photoId: number) => void;
   /** Gesture finished (one undo step per drag). */
   onCommit?: () => void;
 }
 
+/** Within this many screen pixels of a line, a dragged item snaps onto it. */
+const SNAP_PX = 6;
+/** The canvas and slide edges hold a little more firmly, as in design apps. */
+const SNAP_EDGE_PX = 10;
+/** Turning snaps to straight within this many degrees of a quarter turn. */
+const SNAP_DEG = 4;
+const snapAngle = (deg: number) => {
+  const near = Math.round(deg / 90) * 90;
+  return Math.abs(deg - near) <= SNAP_DEG ? near : deg;
+};
+/** A press that moves less than this is a click (select), not a drag. */
+const CLICK_SLOP = 3;
+
 /**
- * The design drawn by the engine, fitted into `box`, with picking, panning
- * photos, zooming photos and moving texts.
+ * What a dragged item can line up with, as canvas fractions: its own half
+ * size, and the vertical (x) and horizontal (y) lines — the canvas and slide
+ * centres and edges, and the edges and middles of every other item
+ * (engine `itemBounds`). Worked out once when the drag starts.
+ */
+interface SnapInfo {
+  hw: number;
+  hh: number;
+  tx: number[];
+  ty: number[];
+}
+
+function snapInfo(doc: CollageDoc, f: ReturnType<typeof frameOf>, ctx: CanvasRenderingContext2D, key: string): SnapInfo {
+  const all = itemBounds(doc, templateOf(doc), f, fontFamilies(), ctx);
+  const own = all.find((b) => b.key === key);
+  // Photos in a tiled layout don't move, but they are good lines to line up with.
+  const cells = cellLayouts(templateOf(doc), f, doc.style, doc.slots).map((c, i) => ({
+    key: `cell:${i}`,
+    l: c.rect.x,
+    r: c.rect.x + c.rect.w,
+    t: c.rect.y,
+    b: c.rect.y + c.rect.h,
+  }));
+  const others = [...all.filter((b) => b.key !== key), ...(isFreeLayout(doc) ? [] : cells)];
+  return {
+    hw: own ? (own.r - own.l) / 2 / f.width : 0,
+    hh: own ? (own.b - own.t) / 2 / f.height : 0,
+    tx: [
+      0.5,
+      0,
+      1,
+      ...Array.from({ length: doc.slides - 1 }, (_, i) => (i + 1) / doc.slides),
+      ...Array.from({ length: doc.slides }, (_, i) => (i + 0.5) / doc.slides),
+      ...others.flatMap((b) => [b.l, (b.l + b.r) / 2, b.r].map((v) => v / f.width)),
+    ],
+    ty: [0.5, 0, 1, ...others.flatMap((b) => [b.t, (b.t + b.b) / 2, b.b].map((v) => v / f.height))],
+  };
+}
+
+/** The nearest line within reach of the item's start, middle or end; null when none is. */
+function nearest(mid: number, half: number, lines: number[], px: number, isEdge: (t: number) => boolean) {
+  let found: { line: number; shift: number } | null = null;
+  for (const t of lines) {
+    const limit = isEdge(t) ? SNAP_EDGE_PX : SNAP_PX;
+    for (const edge of [mid - half, mid, mid + half]) {
+      const shift = t - edge;
+      if (Math.abs(shift) * px < limit && (!found || Math.abs(shift) < Math.abs(found.shift))) found = { line: t, shift };
+    }
+  }
+  return found;
+}
+
+export type Box = { cx: number; cy: number; w: number; h: number; rotate: number };
+type Item = Extract<Selection, { kind: 'text' | 'sticker' }>;
+
+const sameSel = (a: Selection, b: Selection) =>
+  !!a && !!b && a.kind === b.kind && (a.kind === 'cell' ? a.index === (b as { index: number }).index : 'id' in a && a.id === (b as { id: string }).id);
+
+/**
+ * The design drawn by the engine, fitted into `box` and enlarged by `scale`
+ * (the view's zoom). In the editor (`outlines`): pick anything, drag texts and
+ * elements (snapping to centres, edges and other items, with blue guides),
+ * resize them from the corners, turn them from the round handle, edit a text
+ * in place with a double-click, pan photos by dragging, zoom them with ⌥ +
+ * wheel, and drop photos from the list onto places.
  */
 export function DocCanvas({
   doc,
   images,
   box,
+  scale = 1,
   selection,
   numbered,
+  outlines,
+  editingText,
+  overlay,
+  safe,
   handlers = {},
 }: {
   doc: CollageDoc;
   images: Map<string, HTMLImageElement>;
   box: { w: number; h: number };
+  scale?: number;
   selection: Selection;
   numbered?: boolean;
+  /** Editor: blue hover/selection boxes over the canvas instead of the engine's own highlight. */
+  outlines?: boolean;
+  /** The text being typed into on the canvas. */
+  editingText?: string | null;
+  /** Drawn over the canvas next to the selection (the quick bar), given its box. */
+  overlay?: (box: Box) => React.ReactNode;
+  /** Shows where Instagram covers or crops the post (`engine/instagram.ts`). */
+  safe?: boolean;
   handlers?: CanvasHandlers;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const ratio = frameOf(doc, 1).height;
-  const width = Math.max(10, Math.floor(Math.min(box.w, box.h / ratio)));
+  const width = Math.max(10, Math.floor(Math.min(box.w, box.h / ratio) * scale));
   const f = frameOf(doc, width);
   const [fontsReady, setFontsReady] = useState(0);
+  const fam = fontFamilies();
 
   useEffect(() => {
     loadDocFonts(doc).then(() => setFontsReady((n) => n + 1));
@@ -97,7 +207,8 @@ export function DocCanvas({
   useLayoutEffect(() => {
     const c = ref.current;
     if (!c) return;
-    const dpr = window.devicePixelRatio || 1;
+    // Sharp at any zoom, but never a canvas bigger than the GPU likes.
+    const dpr = Math.min(window.devicePixelRatio || 1, 8192 / Math.max(f.width, f.height));
     c.width = Math.round(f.width * dpr);
     c.height = Math.round(f.height * dpr);
     const ctx = c.getContext('2d')!;
@@ -109,92 +220,352 @@ export function DocCanvas({
       template: templateOf(doc),
       assets: { ...emptyAssets(), images },
       editor: {
-        selection,
+        selection: outlines ? null : selection,
         swapTarget: null,
         numbered,
+        editingTextId: editingText ?? null,
         emptyFill: '#e8e2d4',
         emptyText: '#8c6a30',
         accent: '#c9a96e',
       },
     });
-  }, [doc, images, selection, f.width, f.height, numbered, fontsReady]);
+  }, [doc, images, selection, f.width, f.height, numbered, fontsReady, outlines, editingText]);
 
-  // ── Picking and dragging ─────────────────────────────────────
-  const drag = useRef<{ kind: 'pan' | 'text'; index: number; id: string; x: number; y: number; ox: number; oy: number; overX: number; overY: number; tx: number; ty: number } | null>(null);
-  const at = (e: React.PointerEvent | React.WheelEvent) => {
+  /** An item's box on the canvas (CSS px): centre, size, tilt. */
+  const boxOf = (sel: Selection): Box | null => {
+    const c = ref.current;
+    if (!sel || !c) return null;
+    if (sel.kind === 'text') {
+      const tx = doc.texts.find((t) => t.id === sel.id);
+      if (!tx) return null;
+      const b = textBox(c.getContext('2d')!, tx, f, fam);
+      const pad = f.unit * 0.012;
+      return { cx: b.x + b.w / 2, cy: b.y + b.h / 2, w: b.w + 2 * pad, h: b.h + 2 * pad, rotate: tx.rotate ?? 0 };
+    }
+    if (sel.kind === 'sticker') {
+      const st = doc.stickers.find((x) => x.id === sel.id);
+      if (!st) return null;
+      const b = stickerBox(st, f);
+      const pad = f.unit * 0.012;
+      return { cx: b.cx, cy: b.cy, w: b.w + 2 * pad, h: b.h + 2 * pad, rotate: st.rotate };
+    }
+    if (sel.kind === 'cell') {
+      const l = cellLayouts(templateOf(doc), f, doc.style, doc.slots)[sel.index];
+      if (!l) return null;
+      return { cx: l.rect.x + l.rect.w / 2, cy: l.rect.y + l.rect.h / 2, w: l.rect.w, h: l.rect.h, rotate: (l.rotate * 180) / Math.PI };
+    }
+    return null;
+  };
+
+  // ── Picking ───────────────────────────────────────────────────
+  const at = (e: { clientX: number; clientY: number }) => {
     const r = ref.current!.getBoundingClientRect();
     return { x: e.clientX - r.left, y: e.clientY - r.top };
   };
+  const inside = (b: Box, x: number, y: number) => {
+    const a = (-b.rotate * Math.PI) / 180;
+    const dx = x - b.cx, dy = y - b.cy;
+    const lx = dx * Math.cos(a) - dy * Math.sin(a), ly = dx * Math.sin(a) + dy * Math.cos(a);
+    return Math.abs(lx) <= b.w / 2 && Math.abs(ly) <= b.h / 2;
+  };
+  /** Topmost visible text or element at (x, y), then a photo place. */
   const pick = (x: number, y: number): Selection => {
-    const ctx = ref.current!.getContext('2d')!;
-    const fam = fontFamilies();
-    for (let i = doc.texts.length - 1; i >= 0; i--) {
-      const tx = doc.texts[i]!;
-      const b = textBox(ctx, tx, f, fam);
-      if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) return { kind: 'text', id: tx.id };
+    if (outlines) {
+      const keys = layerKeys(doc).reverse();
+      for (const key of keys) {
+        if (isLayerHidden(doc, key)) continue;
+        const sel: Selection = key.startsWith('text:') ? { kind: 'text', id: key.slice(5) } : key.startsWith('sticker:') ? { kind: 'sticker', id: key.slice(8) } : null;
+        const b = sel && boxOf(sel);
+        if (sel && b && inside(b, x, y)) return sel;
+      }
+    } else {
+      const ctx = ref.current!.getContext('2d')!;
+      for (let i = doc.texts.length - 1; i >= 0; i--) {
+        const tx = doc.texts[i]!;
+        const b = textBox(ctx, tx, f, fam);
+        if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) return { kind: 'text', id: tx.id };
+      }
     }
     const layouts = cellLayouts(templateOf(doc), f, doc.style, doc.slots);
     const i = hitCell(layouts, x, y);
     return i >= 0 ? { kind: 'cell', index: i } : null;
   };
+  const keyOfItem = (sel: Item) => (sel.kind === 'text' ? textLayerKey(sel.id) : stickerLayerKey(sel.id));
+  const itemOf = (sel: Item) => (sel.kind === 'text' ? doc.texts.find((t) => t.id === sel.id) : doc.stickers.find((x) => x.id === sel.id));
+
+  // ── Dragging ──────────────────────────────────────────────────
+  type Drag =
+    | { kind: 'pan'; index: number; x: number; y: number; ox: number; oy: number; overX: number; overY: number; moved: boolean }
+    | { kind: 'move'; sel: Item; x: number; y: number; ix: number; iy: number; snap: SnapInfo; moved: boolean }
+    | { kind: 'resize'; sel: Item; cx: number; cy: number; d0: number; size0: number }
+    | { kind: 'turn'; sel: Item; cx: number; cy: number; a0: number; r0: number };
+  const drag = useRef<Drag | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const [hover, setHover] = useState<Selection>(null);
+  // Guides: where they are and whether lit, kept apart so a line fades out where it was.
+  const [guides, setGuides] = useState({ x: 0.5, y: 0.5, showX: false, showY: false });
+
+  const start = (d: Drag, e: React.PointerEvent) => {
+    drag.current = d;
+    setDragging(true);
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  };
 
   const onPointerDown = (e: React.PointerEvent) => {
+    if (e.button !== 0 || editingText) return;
     const { x, y } = at(e);
     const s = pick(x, y);
     handlers.onSelect?.(s);
     if (!s) return;
-    if (s.kind === 'text') {
-      const tx = doc.texts.find((t) => t.id === s.id)!;
-      drag.current = { kind: 'text', index: -1, id: s.id, x, y, ox: 0, oy: 0, overX: 0, overY: 0, tx: tx.x, ty: tx.y };
+    if (s.kind === 'text' || s.kind === 'sticker') {
+      if (isLayerLocked(doc, keyOfItem(s))) return;
+      const it = itemOf(s)!;
+      start({ kind: 'move', sel: s, x, y, ix: it.x, iy: it.y, snap: snapInfo(doc, f, ref.current!.getContext('2d')!, keyOfItem(s)), moved: false }, e);
     } else if (s.kind === 'cell') {
       const slot = doc.slots[s.index];
       const img = slot && images.get(slot.file.fileId);
       if (!slot || !img) return;
       const layout = cellLayouts(templateOf(doc), f, doc.style, doc.slots)[s.index]!;
       const p = placeImage(img, layout.photo, slot);
-      drag.current = { kind: 'pan', index: s.index, id: '', x, y, ox: slot.ox, oy: slot.oy, overX: p.overX, overY: p.overY, tx: 0, ty: 0 };
+      start({ kind: 'pan', index: s.index, x, y, ox: slot.ox, oy: slot.oy, overX: p.overX, overY: p.overY, moved: false }, e);
     }
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
   };
+
+  const onHandleDown = (e: React.PointerEvent, kind: 'resize' | 'turn') => {
+    e.stopPropagation();
+    const sel = selection;
+    if (!sel || (sel.kind !== 'text' && sel.kind !== 'sticker')) return;
+    const b = boxOf(sel)!;
+    const { x, y } = at(e);
+    const it = itemOf(sel)!;
+    if (kind === 'resize') start({ kind: 'resize', sel, cx: b.cx, cy: b.cy, d0: Math.hypot(x - b.cx, y - b.cy), size0: it.size }, e);
+    else start({ kind: 'turn', sel, cx: b.cx, cy: b.cy, a0: Math.atan2(y - b.cy, x - b.cx), r0: (it as { rotate?: number }).rotate ?? 0 }, e);
+  };
+
   const onPointerMove = (e: React.PointerEvent) => {
     const d = drag.current;
-    if (!d) return;
     const { x, y } = at(e);
-    const dx = x - d.x;
-    const dy = y - d.y;
-    if (d.kind === 'text') {
-      handlers.onMoveText?.(d.id, clamp(d.tx + dx / f.width, 0, 1), clamp(d.ty + dy / f.height, 0, 1));
+    if (!d) {
+      const h = pick(x, y);
+      setHover((old) => (sameSel(old, h) || (!old && !h) ? old : h));
+      return;
+    }
+    if (d.kind === 'move') {
+      if (!d.moved && Math.hypot(x - d.x, y - d.y) < CLICK_SLOP) return;
+      d.moved = true;
+      const px = d.ix + (x - d.x) / f.width;
+      const py = d.iy + (y - d.y) / f.height;
+      // Hold ⌘/Ctrl to move freely, without the magnet.
+      const free = e.metaKey || e.ctrlKey;
+      const isEdgeX = (t: number) => t <= 0 || t >= 1 || Math.abs(t * doc.slides - Math.round(t * doc.slides)) < 1e-9;
+      const sx = free ? null : nearest(px, d.snap.hw, d.snap.tx, f.width, isEdgeX);
+      const sy = free ? null : nearest(py, d.snap.hh, d.snap.ty, f.height, (t) => t <= 0 || t >= 1);
+      setGuides((g) => ({ x: sx?.line ?? g.x, y: sy?.line ?? g.y, showX: !!sx, showY: !!sy }));
+      handlers.onPatch?.(d.sel, { x: clamp(px + (sx?.shift ?? 0), 0, 1), y: clamp(py + (sy?.shift ?? 0), 0, 1) });
+    } else if (d.kind === 'resize') {
+      const k = Math.hypot(x - d.cx, y - d.cy) / Math.max(1, d.d0);
+      handlers.onPatch?.(d.sel, { size: clamp(d.size0 * k, 0.01, 2) });
+    } else if (d.kind === 'turn') {
+      const a = ((Math.atan2(y - d.cy, x - d.cx) - d.a0) * 180) / Math.PI;
+      let deg = d.r0 + a;
+      deg = ((((deg + 180) % 360) + 360) % 360) - 180;
+      handlers.onPatch?.(d.sel, { rotate: e.shiftKey ? Math.round(deg / 15) * 15 : snapAngle(deg) });
     } else {
+      if (!d.moved && Math.hypot(x - d.x, y - d.y) < CLICK_SLOP) return;
+      d.moved = true;
       // Moving the picture right shows more of its left: the pan goes down.
-      const ox = d.overX > 0 ? clamp(d.ox - (2 * dx) / d.overX, -1, 1) : d.ox;
-      const oy = d.overY > 0 ? clamp(d.oy - (2 * dy) / d.overY, -1, 1) : d.oy;
+      const ox = d.overX > 0 ? clamp(d.ox - (2 * (x - d.x)) / d.overX, -1, 1) : d.ox;
+      const oy = d.overY > 0 ? clamp(d.oy - (2 * (y - d.y)) / d.overY, -1, 1) : d.oy;
       handlers.onPan?.(d.index, ox, oy);
     }
   };
   const onPointerUp = () => {
-    if (drag.current) handlers.onCommit?.();
+    const d = drag.current;
+    if (d && (d.kind === 'resize' || d.kind === 'turn' || d.moved)) handlers.onCommit?.();
     drag.current = null;
+    setDragging(false);
+    setGuides((g) => ({ ...g, showX: false, showY: false }));
+  };
+  const onDoubleClick = (e: React.MouseEvent) => {
+    const s = pick(at(e).x, at(e).y);
+    if (s?.kind === 'text' && !isLayerLocked(doc, textLayerKey(s.id))) handlers.onEditText?.(s.id);
   };
   const onWheel = (e: React.WheelEvent) => {
-    if (!handlers.onZoom) return;
-    const { x, y } = at(e);
-    const s = pick(x, y);
+    // Plain scroll pans the view and ⌘/pinch zooms it (the editor handles both);
+    // ⌥ + scroll zooms the photo under the pointer inside its place.
+    if (!handlers.onZoom || !e.altKey) return;
+    const s = pick(at(e).x, at(e).y);
     if (s?.kind !== 'cell' || !doc.slots[s.index]) return;
-    const zoom = clamp(doc.slots[s.index]!.zoom * Math.exp(-e.deltaY * 0.002), 1, 3);
-    handlers.onZoom(s.index, zoom);
+    e.stopPropagation();
+    handlers.onZoom(s.index, clamp(doc.slots[s.index]!.zoom * Math.exp(-e.deltaY * 0.002), 1, 3));
+    handlers.onCommit?.();
   };
 
+  // Photos dragged from the list (see fill.tsx: `application/x-pilihfotomu-foto`).
+  const [dropAt, setDropAt] = useState<number | null>(null);
+  const dropIndex = (e: React.DragEvent) => {
+    const s = pick(at(e).x, at(e).y);
+    return s?.kind === 'cell' ? s.index : null;
+  };
+  const dnd = handlers.onDropPhoto
+    ? {
+        onDragOver: (e: React.DragEvent) => {
+          if (!e.dataTransfer.types.includes('application/x-pilihfotomu-foto')) return;
+          e.preventDefault();
+          setDropAt(dropIndex(e));
+        },
+        onDragLeave: () => setDropAt(null),
+        onDrop: (e: React.DragEvent) => {
+          const i = dropIndex(e);
+          const id = Number(e.dataTransfer.getData('application/x-pilihfotomu-foto'));
+          setDropAt(null);
+          if (i != null && Number.isFinite(id)) {
+            e.preventDefault();
+            handlers.onDropPhoto!(i, id);
+          }
+        },
+      }
+    : {};
+
+  const selBox = outlines ? boxOf(selection) : null;
+  const editing = editingText ? doc.texts.find((x) => x.id === editingText) : null;
+  const editBox = editing ? boxOf({ kind: 'text', id: editing.id }) : null;
+  const canHandle = !!selection && (selection.kind === 'text' || selection.kind === 'sticker') && !isLayerLocked(doc, keyOfItem(selection as Item)) && !editing;
+
   return (
-    <canvas
-      ref={ref}
-      style={{ width: f.width, height: f.height }}
-      className="touch-none rounded-[4px] shadow-[0_20px_60px_rgb(0_0_0/0.5)]"
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onPointerCancel={onPointerUp}
-      onWheel={onWheel}
-    />
+    <div className="relative shrink-0" style={{ width: f.width, height: f.height }} {...dnd}>
+      <canvas
+        ref={ref}
+        style={{ width: f.width, height: f.height }}
+        className="block touch-none rounded-[4px] shadow-[0_20px_60px_rgb(0_0_0/0.5)]"
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+        onPointerLeave={() => !drag.current && setHover(null)}
+        onDoubleClick={onDoubleClick}
+        onWheel={onWheel}
+      />
+      {/* Guides — lit while a dragged item sits on a centre, an edge, or another item's line. */}
+      <span
+        aria-hidden
+        className={`pointer-events-none absolute inset-y-0 w-px bg-[#3b9cff] transition-opacity ${guides.showX ? 'opacity-100 duration-0' : 'opacity-0 duration-300'}`}
+        style={{ left: `${guides.x * 100}%`, transform: guides.x >= 1 ? 'translateX(-100%)' : undefined }}
+      />
+      <span
+        aria-hidden
+        className={`pointer-events-none absolute inset-x-0 h-px bg-[#3b9cff] transition-opacity ${guides.showY ? 'opacity-100 duration-0' : 'opacity-0 duration-300'}`}
+        style={{ top: `${guides.y * 100}%`, transform: guides.y >= 1 ? 'translateY(-100%)' : undefined }}
+      />
+      {safe && <SafeZones doc={doc} />}
+      {dropAt != null && <Outline box={boxOf({ kind: 'cell', index: dropAt })} drop />}
+      {/* Hover: a thin outline on what the pointer is over. Selection: a firm one with handles. */}
+      {outlines && !dragging && !sameSel(hover, selection) && <Outline box={boxOf(hover)} />}
+      {selBox && (
+        <Outline box={selBox} selected>
+          {canHandle &&
+            (['-left-[6px] -top-[6px]', '-right-[6px] -top-[6px]', '-left-[6px] -bottom-[6px]', '-right-[6px] -bottom-[6px]'] as const).map((pos) => (
+              <span
+                key={pos}
+                onPointerDown={(e) => onHandleDown(e, 'resize')}
+                onPointerMove={onPointerMove}
+                onPointerUp={onPointerUp}
+                className={`pointer-events-auto absolute size-[10px] cursor-nwse-resize border-[1.5px] border-[#3b9cff] bg-white ${pos}`}
+              />
+            ))}
+          {canHandle && (
+            <span
+              title="Putar"
+              onPointerDown={(e) => onHandleDown(e, 'turn')}
+              onPointerMove={onPointerMove}
+              onPointerUp={onPointerUp}
+              className="pointer-events-auto absolute -top-7 left-1/2 size-3 -translate-x-1/2 cursor-grab rounded-full border-[1.5px] border-[#3b9cff] bg-white"
+            />
+          )}
+        </Outline>
+      )}
+      {selBox && !dragging && !editing && overlay?.(selBox)}
+      {editing && editBox && (
+        <textarea
+          autoFocus
+          value={editing.text}
+          onChange={(e) => handlers.onTextInput?.(editing.id, e.target.value)}
+          onBlur={() => handlers.onEndEdit?.()}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === 'Escape' || (e.key === 'Enter' && (e.metaKey || e.ctrlKey))) (e.currentTarget as HTMLTextAreaElement).blur();
+          }}
+          spellCheck={false}
+          className="absolute resize-none overflow-hidden border-[1.5px] border-[#3b9cff] bg-transparent p-0 outline-none"
+          style={{
+            left: editBox.cx - editBox.w / 2,
+            top: editBox.cy - editBox.h / 2,
+            width: Math.max(editBox.w, 60),
+            height: editBox.h,
+            transform: editBox.rotate ? `rotate(${editBox.rotate}deg)` : undefined,
+            fontFamily: fam[editing.font],
+            fontSize: editing.size * f.unit,
+            fontWeight: editing.weight,
+            fontStyle: editing.italic ? 'italic' : 'normal',
+            color: editing.color,
+            textAlign: editing.align,
+            letterSpacing: `${editing.spacing}em`,
+            lineHeight: editing.lineHeight ?? 1.15,
+            caretColor: '#3b9cff',
+            padding: f.unit * 0.012,
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Instagram's covered and cropped strips, per slide: a story's account name
+ * and reply bar at the top and bottom, and the sides the profile grid cuts.
+ */
+function SafeZones({ doc }: { doc: CollageDoc }) {
+  const a = safeArea(doc.format);
+  const band = 'pointer-events-none absolute bg-[repeating-linear-gradient(135deg,rgb(224_100_90/0.22)_0_6px,transparent_6px_12px)]';
+  return (
+    <>
+      {Array.from({ length: doc.slides }, (_, i) => {
+        const left = (i / doc.slides) * 100;
+        const w = 100 / doc.slides;
+        return (
+          <span key={i}>
+            {a.storyTop > 0 && <span className={`${band} top-0 border-b border-dashed border-reject/70`} style={{ left: `${left}%`, width: `${w}%`, height: `${a.storyTop * 100}%` }} />}
+            {a.storyBottom > 0 && <span className={`${band} bottom-0 border-t border-dashed border-reject/70`} style={{ left: `${left}%`, width: `${w}%`, height: `${a.storyBottom * 100}%` }} />}
+            {a.gridSide > 0 && (
+              <>
+                <span className={`${band} inset-y-0 border-r border-dashed border-maybe/70`} style={{ left: `${left}%`, width: `${a.gridSide * w}%` }} />
+                <span className={`${band} inset-y-0 border-l border-dashed border-maybe/70`} style={{ left: `${left + w - a.gridSide * w}%`, width: `${a.gridSide * w}%` }} />
+              </>
+            )}
+          </span>
+        );
+      })}
+    </>
+  );
+}
+
+/** A box around an item, in the item's own tilt; firm with handles when selected, gold where a photo will drop. */
+function Outline({ box, selected, drop, children }: { box: Box | null; selected?: boolean; drop?: boolean; children?: React.ReactNode }) {
+  if (!box) return null;
+  return (
+    <span
+      aria-hidden={!children}
+      className={`pointer-events-none absolute ${drop ? 'border-2 border-[#c9a96e] bg-[#c9a96e]/15' : selected ? 'border-[1.5px] border-[#3b9cff]' : 'border border-[#3b9cff]'}`}
+      style={{
+        left: box.cx - box.w / 2,
+        top: box.cy - box.h / 2,
+        width: box.w,
+        height: box.h,
+        transform: box.rotate ? `rotate(${box.rotate}deg)` : undefined,
+      }}
+    >
+      {children}
+    </span>
   );
 }
 
