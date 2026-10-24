@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { cx } from '../components/ui';
 import { num } from '../lib/format';
-import { t } from '../lib/i18n';
+import { locale, t } from '../lib/i18n';
 import type { FormatId } from './engine/document';
 import { api } from '../lib/api';
 import { useApp } from '../store';
@@ -33,9 +33,11 @@ const TABS: { id: FormatTab; label: string }[] = [
   { id: 'carousel', label: 'Carousel' },
 ];
 
-/** A small outline of a format's shape for the "Mulai dari kosong" cards. */
-const blankShape = (f: FormatId) =>
-  f === 'story' ? { width: 20, height: 34 } : f === 'feed' ? { width: 26, height: 32 } : f === 'carousel' ? { width: 44, height: 22 } : { width: 28, height: 28 };
+/** A format's outline, `k` times the cards' size. */
+const blankShape = (f: FormatId, k = 1) => {
+  const [w, h] = f === 'story' ? [20, 34] : f === 'feed' ? [26, 32] : f === 'carousel' ? [44, 22] : [28, 28];
+  return { width: w * k, height: h * k };
+};
 
 /** How many photos a template takes, computed once per template. */
 const photoCount = new Map<string, number>();
@@ -126,38 +128,67 @@ export function Gallery({ onBack }: { onBack: () => void }) {
     );
   }, [all, tab, category, query, photoFilter]);
 
-  const current = shown.find((tp) => tp.id === picked) ?? shown[0] ?? null;
+  const preview = shown.find((tp) => tp.id === picked) ?? null;
+  const blankFormats = BLANK_FORMATS.filter((f) => tab === 'semua' || tab === f);
 
   return (
-    <div className="flex min-h-0 flex-1">
-      <section className="flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto px-6 pt-6 pb-10 lg:px-10">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5">
-            <button type="button" onClick={onBack} aria-label={t('Kembali')} className="text-muted hover:text-fg">
-              <ArrowLeft size={18} />
-            </button>
-            <h1 className="text-[22px] font-semibold">{t('Pilih template')}</h1>
-          </div>
-          <Steps at={1} />
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-4 border-b border-line-soft px-6 py-4 lg:px-8">
+        <div className="flex items-center gap-3.5">
+          <button type="button" onClick={onBack} aria-label={t('Kembali')} className="text-muted hover:text-fg">
+            <ArrowLeft size={18} />
+          </button>
+          <h1 className="text-[20px] font-semibold">{t('Pilih template')}</h1>
         </div>
+        <Steps at={1} />
+      </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex gap-1 rounded-[10px] bg-panel p-[3px]">
+      <div className="flex min-h-0 flex-1">
+        {/* Every filter in one column, so the templates start at the top. */}
+        <nav className="flex w-56 shrink-0 flex-col gap-5 overflow-y-auto border-r border-line-soft bg-panel px-3 py-5">
+          <FilterGroup title={t('Format')}>
             {TABS.map((x) => (
-              <button
-                key={x.id}
-                type="button"
-                onClick={() => setTab(x.id)}
-                className={cx(
-                  'h-[30px] rounded-lg px-3.5 text-[13px]',
-                  tab === x.id ? 'border border-line bg-raised font-semibold text-fg' : 'font-medium text-muted hover:text-fg',
-                )}
-              >
+              <FilterItem key={x.id} on={tab === x.id} onClick={() => setTab(x.id)} icon={<FormatGlyph format={x.id} />}>
                 {t(x.label)}
-              </button>
+              </FilterItem>
             ))}
-          </div>
-          <label className="flex h-9 w-60 items-center gap-2 rounded-[10px] border border-line bg-panel px-3 focus-within:border-gold">
+          </FilterGroup>
+          <FilterGroup title={t('Kategori')}>
+            <FilterItem on={!category} onClick={() => setCategory(null)}>
+              {t('Semua')}
+            </FilterItem>
+            {mineCount > 0 && (
+              <FilterItem on={category === 'saya'} onClick={() => setCategory('saya')} count={mineCount}>
+                {t('Template saya')}
+              </FilterItem>
+            )}
+            {CATEGORIES.filter((c) => counts.get(c.id)).map((c) => (
+              <FilterItem key={c.id} on={category === c.id} onClick={() => setCategory(c.id)} count={counts.get(c.id)!}>
+                {t(c.label)}
+              </FilterItem>
+            ))}
+          </FilterGroup>
+          <FilterGroup title={t('Jumlah foto')}>
+            <div className="flex gap-1.5 px-2">
+              {[1, 2, 3, 4].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setPhotoFilter(photoFilter === n ? null : n)}
+                  className={cx(
+                    'h-7 flex-1 rounded-md text-xs font-medium',
+                    photoFilter === n ? 'bg-raised text-fg ring-1 ring-gold' : 'bg-panel-2 text-muted hover:text-fg',
+                  )}
+                >
+                  {n === 4 ? '4+' : n}
+                </button>
+              ))}
+            </div>
+          </FilterGroup>
+        </nav>
+
+        <section className="flex min-w-0 flex-1 flex-col gap-6 overflow-y-auto px-6 pt-5 pb-10 lg:px-8">
+          <label className="flex h-10 w-full max-w-[520px] shrink-0 items-center gap-2 rounded-[10px] border border-line bg-panel px-3 focus-within:border-gold">
             <Search size={15} className="shrink-0 text-faint" />
             <input
               value={query}
@@ -171,200 +202,228 @@ export function Gallery({ onBack }: { onBack: () => void }) {
               </button>
             )}
           </label>
-        </div>
 
-        <div className="flex flex-wrap gap-2">
-          <Chip on={!category} onClick={() => setCategory(null)}>
-            {t('Semua')}
-          </Chip>
-          {mineCount > 0 && (
-            <Chip on={category === 'saya'} onClick={() => setCategory(category === 'saya' ? null : 'saya')}>
-              {t('Template saya')} <span className="opacity-60">{num(mineCount)}</span>
-            </Chip>
+          {drafts.length > 0 && !query && (
+            <section className="flex flex-col gap-2.5">
+              <h2 className="text-[13px] font-semibold">{t('Lanjutkan desain')}</h2>
+              <div className="-mx-1 -mt-1 flex gap-3 overflow-x-auto px-1 pt-1 pb-1">
+                {drafts.map((d) => (
+                  <div key={d.id} className="group relative flex w-[132px] shrink-0 flex-col gap-1.5">
+                    <button type="button" onClick={() => resume(d)} className="flex h-[132px] items-center justify-center rounded-xl bg-panel-2 p-2.5 ring-1 ring-line-soft hover:ring-gold">
+                      {d.cover ? <img src={d.cover} alt="" className="max-h-full max-w-full rounded-[3px] object-contain" /> : null}
+                    </button>
+                    <span className="truncate text-xs font-medium">{d.name}</span>
+                    <span className="text-[11px] text-faint">{new Intl.DateTimeFormat(locale(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(d.updatedAt)}</span>
+                    <button
+                      type="button"
+                      onClick={() => forget(d)}
+                      onMouseLeave={() => setConfirming(null)}
+                      title={t('Hapus draf')}
+                      aria-label={t('Hapus draf')}
+                      className={cx(
+                        'absolute top-1.5 right-1.5 h-7 items-center justify-center gap-1 rounded-lg px-1.5 text-[11px] font-medium group-hover:flex',
+                        confirming === d.id ? 'flex bg-reject text-white' : 'hidden bg-bg/85 text-faint hover:text-reject',
+                      )}
+                    >
+                      <Trash2 size={13} /> {confirming === d.id && t('Hapus?')}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </section>
           )}
-          {CATEGORIES.filter((c) => counts.get(c.id)).map((c) => (
-            <Chip key={c.id} on={category === c.id} onClick={() => setCategory(category === c.id ? null : c.id)}>
-              {t(c.label)} <span className="opacity-60">{num(counts.get(c.id)!)}</span>
-            </Chip>
-          ))}
-        </div>
 
-        <div className="-mt-1 flex items-center gap-2 text-xs text-faint">
-          {t('Jumlah foto')}
-          {[1, 2, 3, 4].map((n) => (
-            <button
-              key={n}
-              type="button"
-              onClick={() => setPhotoFilter(photoFilter === n ? null : n)}
-              className={cx(
-                'h-6 min-w-8 rounded-md px-2 font-medium',
-                photoFilter === n ? 'bg-raised text-fg ring-1 ring-gold' : 'bg-panel-2 text-muted hover:text-fg',
-              )}
-            >
-              {n === 4 ? '4+' : n}
-            </button>
-          ))}
-        </div>
-
-        {!query && !category && photoFilter === null && (
-          <section className="flex flex-col gap-2.5">
-            <h2 className="text-[13px] font-semibold">{t('Mulai dari kosong')}</h2>
-            <div className="flex flex-wrap gap-3">
-              {BLANK_FORMATS.filter((f) => tab === 'semua' || tab === f).map((f) => (
-                <button
-                  key={f}
-                  type="button"
-                  onClick={() => start(blankTemplate(f))}
-                  className="flex h-[86px] w-[150px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-line bg-panel text-muted hover:border-gold/70 hover:text-fg"
-                >
-                  <span className="flex items-center justify-center rounded-[3px] border border-current" style={blankShape(f)}>
-                    <Plus size={13} />
-                  </span>
-                  <span className="text-xs font-medium">{t(TABS.find((x) => x.id === f)?.label ?? formatLabel(f))}</span>
-                </button>
-              ))}
+          <section className="flex flex-col gap-3">
+            <h2 className="text-[13px] font-semibold">
+              {category === 'saya' ? t('Template saya') : t('Template')} <span className="font-normal text-faint">{num(shown.length)}</span>
+            </h2>
+            {error && <p className="text-sm text-reject">{error}</p>}
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(176px,1fr))] gap-5">
+              {!query && category !== 'saya' && blankFormats.length > 0 && <BlankCard formats={blankFormats} onStart={(f) => start(blankTemplate(f))} />}
+              {shown.map((tp) => {
+                const n = countOf(tp);
+                return (
+                  <div key={tp.id} className="group flex flex-col gap-2">
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setPicked(tp.id)}
+                        className="flex aspect-[200/248] w-full items-center justify-center rounded-xl bg-panel-2 p-3 ring-1 ring-line-soft hover:ring-gold"
+                      >
+                        <DocPicture id={tp.id} doc={templateDoc(tp)} width={tp.format === 'carousel' ? 120 : 180} className="max-h-full max-w-full" />
+                      </button>
+                      {/* Straight to it, without the preview. */}
+                      <button
+                        type="button"
+                        onClick={() => start(tp)}
+                        className="absolute right-2 bottom-2 left-2 hidden h-9 items-center justify-center gap-1.5 rounded-lg bg-gold-gradient text-xs font-semibold text-white shadow-lg group-hover:flex"
+                      >
+                        {t('Pakai')} <ArrowRight size={14} />
+                      </button>
+                    </div>
+                    <span className="flex flex-col gap-0.5 px-0.5">
+                      <span className="truncate text-[13px] font-medium">{tp.name}</span>
+                      <span className="text-[11px] text-faint">
+                        {formatLabel(tp.format)}
+                        {tp.format === 'carousel' ? ` · ${t('{n} slide', { n: tp.slides })}` : ''} · {t('{count} foto', { n, count: num(n) })}
+                      </span>
+                    </span>
+                  </div>
+                );
+              })}
             </div>
+            {all && shown.length === 0 && <p className="py-16 text-center text-sm text-faint">{t('Tidak ada template yang cocok.')}</p>}
           </section>
-        )}
+        </section>
+      </div>
 
-        {drafts.length > 0 && !query && (
-          <section className="flex flex-col gap-2.5">
-            <h2 className="text-[13px] font-semibold">{t('Lanjutkan desain')}</h2>
-            <div className="-mx-1 -mt-1 flex gap-3 overflow-x-auto px-1 pt-1 pb-1">
-              {drafts.map((d) => (
-                <div key={d.id} className="group relative flex w-[150px] shrink-0 flex-col gap-1.5">
-                  <button type="button" onClick={() => resume(d)} className="flex h-[150px] items-center justify-center rounded-xl bg-panel-2 p-2.5 ring-1 ring-line-soft hover:ring-gold">
-                    {d.cover ? <img src={d.cover} alt="" className="max-h-full max-w-full rounded-[3px] object-contain" /> : null}
-                  </button>
-                  <span className="truncate text-xs font-medium">{d.name}</span>
-                  <span className="text-[11px] text-faint">{new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(d.updatedAt)}</span>
-                  <button
-                    type="button"
-                    onClick={() => forget(d)}
-                    onMouseLeave={() => setConfirming(null)}
-                    title={t('Hapus draf')}
-                    aria-label={t('Hapus draf')}
-                    className={cx(
-                      'absolute top-1.5 right-1.5 h-7 items-center justify-center gap-1 rounded-lg px-1.5 text-[11px] font-medium group-hover:flex',
-                      confirming === d.id ? 'flex bg-reject text-white' : 'hidden bg-bg/85 text-faint hover:text-reject',
-                    )}
-                  >
-                    <Trash2 size={13} /> {confirming === d.id && t('Hapus?')}
-                  </button>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {error && <p className="text-sm text-reject">{error}</p>}
-        {all && shown.length === 0 && (
-          <p className="py-16 text-center text-sm text-faint">{t('Tidak ada template yang cocok.')}</p>
-        )}
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(184px,1fr))] gap-5">
-          {shown.map((tp) => {
-            const on = tp.id === current?.id;
-            const n = countOf(tp);
-            return (
-              <button
-                key={tp.id}
-                type="button"
-                onClick={() => setPicked(tp.id)}
-                onDoubleClick={() => start(tp)}
-                className="flex flex-col gap-2 text-left"
-              >
-                <span
-                  className={cx(
-                    'flex aspect-[200/248] w-full items-center justify-center rounded-xl bg-panel-2 p-3',
-                    on ? 'ring-2 ring-gold' : 'ring-1 ring-line-soft hover:ring-line',
-                  )}
-                >
-                  <DocPicture id={tp.id} doc={templateDoc(tp)} width={tp.format === 'carousel' ? 120 : 180} className="max-h-full max-w-full" />
-                </span>
-                <span className="flex flex-col gap-0.5 px-0.5">
-                  <span className="truncate text-[13px] font-medium">{tp.name}</span>
-                  <span className="text-[11px] text-faint">
-                    {formatLabel(tp.format)}
-                    {tp.format === 'carousel' ? ` · ${t('{n} slide', { n: tp.slides })}` : ''} · {t('{count} foto', { n, count: num(n) })}
-                  </span>
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </section>
-
-      {current && (
-        <TemplatePanel key={current.id} template={current} onUse={() => start(current)} onDelete={current.mine ? () => removeMine(current) : undefined} />
+      {preview && (
+        <TemplatePreview
+          key={preview.id}
+          template={preview}
+          onClose={() => setPicked(null)}
+          onUse={() => start(preview)}
+          onDelete={preview.mine ? () => (removeMine(preview), setPicked(null)) : undefined}
+        />
       )}
     </div>
   );
 }
 
-function Chip({ on, onClick, children }: { on: boolean; onClick: () => void; children: React.ReactNode }) {
+function FilterGroup({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="px-2 pb-1 text-[11px] font-semibold text-faint uppercase">{title}</span>
+      {children}
+    </div>
+  );
+}
+
+function FilterItem({ on, onClick, icon, count, children }: { on: boolean; onClick: () => void; icon?: React.ReactNode; count?: number; children: React.ReactNode }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={cx(
-        'flex h-7 items-center gap-1.5 rounded-full px-3 text-xs font-medium',
-        on ? 'bg-gold text-bg' : 'border border-line bg-panel-2 text-muted hover:text-fg',
-      )}
+      className={cx('flex h-8 items-center gap-2.5 rounded-lg px-2 text-left text-[13px]', on ? 'bg-raised font-semibold text-fg' : 'text-muted hover:bg-panel-2 hover:text-fg')}
     >
-      {children}
+      {icon && <span className="flex w-4 shrink-0 justify-center">{icon}</span>}
+      <span className="min-w-0 flex-1 truncate">{children}</span>
+      {count != null && <span className="text-[11px] font-normal text-faint">{num(count)}</span>}
     </button>
   );
 }
 
-/** Right panel: the selected template large, with what it needs. */
-function TemplatePanel({ template, onUse, onDelete }: { template: Template; onUse: () => void; onDelete?: () => void }) {
+/** A format's outline, small: what shape the canvas is. */
+function FormatGlyph({ format }: { format: FormatTab }) {
+  const size = format === 'semua' ? { width: 12, height: 12 } : blankShape(format, 0.5);
+  return <span className={cx('block rounded-[2px] border-[1.5px] border-current', format === 'semua' && 'border-dashed')} style={size} />;
+}
+
+/** "Kanvas kosong": the first card, an empty canvas of each format shown. */
+function BlankCard({ formats, onStart }: { formats: FormatId[]; onStart: (f: FormatId) => void }) {
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex aspect-[200/248] w-full flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-line bg-panel p-3">
+        {formats.length === 1 ? (
+          <button type="button" onClick={() => onStart(formats[0]!)} className="flex size-full flex-col items-center justify-center gap-3 rounded-lg text-muted hover:bg-panel-2 hover:text-fg">
+            <span className="flex items-center justify-center rounded-[4px] border-[1.5px] border-current" style={blankShape(formats[0]!, 1.6)}>
+              <Plus size={18} />
+            </span>
+          </button>
+        ) : (
+          <div className="grid size-full grid-cols-2 gap-2">
+            {formats.map((f) => (
+              <button
+                key={f}
+                type="button"
+                onClick={() => onStart(f)}
+                className="flex flex-col items-center justify-center gap-1.5 rounded-lg bg-panel-2 text-muted hover:text-fg hover:ring-1 hover:ring-gold"
+              >
+                <span className="flex items-center justify-center rounded-[3px] border-[1.5px] border-current" style={blankShape(f)}>
+                  <Plus size={11} />
+                </span>
+                <span className="text-[10px] leading-tight font-medium">{t(TABS.find((x) => x.id === f)?.label ?? '')}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      <span className="flex flex-col gap-0.5 px-0.5">
+        <span className="truncate text-[13px] font-medium">{t('Kanvas kosong')}</span>
+        <span className="text-[11px] text-faint">{t('Susun foto dan teks sendiri')}</span>
+      </span>
+    </div>
+  );
+}
+
+/** A template large, with what it needs; opened by clicking its card. */
+function TemplatePreview({ template, onUse, onClose, onDelete }: { template: Template; onUse: () => void; onClose: () => void; onDelete?: () => void }) {
   const doc = templateDoc(template);
   const shapes = slotShapes(doc);
   const [confirm, setConfirm] = useState(false);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => (e.key === 'Escape' ? onClose() : e.key === 'Enter' && onUse());
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose, onUse]);
   return (
-    <aside className="flex w-[360px] shrink-0 flex-col gap-4 overflow-y-auto border-l border-line-soft bg-panel p-6">
-      <div className="flex flex-col gap-1">
-        <h2 className="text-[17px] font-semibold">{template.name}</h2>
-        <p className="text-xs text-faint">
-          {formatLabel(template.format)} · {template.mine ? t('Template saya') : t(CATEGORIES.find((c) => c.id === template.category)?.label ?? '')}
-        </p>
-      </div>
-      <div className="flex h-[340px] shrink-0 items-center justify-center rounded-xl bg-panel-2 p-4">
-        <DocPicture id={template.id} doc={doc} width={template.format === 'carousel' ? 150 : 300} numbered className="max-h-full max-w-full" />
-      </div>
-      {template.description && <p className="text-xs text-muted">{template.description}</p>}
-      <div className="flex flex-col gap-2">
-        <span className="text-[13px] font-semibold">{t('Butuh {count} foto', { n: shapes.length, count: num(shapes.length) })}</span>
-        {shapes.slice(0, 8).map((s, i) => (
-          <span key={i} className="flex h-9 items-center gap-2.5 rounded-lg bg-panel-2 px-3">
-            <span className="flex size-[22px] items-center justify-center rounded-md bg-raised text-[11px] font-semibold text-gold-text">{i + 1}</span>
-            <ShapeIcon shape={s.shape} className="text-faint" />
-            <span className="text-xs text-muted">{t(SHAPE_LABEL[s.shape])}</span>
-          </span>
-        ))}
-        {shapes.length > 8 && <span className="text-xs text-faint">{t('dan {n} lagi', { n: shapes.length - 8 })}</span>}
-      </div>
-      <div className="flex-1" />
-      {onDelete && (
-        <button
-          type="button"
-          onClick={() => (confirm ? onDelete() : setConfirm(true))}
-          onMouseLeave={() => setConfirm(false)}
-          className={cx(
-            'flex h-9 shrink-0 items-center justify-center gap-2 rounded-[10px] text-[13px] font-medium',
-            confirm ? 'bg-reject text-white' : 'border border-line text-muted hover:text-reject',
-          )}
-        >
-          <Trash2 size={14} /> {confirm ? t('Hapus template ini?') : t('Hapus dari Template saya')}
-        </button>
-      )}
-      <button
-        type="button"
-        onClick={onUse}
-        className="flex h-11 shrink-0 items-center justify-center gap-2 rounded-[10px] bg-gold-gradient text-sm font-semibold text-white"
+    <div className="fixed inset-x-0 top-10 bottom-0 z-40 flex items-center justify-center bg-black/70 p-6" onMouseDown={onClose}>
+      <div
+        role="dialog"
+        aria-label={template.name}
+        onMouseDown={(e) => e.stopPropagation()}
+        className="flex max-h-full w-[860px] max-w-full gap-6 overflow-hidden rounded-[18px] border border-line bg-panel p-6 shadow-2xl"
       >
-        {t('Pakai template ini')} <ArrowRight size={16} />
-      </button>
-    </aside>
+        <div className="flex min-h-[420px] flex-1 items-center justify-center rounded-xl bg-panel-2 p-5">
+          <DocPicture id={template.id} doc={doc} width={template.format === 'carousel' ? 180 : 340} numbered className="max-h-[60vh] max-w-full" />
+        </div>
+        <div className="flex w-[280px] shrink-0 flex-col gap-4 overflow-y-auto">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex flex-col gap-1">
+              <h2 className="text-[17px] font-semibold">{template.name}</h2>
+              <p className="text-xs text-faint">
+                {formatLabel(template.format)} · {template.mine ? t('Template saya') : t(CATEGORIES.find((c) => c.id === template.category)?.label ?? '')}
+              </p>
+            </div>
+            <button type="button" onClick={onClose} aria-label={t('Tutup')} className="text-faint hover:text-fg">
+              <X size={18} />
+            </button>
+          </div>
+          {template.description && <p className="text-xs text-muted">{template.description}</p>}
+          <div className="flex flex-col gap-2">
+            <span className="text-[13px] font-semibold">{t('Butuh {count} foto', { n: shapes.length, count: num(shapes.length) })}</span>
+            {shapes.slice(0, 8).map((s, i) => (
+              <span key={i} className="flex h-9 items-center gap-2.5 rounded-lg bg-panel-2 px-3">
+                <span className="flex size-[22px] items-center justify-center rounded-md bg-raised text-[11px] font-semibold text-gold-text">{i + 1}</span>
+                <ShapeIcon shape={s.shape} className="text-faint" />
+                <span className="text-xs text-muted">{t(SHAPE_LABEL[s.shape])}</span>
+              </span>
+            ))}
+            {shapes.length > 8 && <span className="text-xs text-faint">{t('dan {n} lagi', { n: shapes.length - 8 })}</span>}
+          </div>
+          <div className="flex-1" />
+          {onDelete && (
+            <button
+              type="button"
+              onClick={() => (confirm ? onDelete() : setConfirm(true))}
+              onMouseLeave={() => setConfirm(false)}
+              className={cx(
+                'flex h-9 shrink-0 items-center justify-center gap-2 rounded-[10px] text-[13px] font-medium',
+                confirm ? 'bg-reject text-white' : 'border border-line text-muted hover:text-reject',
+              )}
+            >
+              <Trash2 size={14} /> {confirm ? t('Hapus template ini?') : t('Hapus dari Template saya')}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onUse}
+            className="flex h-11 shrink-0 items-center justify-center gap-2 rounded-[10px] bg-gold-gradient text-sm font-semibold text-white"
+          >
+            {t('Pakai template ini')} <ArrowRight size={16} />
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

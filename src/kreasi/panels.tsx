@@ -4,7 +4,7 @@
  * exactly what lands on the canvas.
  */
 
-import { ArrowDown, ArrowUp, Eye, EyeOff, Image as ImageIcon, Lock, Search, Shapes, Type, Unlock } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronDown, Eye, EyeOff, Image as ImageIcon, Lock, Search, Shapes, Type, Unlock } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { cx } from '../components/ui';
@@ -211,18 +211,22 @@ export function TextPanel({ onAdd }: { onAdd: (a: { edit: Edit; id: string }) =>
         </button>
       ))}
       <Title>{t('Gaya siap pakai')}</Title>
-      <div className="flex flex-wrap gap-1.5">
-        {PRESET_CATEGORIES.map((c) => (
-          <button
-            key={c.id}
-            type="button"
-            onClick={() => setCat(c.id)}
-            className={cx('h-6 rounded-full px-2.5 text-[11px] font-medium', cat === c.id ? 'bg-gold text-bg' : 'bg-panel-2 text-muted hover:text-fg')}
-          >
-            {t(c.label)}
-          </button>
-        ))}
-      </div>
+      {/* One line however many kinds there are. */}
+      <label className="relative flex items-center">
+        <select
+          value={cat}
+          onChange={(e) => setCat(e.target.value)}
+          aria-label={t('Gaya siap pakai')}
+          className="h-8 w-full appearance-none rounded-lg border border-line bg-panel-2 pr-8 pl-2.5 text-xs font-medium text-fg outline-none focus:border-gold"
+        >
+          {PRESET_CATEGORIES.map((c) => (
+            <option key={c.id} value={c.id}>
+              {t(c.label)} ({ALL_PRESETS.filter((p) => p.category === c.id).length})
+            </option>
+          ))}
+        </select>
+        <ChevronDown size={14} className="pointer-events-none absolute right-2.5 text-faint" />
+      </label>
       <div className="grid grid-cols-2 gap-2">
         {presets.map((p) => (
           <button key={p.id} type="button" title={p.name} onClick={() => onAdd(addPreset(p))} className="rounded-md ring-1 ring-line-soft hover:ring-gold">

@@ -223,4 +223,8 @@ export default {
   'Garis putih##bingkai': 'White border',
   'Polaroid##bingkai': 'Polaroid',
   'Tambah foto dari panel Foto, atau seret ke sini.': 'Add photos from the Photo panel, or drag them here.',
+  Template: 'Templates',
+  Pakai: 'Use',
+  'Kanvas kosong': 'Blank canvas',
+  'Susun foto dan teks sendiri': 'Arrange photos and text yourself',
 } as Record<string, string | [string, string]>;
