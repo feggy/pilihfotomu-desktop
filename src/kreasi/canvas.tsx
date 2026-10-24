@@ -472,6 +472,9 @@ export function DocCanvas({
   };
 
   const onPointerDown = (e: React.PointerEvent) => {
+    // The canvas takes the keyboard: a text box used before (inspector, search)
+    // must not keep it, or ⌘Z, Delete and the arrows would go there.
+    if (outlines && document.activeElement !== ref.current) ref.current?.focus({ preventScroll: true });
     if (e.button !== 0 || editingText) return;
     const { x, y } = at(e);
     if (crop && cropping != null) {
@@ -706,7 +709,8 @@ export function DocCanvas({
       <canvas
         ref={ref}
         style={{ width: f.width, height: f.height }}
-        className="block touch-none rounded-[4px] shadow-[0_20px_60px_rgb(0_0_0/0.5)]"
+        tabIndex={outlines ? -1 : undefined}
+        className="block touch-none rounded-[4px] shadow-[0_20px_60px_rgb(0_0_0/0.5)] outline-none"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}

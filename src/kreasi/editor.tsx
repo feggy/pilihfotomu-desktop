@@ -174,8 +174,8 @@ export function Editor() {
       if (mod && e.key === '0') return (e.preventDefault(), setView(1));
       if (cropping != null && (e.key === 'Escape' || e.key === 'Enter')) return (e.preventDefault(), setCropping(null));
       if (e.key === 'Escape') return select(null);
-      // ⌘] / ⌘[ one layer up / down; with Shift all the way (by key position, whatever the layout types).
-      if (mod && (e.code === 'BracketRight' || e.code === 'BracketLeft')) {
+      // ] / [ one layer up / down (⌘ too); with Shift all the way. By key position, whatever the keyboard layout types.
+      if (!e.altKey && (e.code === 'BracketRight' || e.code === 'BracketLeft')) {
         e.preventDefault();
         const up = e.code === 'BracketRight';
         const to: LayerMove = e.shiftKey ? (up ? 'front' : 'back') : up ? 'forward' : 'backward';
@@ -437,7 +437,7 @@ export function Editor() {
         <div className="flex min-w-0 flex-1 flex-col bg-[#08100d]">
           <div ref={stageRef} className="min-h-0 flex-1 overflow-auto">
             {/* Centred while it fits; scrollable from its edges once zoomed past the window. Room above for the quick bar. */}
-            <div className="flex min-h-full w-max min-w-full items-center justify-center px-8 pt-16 pb-8" onPointerDown={(e) => e.target === e.currentTarget && e.button === 0 && (select(null), bandRef.current?.(e))}>
+            <div className="flex min-h-full w-max min-w-full items-center justify-center px-8 pt-16 pb-8 outline-none" tabIndex={-1} onPointerDown={(e) => e.target === e.currentTarget && e.button === 0 && (e.currentTarget.focus({ preventScroll: true }), select(null), bandRef.current?.(e))}>
               {stage.w > 0 && (
                 <DocCanvas
                   doc={doc}
