@@ -455,8 +455,9 @@ export function Editor() {
                   bandFrom={bandRef}
                   hint={free && !doc.freeCells.length && !doc.texts.length && !doc.stickers.length ? t('Tambah foto dari panel Foto, atau seret ke sini.') : undefined}
                   handlers={{
-                    onSelect: select,
-                    onMulti: pickMany,
+                    // Picked on the canvas: its row in Lapisan, to see where it sits.
+                    onSelect: (s) => (select(s), s && s.kind !== 'watermark' && setPanel('lapisan')),
+                    onMulti: (list) => (pickMany(list), list.length > 1 && setPanel('lapisan')),
                     onMove: (moves) => live(placeMany(moves)),
                     onCropCell: (i) => placed(doc)[i] != null && (select({ kind: 'cell', index: i }), setCropping(i)),
                     onEndCrop: () => setCropping(null),

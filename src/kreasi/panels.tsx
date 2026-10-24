@@ -125,6 +125,7 @@ export function LayersPanel({
         key={key}
         onPointerEnter={() => onHover({ kind: 'cell', index: i })}
         onPointerLeave={() => onHover(null)}
+        data-on={on || undefined}
         className={cx('group flex h-9 shrink-0 items-center gap-2 rounded-lg px-2', on ? 'bg-raised ring-1 ring-gold' : 'hover:bg-panel-2', hidden && 'opacity-50')}
       >
         <button type="button" onClick={(e) => (e.shiftKey && movable ? onToggle({ kind: 'cell', index: i }) : onSelect({ kind: 'cell', index: i }))} className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
@@ -137,8 +138,13 @@ export function LayersPanel({
       </div>
     );
   };
+  // What was picked on the canvas comes into view in the list.
+  const listRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    listRef.current?.querySelector('[data-on]')?.scrollIntoView({ block: 'nearest' });
+  }, [selection, multi]);
   return (
-    <div className="flex flex-col gap-0.5">
+    <div ref={listRef} className="flex flex-col gap-0.5">
       <Title>{t('Lapisan')}</Title>
       {keys.map((key) => {
         // A free layout's photo places are layers among the others.
@@ -155,6 +161,7 @@ export function LayersPanel({
         return (
           <div
             key={key}
+            data-on={on || undefined}
             className={cx('group flex h-9 shrink-0 items-center gap-2 rounded-lg px-2', on ? 'bg-raised ring-1 ring-gold' : 'hover:bg-panel-2', hidden && 'opacity-50')}
             onPointerEnter={() => onHover(sel)}
             onPointerLeave={() => onHover(null)}
