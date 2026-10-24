@@ -52,6 +52,22 @@ const FIXED: [string, string][] = [
   [isMac ? '⌘ ,' : 'Ctrl + ,', 'Buka pengaturan'],
 ];
 
+/** The Buat konten editor's shortcuts (src/kreasi/editor.tsx). */
+const M = isMac ? '⌘' : 'Ctrl + ';
+const KREASI: [string, string][] = [
+  [`${M}Z`, 'Urungkan'],
+  [isMac ? '⇧⌘Z' : 'Ctrl + Shift + Z / Ctrl + Y', 'Ulangi'],
+  [`${M}T`, 'Atur ukuran foto di tempatnya'],
+  [`${M}D`, 'Duplikat'],
+  ['Delete', 'Hapus teks atau elemen'],
+  ['← → ↑ ↓ (Shift: 10 px)', 'Geser teks atau elemen'],
+  ['Enter', 'Ubah teks'],
+  [`${M}= / ${M}− / ${M}0`, 'Zoom kanvas / pas layar'],
+  [isMac ? '⌥ + scroll' : 'Alt + scroll', 'Zoom foto di tempatnya'],
+  [isMac ? '⌘ saat menyeret' : 'Ctrl saat menyeret', 'Geser tanpa magnet'],
+  [`${M}E`, 'Ekspor desain'],
+];
+
 function KeyEditor() {
   const keys = useKeys((s) => s.keys);
   const setKey = useKeys((s) => s.set);
@@ -132,6 +148,15 @@ function KeyEditor() {
       <h2 className="pt-2 text-sm font-semibold text-muted">{t('Tetap')}</h2>
       <div className="flex flex-col rounded-2xl border border-line-soft bg-panel px-5 py-2">
         {FIXED.map(([k, l]) => (
+          <div key={k} className="flex h-10 items-center justify-between border-b border-line-soft last:border-0">
+            <span className="text-[13px] text-muted">{t(l)}</span>
+            <Kbd>{k}</Kbd>
+          </div>
+        ))}
+      </div>
+      <h2 className="pt-2 text-sm font-semibold text-muted">{t('Buat konten')}</h2>
+      <div className="flex flex-col rounded-2xl border border-line-soft bg-panel px-5 py-2">
+        {KREASI.map(([k, l]) => (
           <div key={k} className="flex h-10 items-center justify-between border-b border-line-soft last:border-0">
             <span className="text-[13px] text-muted">{t(l)}</span>
             <Kbd>{k}</Kbd>

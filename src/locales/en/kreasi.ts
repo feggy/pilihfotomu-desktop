@@ -188,4 +188,5 @@ export default {
     'Photos come from each one’s 2048 px preview. Originals are not changed.',
   'Ekspor {format}': 'Export {format}',
   'Slide {n}': 'Slide {n}',
+  'Atur ukuran': 'Resize',
 } as Record<string, string | [string, string]>;

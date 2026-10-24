@@ -162,7 +162,7 @@ export function Gallery({ onBack }: { onBack: () => void }) {
         {drafts.length > 0 && !query && (
           <section className="flex flex-col gap-2.5">
             <h2 className="text-[13px] font-semibold">{t('Lanjutkan desain')}</h2>
-            <div className="flex gap-3 overflow-x-auto pb-1">
+            <div className="-mx-1 -mt-1 flex gap-3 overflow-x-auto px-1 pt-1 pb-1">
               {drafts.map((d) => (
                 <div key={d.id} className="group relative flex w-[150px] shrink-0 flex-col gap-1.5">
                   <button type="button" onClick={() => resume(d)} className="flex h-[150px] items-center justify-center rounded-xl bg-panel-2 p-2.5 ring-1 ring-line-soft hover:ring-gold">

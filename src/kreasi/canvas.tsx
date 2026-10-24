@@ -16,7 +16,7 @@ import {
 } from './engine/document';
 import { itemBounds } from './engine/bounds';
 import { safeArea } from './engine/instagram';
-import { cellLayouts, drawCollage, frameOf, hitCell, placeImage, stickerBox, textBox, type Selection } from './engine/render';
+import { cellLayouts, drawCollage, frameOf, hitCell, photoPlacement, placeImage, stickerBox, textBox, type Selection } from './engine/render';
 import { fontFamilies, loadDocFonts, loadLocalImage, photoIdOf } from './kit';
 import { emptyAssets } from './preview';
 
@@ -83,6 +83,10 @@ export interface CanvasHandlers {
   onDropPhoto?: (index: number, photoId: number) => void;
   /** Gesture finished (one undo step per drag). */
   onCommit?: () => void;
+  /** Double-click on a photo: "Atur ukuran" for it. */
+  onCropCell?: (index: number) => void;
+  /** Leaves "Atur ukuran" (a click outside the photo). */
+  onEndCrop?: () => void;
 }
 
 /** Within this many screen pixels of a line, a dragged item snaps onto it. */
@@ -176,6 +180,7 @@ export function DocCanvas({
   editingText,
   overlay,
   safe,
+  cropping,
   handlers = {},
 }: {
   doc: CollageDoc;
@@ -192,6 +197,8 @@ export function DocCanvas({
   overlay?: (box: Box) => React.ReactNode;
   /** Shows where Instagram covers or crops the post (`engine/instagram.ts`). */
   safe?: boolean;
+  /** "Atur ukuran": this photo place shows its whole picture, to drag and resize inside the place. */
+  cropping?: number | null;
   handlers?: CanvasHandlers;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -258,6 +265,27 @@ export function DocCanvas({
     return null;
   };
 
+  /** The whole picture of photo place `index` (CSS px), turned with its place. */
+  const pictureOf = (index: number) => {
+    const slot = doc.slots[index];
+    const img = slot && images.get(slot.file.fileId);
+    const l = cellLayouts(templateOf(doc), f, doc.style, doc.slots)[index];
+    if (!slot || !img || !l) return null;
+    // As the engine draws it: turned by the photo's own angle, then by its place's.
+    const p = photoPlacement(img, l.photo, slot);
+    const dx = p.cx - (l.rect.x + l.rect.w / 2), dy = p.cy - (l.rect.y + l.rect.h / 2);
+    const c = Math.cos(l.rotate), sn = Math.sin(l.rotate);
+    const box: Box = {
+      cx: l.rect.x + l.rect.w / 2 + dx * c - dy * sn,
+      cy: l.rect.y + l.rect.h / 2 + dx * sn + dy * c,
+      w: p.dw,
+      h: p.dh,
+      rotate: ((l.rotate + p.angle) * 180) / Math.PI,
+    };
+    return { box, img, slot, over: { x: p.overX, y: p.overY }, flip: slot.flip };
+  };
+  const crop = cropping != null && outlines ? pictureOf(cropping) : null;
+
   // ── Picking ───────────────────────────────────────────────────
   const at = (e: { clientX: number; clientY: number }) => {
     const r = ref.current!.getBoundingClientRect();
@@ -299,7 +327,8 @@ export function DocCanvas({
     | { kind: 'pan'; index: number; x: number; y: number; ox: number; oy: number; overX: number; overY: number; moved: boolean }
     | { kind: 'move'; sel: Item; x: number; y: number; ix: number; iy: number; snap: SnapInfo; moved: boolean }
     | { kind: 'resize'; sel: Item; cx: number; cy: number; d0: number; size0: number }
-    | { kind: 'turn'; sel: Item; cx: number; cy: number; a0: number; r0: number };
+    | { kind: 'turn'; sel: Item; cx: number; cy: number; a0: number; r0: number }
+    | { kind: 'zoom'; index: number; cx: number; cy: number; d0: number; zoom0: number };
   const drag = useRef<Drag | null>(null);
   const [dragging, setDragging] = useState(false);
   const [hover, setHover] = useState<Selection>(null);
@@ -315,6 +344,14 @@ export function DocCanvas({
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0 || editingText) return;
     const { x, y } = at(e);
+    if (crop && cropping != null) {
+      // Inside the picture: move it. Outside: done resizing, carry on as a normal click.
+      if (inside(crop.box, x, y)) {
+        start({ kind: 'pan', index: cropping, x, y, ox: crop.slot.ox, oy: crop.slot.oy, overX: crop.over.x, overY: crop.over.y, moved: false }, e);
+        return;
+      }
+      handlers.onEndCrop?.();
+    }
     const s = pick(x, y);
     handlers.onSelect?.(s);
     if (!s) return;
@@ -334,6 +371,13 @@ export function DocCanvas({
 
   const onHandleDown = (e: React.PointerEvent, kind: 'resize' | 'turn') => {
     e.stopPropagation();
+    if (crop && cropping != null) {
+      const { x, y } = at(e);
+      // Zoom from the place's middle, so the corner follows the pointer.
+      const b = boxOf({ kind: 'cell', index: cropping })!;
+      start({ kind: 'zoom', index: cropping, cx: b.cx, cy: b.cy, d0: Math.hypot(x - b.cx, y - b.cy), zoom0: crop.slot.zoom }, e);
+      return;
+    }
     const sel = selection;
     if (!sel || (sel.kind !== 'text' && sel.kind !== 'sticker')) return;
     const b = boxOf(sel)!;
@@ -347,6 +391,7 @@ export function DocCanvas({
     const d = drag.current;
     const { x, y } = at(e);
     if (!d) {
+      if (crop) return;
       const h = pick(x, y);
       setHover((old) => (sameSel(old, h) || (!old && !h) ? old : h));
       return;
@@ -366,6 +411,9 @@ export function DocCanvas({
     } else if (d.kind === 'resize') {
       const k = Math.hypot(x - d.cx, y - d.cy) / Math.max(1, d.d0);
       handlers.onPatch?.(d.sel, { size: clamp(d.size0 * k, 0.01, 2) });
+    } else if (d.kind === 'zoom') {
+      const k = Math.hypot(x - d.cx, y - d.cy) / Math.max(1, d.d0);
+      handlers.onZoom?.(d.index, clamp(d.zoom0 * k, 1, 5));
     } else if (d.kind === 'turn') {
       const a = ((Math.atan2(y - d.cy, x - d.cx) - d.a0) * 180) / Math.PI;
       let deg = d.r0 + a;
@@ -382,7 +430,7 @@ export function DocCanvas({
   };
   const onPointerUp = () => {
     const d = drag.current;
-    if (d && (d.kind === 'resize' || d.kind === 'turn' || d.moved)) handlers.onCommit?.();
+    if (d && (d.kind === 'resize' || d.kind === 'turn' || d.kind === 'zoom' || d.moved)) handlers.onCommit?.();
     drag.current = null;
     setDragging(false);
     setGuides((g) => ({ ...g, showX: false, showY: false }));
@@ -390,6 +438,7 @@ export function DocCanvas({
   const onDoubleClick = (e: React.MouseEvent) => {
     const s = pick(at(e).x, at(e).y);
     if (s?.kind === 'text' && !isLayerLocked(doc, textLayerKey(s.id))) handlers.onEditText?.(s.id);
+    else if (s?.kind === 'cell') handlers.onCropCell?.(s.index);
   };
   const onWheel = (e: React.WheelEvent) => {
     // Plain scroll pans the view and ⌘/pinch zooms it (the editor handles both);
@@ -428,7 +477,7 @@ export function DocCanvas({
       }
     : {};
 
-  const selBox = outlines ? boxOf(selection) : null;
+  const selBox = outlines && !crop ? boxOf(selection) : null;
   const editing = editingText ? doc.texts.find((x) => x.id === editingText) : null;
   const editBox = editing ? boxOf({ kind: 'text', id: editing.id }) : null;
   const canHandle = !!selection && (selection.kind === 'text' || selection.kind === 'sticker') && !isLayerLocked(doc, keyOfItem(selection as Item)) && !editing;
@@ -471,6 +520,36 @@ export function DocCanvas({
             {t('Slide {n}', { n: i + 1 })}
           </span>
         ))}
+      {crop && (
+        <>
+          {/* The rest of the picture, faint, beyond its place. */}
+          <img
+            src={crop.img.src}
+            alt=""
+            draggable={false}
+            className="pointer-events-none absolute max-w-none opacity-40"
+            style={{
+              left: crop.box.cx - crop.box.w / 2,
+              top: crop.box.cy - crop.box.h / 2,
+              width: crop.box.w,
+              height: crop.box.h,
+              transform: `rotate(${crop.box.rotate}deg)${crop.flip ? ' scaleX(-1)' : ''}`,
+            }}
+          />
+          <Outline box={boxOf({ kind: 'cell', index: cropping! })} selected />
+          <Outline box={crop.box} selected>
+            {(['-left-[6px] -top-[6px]', '-right-[6px] -top-[6px]', '-left-[6px] -bottom-[6px]', '-right-[6px] -bottom-[6px]'] as const).map((pos) => (
+              <span
+                key={pos}
+                onPointerDown={(e) => onHandleDown(e, 'resize')}
+                onPointerMove={onPointerMove}
+                onPointerUp={onPointerUp}
+                className={`pointer-events-auto absolute size-[10px] cursor-nwse-resize border-[1.5px] border-[#3b9cff] bg-white ${pos}`}
+              />
+            ))}
+          </Outline>
+        </>
+      )}
       {safe && <SafeZones doc={doc} />}
       {dropAt != null && <Outline box={boxOf({ kind: 'cell', index: dropAt })} drop />}
       {/* Hover: a thin outline on what the pointer is over. Selection: a firm one with handles. */}
@@ -498,7 +577,7 @@ export function DocCanvas({
           )}
         </Outline>
       )}
-      {selBox && !dragging && !editing && overlay?.(selBox)}
+      {!dragging && !editing && (crop ? overlay?.(crop.box) : selBox && overlay?.(selBox))}
       {editing && editBox && (
         <textarea
           autoFocus

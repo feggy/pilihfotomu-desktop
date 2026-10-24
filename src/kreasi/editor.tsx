@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   Bold,
   Check,
+  Crop,
   ChevronDown,
   Copy,
   Download,
@@ -60,6 +61,17 @@ export function Editor() {
   const [panel, setPanel] = useState<Panel>('lapisan');
   const [exporting, setExporting] = useState(false);
   const [replacing, setReplacing] = useState<number | null>(null);
+  // "Atur ukuran" (⌘T, double-click): the photo place whose whole picture is out to drag and resize.
+  const [cropping, setCropping] = useState<number | null>(null);
+  if (cropping != null && (selection?.kind !== 'cell' || selection.index !== cropping || !doc?.slots[cropping])) setCropping(null);
+  const select = (s: Selection) => (setSelection(s), setEditingText(null));
+
+  // ⌘E from the menu bar: this design's export, not the session's.
+  useEffect(() => {
+    const go = () => setExporting(true);
+    window.addEventListener('pfm:kreasi-export', go);
+    return () => window.removeEventListener('pfm:kreasi-export', go);
+  }, []);
   const [safe, setSafe] = useState(false);
   const [stageRef, stage] = useBox<HTMLDivElement>();
   const images = useDocImages(doc, source?.root ?? null, true);
@@ -101,10 +113,15 @@ export function Editor() {
     return () => el.removeEventListener('wheel', onWheel);
   });
 
-  // Keyboard: Delete, ⌘D, arrows, Enter, Esc, ⌘= / ⌘− / ⌘0. ⌘Z / ⇧⌘Z come from the menu bar.
+  // Keyboard: Delete, ⌘D, ⌘T, arrows, Enter, Esc, ⌘= / ⌘− / ⌘0, Ctrl+Y. ⌘Z / ⇧⌘Z come from the menu bar.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement;
+      const el = e.target;
+      // Shortcuts keep working after a slider, colour or checkbox was clicked.
+      const typing =
+        el instanceof HTMLTextAreaElement ||
+        el instanceof HTMLSelectElement ||
+        (el instanceof HTMLInputElement && ['text', 'search', 'number', 'email', 'url', 'password', ''].includes(el.type));
       if (typing || exporting || replacing != null) return;
       const d = useKreasi.getState().doc;
       if (!d) return;
@@ -112,7 +129,15 @@ export function Editor() {
       if (mod && (e.key === '=' || e.key === '+')) return (e.preventDefault(), zoomBy(1.25));
       if (mod && e.key === '-') return (e.preventDefault(), zoomBy(0.8));
       if (mod && e.key === '0') return (e.preventDefault(), setView(1));
+      if (mod && !e.shiftKey && e.key.toLowerCase() === 'y') return (e.preventDefault(), redo());
+      if (cropping != null && (e.key === 'Escape' || e.key === 'Enter')) return (e.preventDefault(), setCropping(null));
       if (e.key === 'Escape') return setSelection(null);
+      if (mod && e.key.toLowerCase() === 't') {
+        // Photos get their picture out; texts and elements already show their handles.
+        e.preventDefault();
+        if (selection?.kind === 'cell' && d.slots[selection.index]) setCropping((c) => (c == null ? selection.index : null));
+        return;
+      }
       const key = keyOf(selection);
       const locked = key ? isLayerLocked(d, key) : false;
       if ((e.key === 'Delete' || e.key === 'Backspace') && key && !locked) {
@@ -186,9 +211,15 @@ export function Editor() {
     } else if (selection?.kind === 'cell') {
       const i = selection.index;
       const p = photoOf(i);
-      items.push(btn(<Replace size={13} />, p ? t('Ganti') : t('Pilih foto##isi'), () => setReplacing(i)));
-      if (p?.faces?.length) items.push(btn(<ScanFace size={13} />, t('Pas wajah'), () => setSlot(i, { zoom: 1, ...facePan(p, slotShapes(doc)[i]?.ratio ?? 1) })));
-      if (p) items.push(btn(<RotateCcw size={13} />, t('Atur ulang'), () => setSlot(i, { zoom: 1, ox: 0, oy: 0, rotate: 0 })));
+      if (cropping === i) {
+        items.push(btn(<RotateCcw size={13} />, t('Atur ulang'), () => setSlot(i, { zoom: 1, ox: 0, oy: 0 })));
+        items.push(btn(<Check size={13} />, t('Selesai'), () => setCropping(null)));
+      } else {
+        items.push(btn(<Replace size={13} />, p ? t('Ganti') : t('Pilih foto##isi'), () => setReplacing(i)));
+        if (p) items.push(btn(<Crop size={13} />, t('Atur ukuran'), () => setCropping(i)));
+        if (p?.faces?.length) items.push(btn(<ScanFace size={13} />, t('Pas wajah'), () => setSlot(i, { zoom: 1, ...facePan(p, slotShapes(doc)[i]?.ratio ?? 1) })));
+        if (p) items.push(btn(<RotateCcw size={13} />, t('Atur ulang'), () => setSlot(i, { zoom: 1, ox: 0, oy: 0, rotate: 0 })));
+      }
     }
     if (!items.length) return null;
     const top = box.cy - box.h / 2;
@@ -271,8 +302,11 @@ export function Editor() {
                   safe={safe}
                   editingText={editingText}
                   overlay={quickBar}
+                  cropping={cropping}
                   handlers={{
-                    onSelect: (s) => (setSelection(s), setEditingText(null)),
+                    onSelect: select,
+                    onCropCell: (i) => doc.slots[i] && (select({ kind: 'cell', index: i }), setCropping(i)),
+                    onEndCrop: () => setCropping(null),
                     onPan: (i, ox, oy) => setSlot(i, { ox, oy }, true),
                     onZoom: (i, zoom) => setSlot(i, { zoom }, true),
                     onPatch: (s, p) => live(s.kind === 'text' ? patchText(s.id, p) : patchSticker(s.id, p)),

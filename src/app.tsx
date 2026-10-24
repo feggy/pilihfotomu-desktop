@@ -49,8 +49,13 @@ export function App() {
     const off = listen<string>('menu', ({ payload }) => {
       const { screen: current, session: open, go: goTo } = useApp.getState();
       if (payload === 'undo' || payload === 'redo') {
+        // Only where text is typed does ⌘Z undo typing; a slider, colour or
+        // checkbox that kept focus after a click must not swallow it.
         const field = document.activeElement;
-        if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) {
+        const typing =
+          field instanceof HTMLTextAreaElement ||
+          (field instanceof HTMLInputElement && ['text', 'search', 'number', 'email', 'url', 'password', ''].includes(field.type));
+        if (typing) {
           document.execCommand(payload);
         } else if (current.name === 'review' || current.name === 'compare') {
           useApp.getState()[payload]();
@@ -68,6 +73,8 @@ export function App() {
       else if (payload === 'client-picks') {
         if (open) goTo({ name: 'picks', root: open.root, back: { name: 'review' } });
         else goTo({ name: 'home' });
+      } else if (payload === 'export' && current.name === 'kreasi') {
+        window.dispatchEvent(new Event('pfm:kreasi-export'));
       } else if (payload === 'export' && open) {
         if (current.name !== 'review') goTo({ name: 'review' });
         window.dispatchEvent(new Event('pfm:export'));

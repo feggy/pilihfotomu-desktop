@@ -128,4 +128,11 @@ export default {
   'Grup burst · {count} foto': ['Burst group · {count} photo', 'Burst group · {count} photos'],
   Bandingkan: 'Compare',
   'Tampilkan di {app}': 'Show in {app}',
+  'Atur ukuran foto di tempatnya': 'Resize the photo in its place',
+  'Hapus teks atau elemen': 'Delete text or element',
+  'Geser teks atau elemen': 'Move text or element',
+  'Zoom kanvas / pas layar': 'Zoom canvas / fit',
+  'Zoom foto di tempatnya': 'Zoom the photo in its place',
+  'Geser tanpa magnet': 'Move without snapping',
+  'Ekspor desain': 'Export design',
 } as Record<string, string | [string, string]>;
