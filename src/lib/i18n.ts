@@ -6,6 +6,8 @@
  * - `{name}` placeholders are filled from `vars`.
  * - An English entry may be `[one, other]`: picked by `vars.n === 1`.
  * - `tj()` is `t()` for placeholders that are elements (`<b>…</b>`).
+ * - A key may end in `##context` when the same Indonesian words need two
+ *   English ones ("Pilih foto##mode" → "Cull photos"); the context is never shown.
  *
  * The App component subscribes to the language, so changing it re-renders
  * every screen; module-level constants must call `t()` when read, not when
@@ -57,9 +59,10 @@ export const locale = () => (lang() === 'en' ? 'en-US' : 'id-ID');
 type Vars = Record<string, string | number>;
 
 function pick(id: string, vars?: Record<string, unknown>): string {
-  if (lang() !== 'en') return id;
+  const shown = id.split('##')[0]!;
+  if (lang() !== 'en') return shown;
   const e = EN[id];
-  if (e == null) return id;
+  if (e == null) return shown;
   if (typeof e === 'string') return e;
   return vars?.n === 1 ? e[0] : e[1];
 }

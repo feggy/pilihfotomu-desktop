@@ -71,7 +71,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
       const paths: string[] = [];
       for (let i = 0; i < blobs.length; i++) {
         const file = blobs.length > 1 ? `${name}-${String(i + 1).padStart(2, '0')}.${ext}` : `${name}.${ext}`;
-        paths.push(await api.saveExport(source.root, folder.trim(), file, new Uint8Array(await blobs[i]!.arrayBuffer())));
+        paths.push(await api.saveExport(source.saveDir, folder.trim(), file, new Uint8Array(await blobs[i]!.arrayBuffer())));
       }
       setSaved(paths);
     } catch (e) {
@@ -148,7 +148,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
                 ))}
               </div>
             </Field>
-            <Field label={t('Simpan ke')} hint={t('dibuat di dalam folder sesi')}>
+            <Field label={t('Simpan ke')} hint={t('di dalam {folder}', { folder: source.saveDir.split(/[\\/]/).pop() ?? '' })}>
               <input value={folder} onChange={(e) => setFolder(e.target.value)} className="h-[38px] rounded-[10px] border border-line bg-bg px-3 text-[13px] outline-none focus:border-gold" />
             </Field>
             <Field label={t('Nama file')}>

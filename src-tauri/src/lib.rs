@@ -338,6 +338,40 @@ fn scan_photos(state: State<'_, AppState>, root: PathBuf) -> CmdResult<Vec<Photo
     Ok(photos)
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PickedFiles {
+    /// Key for thumbnails/previews of these photos (not a real folder).
+    root: PathBuf,
+    /// Where results go: the folder holding the first photo.
+    dir: PathBuf,
+    photos: Vec<Photo>,
+}
+
+/// Photos picked file by file, kept like a scanned folder under a key of
+/// their own, so thumbnails and previews work as for a folder.
+#[tauri::command]
+fn open_files(state: State<'_, AppState>, paths: Vec<PathBuf>) -> CmdResult<PickedFiles> {
+    let first = paths.first().ok_or("Belum ada foto yang dipilih.")?;
+    let dir = first.parent().map(Path::to_path_buf).ok_or("Lokasi foto tidak valid.")?;
+    // Their common parent, so photos keep readable folders ("a", "b").
+    let mut base = dir.clone();
+    while !paths.iter().all(|p| p.starts_with(&base)) {
+        if !base.pop() {
+            break;
+        }
+    }
+    let photos = scan::from_files(&base, &paths);
+    if photos.is_empty() {
+        return Err("File yang dipilih bukan foto RAW atau JPEG.".into());
+    }
+    let mut key: Vec<String> = paths.iter().map(|p| p.to_string_lossy().into_owned()).collect();
+    key.sort();
+    let root = base.join(format!(".pilihfotomu-pilihan-{:016x}", scan::fnv(key.join("\n").as_bytes())));
+    state.scanned.lock().unwrap().insert(root.clone(), photos.clone());
+    Ok(PickedFiles { root, dir, photos })
+}
+
 /// Thumbnails for some photos of a folder, made on demand and cached in the
 /// same place an analysis puts them.
 #[tauri::command]
@@ -532,6 +566,7 @@ pub fn run() {
             full_res_supported,
             full_res_image,
             scan_photos,
+            open_files,
             thumbnails,
             resolve_client_picks,
             export_xmp,

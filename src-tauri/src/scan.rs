@@ -105,16 +105,7 @@ pub fn scan(root: &Path) -> Result<Vec<Photo>, ScanError> {
     }
     let mut found = Found::new();
     walk(root, root, &mut found)?;
-
-    Ok(found
-        .into_iter()
-        .filter(|(_, (_, raw, jpeg))| raw.is_some() || jpeg.is_some())
-        .enumerate()
-        .map(|(i, ((folder, _), (stem, raw, jpeg)))| {
-            let (prefix, number) = split_frame_number(&stem);
-            Photo { id: i as u32, stem, prefix, number, folder, raw, jpeg }
-        })
-        .collect())
+    Ok(numbered(found))
 }
 
 fn walk(root: &Path, dir: &Path, found: &mut Found) -> Result<(), ScanError> {
@@ -136,22 +127,50 @@ fn walk(root: &Path, dir: &Path, found: &mut Found) -> Result<(), ScanError> {
         if !kind.is_file() {
             continue;
         }
-        let Some(ext) = path.extension().map(|e| e.to_string_lossy().to_lowercase()) else { continue };
-        let is_raw = RAW_EXTS.contains(&ext.as_str());
-        let is_jpeg = JPEG_EXTS.contains(&ext.as_str());
-        if !is_raw && !is_jpeg {
-            continue;
-        }
-        let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
-        let folder = dir.strip_prefix(root).map(|p| p.to_string_lossy().replace('\\', "/")).unwrap_or_default();
-        let slot = found.entry((folder, stem.to_lowercase())).or_insert_with(|| (stem.clone(), None, None));
-        if is_raw {
-            slot.1 = Some(path);
-        } else {
-            slot.2 = Some(path);
-        }
+        add_file(root, &path, found);
     }
     Ok(())
+}
+
+/// Records `path` if it is a RAW or JPEG; pairs RAW + JPEG by folder + stem.
+fn add_file(root: &Path, path: &Path, found: &mut Found) {
+    let Some(ext) = path.extension().map(|e| e.to_string_lossy().to_lowercase()) else { return };
+    let is_raw = RAW_EXTS.contains(&ext.as_str());
+    let is_jpeg = JPEG_EXTS.contains(&ext.as_str());
+    if !is_raw && !is_jpeg {
+        return;
+    }
+    let dir = path.parent().unwrap_or(root);
+    let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+    let folder = dir.strip_prefix(root).map(|p| p.to_string_lossy().replace('\\', "/")).unwrap_or_default();
+    let slot = found.entry((folder, stem.to_lowercase())).or_insert_with(|| (stem.clone(), None, None));
+    if is_raw {
+        slot.1 = Some(path.to_path_buf());
+    } else {
+        slot.2 = Some(path.to_path_buf());
+    }
+}
+
+fn numbered(found: Found) -> Vec<Photo> {
+    found
+        .into_iter()
+        .filter(|(_, (_, raw, jpeg))| raw.is_some() || jpeg.is_some())
+        .enumerate()
+        .map(|(i, ((folder, _), (stem, raw, jpeg)))| {
+            let (prefix, number) = split_frame_number(&stem);
+            Photo { id: i as u32, stem, prefix, number, folder, raw, jpeg }
+        })
+        .collect()
+}
+
+/// Photos from files picked one by one (they may sit in different folders).
+/// Folders are relative to `root`, their common parent when there is one.
+pub fn from_files(root: &Path, paths: &[PathBuf]) -> Vec<Photo> {
+    let mut found = Found::new();
+    for p in paths.iter().filter(|p| p.is_file()) {
+        add_file(root, p, &mut found);
+    }
+    numbered(found)
 }
 
 /// Stable 64-bit hash (FNV-1a). std's hasher may change between Rust
@@ -226,6 +245,21 @@ mod tests {
         let p = dir.join(rel);
         fs::create_dir_all(p.parent().unwrap()).unwrap();
         fs::write(p, b"x").unwrap();
+    }
+
+    #[test]
+    fn photos_from_picked_files() {
+        let tmp = tempfile::tempdir().unwrap();
+        let d = tmp.path();
+        touch(d, "a/IMG_0001.CR3");
+        touch(d, "a/IMG_0001.JPG");
+        touch(d, "b/DSC_0002.ARW");
+        touch(d, "b/notes.txt");
+        let picked =
+            ["a/IMG_0001.CR3", "a/IMG_0001.JPG", "b/DSC_0002.ARW", "b/notes.txt", "gone.jpg"].map(|p| d.join(p));
+        let photos = from_files(d, &picked);
+        let got: Vec<_> = photos.iter().map(|p| (p.folder.as_str(), p.display_name(), p.jpeg.is_some())).collect();
+        assert_eq!(got, vec![("a", "IMG_0001.CR3".into(), true), ("b", "DSC_0002.ARW".into(), false)]);
     }
 
     #[test]

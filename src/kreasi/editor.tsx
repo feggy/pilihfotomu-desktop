@@ -235,7 +235,7 @@ function PhotoInspector({
       <Section title={t('Foto')}>
         <span className="truncate text-xs text-muted">{name ?? t('Belum ada foto')}</span>
         <button type="button" onClick={onReplace} className="flex h-8 items-center justify-center gap-2 rounded-lg border border-line bg-panel-2 text-xs hover:bg-raised">
-          <Replace size={13} /> {hasPhoto ? t('Ganti foto') : t('Pilih foto')}
+          <Replace size={13} /> {hasPhoto ? t('Ganti foto') : t('Pilih foto##isi')}
         </button>
       </Section>
       {hasPhoto && slot && (

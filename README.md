@@ -50,10 +50,15 @@ Review › Lanjutkan ▾ › Buat konten untuk memakai foto sesi yang terbuka).
   Perbaikan mesin sebaiknya dibuat di web lalu disalin ulang ke sini.
 - **Template**: 354 template komunitas dari `pilihfotomu-api/prisma/seed-data/community-templates.json`
   di `public/kreasi/templates.json`. Pratinjau digambar mesin dengan foto pengganti.
+- **Offline penuh**: template, font, dan stiker ikut di dalam app (folder `dist`
+  ditanam Tauri). Template tidak berisi URL; stiker digambar dari kode.
 - **Font**: 97 keluarga Google Fonts (OFL), subset latin, di `public/fonts/` +
-  `src/kreasi/fonts.css`. Buat ulang dengan `node scripts/fetch-fonts.mjs`.
-- **Isi foto**: dari sesi yang terbuka (Dipilih / Bintang 5 / Semua) atau folder
-  mana saja. "Hanya yang pas untuk slot" memakai bentuk foto (diukur dari
+  `src/kreasi/fonts.css` — rentang berat penuh untuk font variabel, dan setiap
+  berat/miring yang dipakai template ada persis. Buat ulang dengan
+  `node scripts/fetch-fonts.mjs` (membaca `pilihfotomu-web` untuk daftar berat).
+- **Isi foto**: dari sesi yang terbuka (Dipilih / Bintang 5 / Semua), atau
+  **Pilih foto** satu per satu (RAW/JPG, boleh dari beberapa folder — `open_files`;
+  hasil ekspor ke folder foto pertama), atau satu folder. "Hanya yang pas untuk slot" memakai bentuk foto (diukur dari
   thumbnail); foto diletakkan supaya wajah dari analisis ada di tengah tempatnya.
   "Isi sisanya otomatis": Dipilih, bintang tertinggi, bentuk pas, tidak dua dari satu burst.
 - **Ekspor**: JPG/PNG 1080 px atau 2×, foto dari pratinjau 2048 px, disimpan ke

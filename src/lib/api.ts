@@ -241,6 +241,8 @@ export const api = {
   fullResImage: (root: string, id: number) =>
     invoke<{ path: string; width: number; height: number }>('full_res_image', { root, id }),
   scanPhotos: (root: string) => invoke<Photo[]>('scan_photos', { root }),
+  /** Photos picked file by file: a key to use as `root`, the folder results go to, and the photos. */
+  openFiles: (paths: string[]) => invoke<{ root: string; dir: string; photos: Photo[] }>('open_files', { paths }),
   thumbnails: (root: string, ids: number[]) =>
     invoke<Record<number, string | null>>('thumbnails', { root, ids }),
   resolveClientPicks: (root: string, folders: string[], text: string) =>

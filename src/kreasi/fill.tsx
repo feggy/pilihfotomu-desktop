@@ -1,9 +1,9 @@
 import { open } from '@tauri-apps/plugin-dialog';
-import { ArrowLeft, ArrowRight, Folder, ImageOff, ImagePlus, MousePointerClick, Sparkles, Star, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Folder, ImageOff, ImagePlus, Images, MousePointerClick, Sparkles, Star, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Switch, cx } from '../components/ui';
-import { api, thumbUrl } from '../lib/api';
+import { api, thumbUrl, type Photo } from '../lib/api';
 import { num } from '../lib/format';
 import { t, tj } from '../lib/i18n';
 import { useApp } from '../store';
@@ -21,6 +21,7 @@ export function sessionSource(): Source | null {
   return {
     root: s.root,
     name: s.name,
+    saveDir: s.root,
     photos: s.photos.map((p) => ({
       id: p.id,
       name: p.name,
@@ -33,6 +34,8 @@ export function sessionSource(): Source | null {
   };
 }
 
+const fileName = (p: Photo) => (p.raw ?? p.jpeg ?? '').split(/[\\/]/).pop() || p.stem;
+
 /** Any folder: its photos by name, thumbnails made as they are needed. */
 async function folderSource(): Promise<Source | null> {
   const root = await open({ directory: true, title: t('Pilih folder foto') });
@@ -41,9 +44,31 @@ async function folderSource(): Promise<Source | null> {
   return {
     root,
     name: root.split(/[\\/]/).pop() || root,
-    photos: photos.map((p) => ({ id: p.id, name: (p.raw ?? p.jpeg ?? '').split(/[\\/]/).pop() || p.stem, thumb: null })),
+    saveDir: root,
+    photos: photos.map((p) => ({ id: p.id, name: fileName(p), thumb: null })),
   };
 }
+
+/** Photos picked one by one — the usual case: a template needs only a few. */
+async function filesSource(): Promise<Source | null> {
+  const picked = await open({
+    multiple: true,
+    title: t('Pilih foto##isi'),
+    filters: [{ name: t('Foto'), extensions: PHOTO_EXTS }],
+  });
+  const paths = Array.isArray(picked) ? picked : typeof picked === 'string' ? [picked] : [];
+  if (!paths.length) return null;
+  const got = await api.openFiles(paths);
+  return {
+    root: got.root,
+    name: t('{count} foto dipilih', { n: got.photos.length, count: num(got.photos.length) }),
+    saveDir: got.dir,
+    photos: got.photos.map((p) => ({ id: p.id, name: fileName(p), thumb: null })),
+  };
+}
+
+/** What the file picker offers: JPEG and the RAW kinds the scanner reads (src-tauri/src/scan.rs). */
+const PHOTO_EXTS = ['jpg', 'jpeg', 'cr3', 'cr2', 'crw', 'nef', 'nrw', 'arw', 'srf', 'sr2', 'raf', 'orf', 'rw2', 'dng', 'pef', 'srw', '3fr', 'iiq', 'x3f'];
 
 /** Layar 13 · Isi foto: the template's photo places, filled from a session or folder. */
 export function Fill() {
@@ -137,9 +162,9 @@ export function Fill() {
   const allDone = done === filled.length;
   const slotOf = new Map(filled.flatMap((id, i) => (id != null ? [[id, i] as const] : [])));
 
-  const changeSource = async () => {
+  const changeSource = async (how: 'files' | 'folder') => {
     try {
-      const s = await folderSource();
+      const s = await (how === 'files' ? filesSource() : folderSource());
       if (s) {
         setSource(s);
         setFilter('all');
@@ -181,13 +206,26 @@ export function Fill() {
 
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
+            {source && (
+              <span className="flex h-[34px] max-w-56 items-center gap-2 rounded-[10px] border border-line-soft bg-panel px-3 text-xs font-medium">
+                <Images size={14} className="shrink-0 text-gold-text" /> <span className="truncate">{source.name}</span>
+              </span>
+            )}
             <button
               type="button"
-              onClick={changeSource}
+              onClick={() => changeSource('files')}
               className="flex h-[34px] items-center gap-2 rounded-[10px] border border-line bg-panel px-3 text-xs font-medium hover:border-faint"
-              title={t('Ganti folder')}
             >
-              <Folder size={14} className="text-gold-text" /> {source?.name ?? t('Pilih folder foto')}
+              <ImagePlus size={14} className="text-gold-text" /> {source ? t('Pilih foto lain') : t('Pilih foto##isi')}
+            </button>
+            <button
+              type="button"
+              onClick={() => changeSource('folder')}
+              title={t('Pilih folder foto')}
+              aria-label={t('Pilih folder foto')}
+              className="flex size-[34px] items-center justify-center rounded-[10px] border border-line bg-panel text-muted hover:border-faint hover:text-fg"
+            >
+              <Folder size={14} />
             </button>
             {isSession && (
               <div className="flex gap-1 rounded-[10px] bg-panel p-[3px]">
@@ -223,9 +261,16 @@ export function Fill() {
           {!source ? (
             <div className="flex flex-col items-center gap-3 py-20 text-center text-sm text-muted">
               <ImagePlus size={28} className="text-faint" />
-              {t('Pilih folder berisi foto untuk template ini.')}
-              <button type="button" onClick={changeSource} className="rounded-[10px] bg-gold-gradient px-4 py-2 text-[13px] font-semibold text-white">
-                {t('Pilih folder foto')}
+              {t('Pilih foto untuk template ini — RAW atau JPG, boleh beberapa sekaligus.')}
+              <button
+                type="button"
+                onClick={() => changeSource('files')}
+                className="flex items-center gap-2 rounded-[10px] bg-gold-gradient px-4 py-2 text-[13px] font-semibold text-white"
+              >
+                <ImagePlus size={15} /> {t('Pilih foto##isi')}
+              </button>
+              <button type="button" onClick={() => changeSource('folder')} className="text-xs font-medium text-gold-text hover:underline">
+                {t('atau pilih satu folder')}
               </button>
             </div>
           ) : photos.length === 0 ? (

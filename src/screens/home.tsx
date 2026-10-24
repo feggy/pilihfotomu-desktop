@@ -194,7 +194,7 @@ export function Home({ dragging }: { dragging: boolean }) {
               highlight={dragging}
               preview="/home/pilih.jpg"
               icon={Sparkles}
-              title={t('Pilih foto')}
+              title={t('Pilih foto##mode')}
               sub={t('Ratusan foto sesi dipilah otomatis jadi Pilih, Cek, dan Lewati, lengkap dengan alasannya.')}
               tags={[t('Offline'), 'RAW & JPEG', '⌘O']}
               onClick={() => chooseFolder()}

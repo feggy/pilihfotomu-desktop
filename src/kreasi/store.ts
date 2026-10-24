@@ -24,9 +24,12 @@ export interface SourcePhoto {
 }
 
 export interface Source {
+  /** Key for thumbnails and previews: the folder, or a key for picked files. */
   root: string;
   name: string;
   photos: SourcePhoto[];
+  /** Real folder the exported pictures go into (`<saveDir>/Konten`). */
+  saveDir: string;
 }
 
 type Step = 'galeri' | 'isi' | 'edit';
