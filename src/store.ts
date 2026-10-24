@@ -4,13 +4,14 @@ import { api, type FolderInfo, type Options, type Progress, type Reason, type Se
 
 export type Screen =
   | { name: 'home' }
-  | { name: 'setup'; folder: FolderInfo }
+  /** A chosen folder: cull it with AI, or (`mode: 'pesan'`) find the photos a client's message names. */
+  | { name: 'setup'; folder: FolderInfo; mode?: 'ai' | 'pesan' }
   | { name: 'progress' }
   | { name: 'review' }
   /** A burst group, or any photos picked by hand (`ids`). */
   | { name: 'compare'; group?: number; ids?: number[] }
   /** Client picks on any folder; uses the open session's thumbnails when it is that folder. */
-  | { name: 'picks'; root: string; back: Screen }
+  | { name: 'picks'; root: string; back: Screen; text?: string; folders?: string[] }
   /** Buat konten: pick a template, fill its photos, edit, export. */
   | { name: 'kreasi'; back: Screen }
   /** Edit foto: develop photos like Lightroom. */

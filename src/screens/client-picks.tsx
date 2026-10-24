@@ -27,7 +27,19 @@ import { useApp, type Screen } from '../store';
 const baseName = (p: string) => p.split(/[\\/]/).filter(Boolean).pop() ?? p;
 const fileName = (p: Photo) => baseName(p.raw ?? p.jpeg ?? p.stem);
 
-export function ClientPicks({ root, back }: { root: string; back: Screen }) {
+export function ClientPicks({
+  root,
+  back,
+  text: pasted = '',
+  folders: picked,
+}: {
+  root: string;
+  back: Screen;
+  /** Already pasted on the folder's setup page. */
+  text?: string;
+  /** Subfolders ticked there. */
+  folders?: string[];
+}) {
   const session = useApp((s) => s.session);
   const go = useApp((s) => s.go);
   const fail = useApp((s) => s.fail);
@@ -35,7 +47,7 @@ export function ClientPicks({ root, back }: { root: string; back: Screen }) {
 
   const [scanned, setScanned] = useState<Photo[] | null>(null);
   const [thumbs, setThumbs] = useState<Record<number, string | null>>({});
-  const [text, setText] = useState('');
+  const [text, setText] = useState(pasted);
   const [result, setResult] = useState<PickResult | null>(null);
   const [choice, setChoice] = useState<Record<string, number>>({});
   const [added, setAdded] = useState<Set<number>>(new Set());
@@ -58,8 +70,8 @@ export function ClientPicks({ root, back }: { root: string; back: Screen }) {
   }, [scanned]);
   const [folders, setFolders] = useState<string[] | null>(null);
   useEffect(() => {
-    if (scanned && folders == null) setFolders(fromSession?.folders ?? defaultFolders(tops.map(([name]) => ({ name }))));
-  }, [scanned, folders, fromSession, tops]);
+    if (scanned && folders == null) setFolders(picked ?? fromSession?.folders ?? defaultFolders(tops.map(([name]) => ({ name }))));
+  }, [scanned, folders, picked, fromSession, tops]);
 
   const photos: Photo[] | null = scanned;
   const searched = (folders ?? []).reduce((n, f) => n + (tops.find(([t]) => t === f)?.[1] ?? 0), 0);

@@ -1,6 +1,7 @@
 import {
   ArrowLeft,
   Check as CheckIcon,
+  ClipboardList,
   Copy,
   EyeOff,
   Folder,
@@ -8,6 +9,7 @@ import {
   FolderTree,
   Minus,
   Focus,
+  Search,
   ShieldCheck,
   Smile,
   Sparkles,
@@ -34,8 +36,13 @@ const STRICTNESS_HINT: Record<Strictness, string> = {
 /** What a strictness level does, in the current language. */
 export const strictnessHint = (s: Strictness) => t(STRICTNESS_HINT[s]);
 
-export function Setup({ folder }: { folder: FolderInfo }) {
+export function Setup({ folder, mode: start = 'ai' }: { folder: FolderInfo; mode?: 'ai' | 'pesan' }) {
   const go = useApp((s) => s.go);
+  // Cull everything with AI, or go straight to the photos a client's message names.
+  const [mode, setMode] = useState(start);
+  const [message, setMessage] = useState('');
+  const findPicks = () =>
+    go({ name: 'picks', root: folder.root, text: message, folders: chosen, back: { name: 'setup', folder, mode: 'pesan' } });
   const analyze = useApp((s) => s.analyze);
   // Starts from Pengaturan › Analisis; changes here are for this folder only.
   const [options, setOptions] = useState<Options>(() => useDefaults.getState().options);
@@ -78,13 +85,30 @@ export function Setup({ folder }: { folder: FolderInfo }) {
             </div>
           </div>
 
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2" role="radiogroup" aria-label={t('Mau diapakan?')}>
+            <ModeOption
+              on={mode === 'ai'}
+              icon={Sparkles}
+              title={t('Pilah dengan AI')}
+              sub={t('Semua foto dipilah jadi Pilih, Cek, dan Lewati, lengkap dengan alasannya.')}
+              onClick={() => setMode('ai')}
+            />
+            <ModeOption
+              on={mode === 'pesan'}
+              icon={ClipboardList}
+              title={t('Dari pesan klien')}
+              sub={t('Tempel pesan WhatsApp berisi nomor foto, kami carikan filenya. Tanpa dipilah dulu.')}
+              onClick={() => setMode('pesan')}
+            />
+          </div>
+
           {folder.folders.length > 1 && (
             <section className="flex flex-col gap-2.5">
               <div className="flex items-end justify-between">
                 <h2 className="flex items-center gap-2 text-[15px] font-semibold">
                   <FolderTree size={16} className="text-muted" /> {t('Isi folder')}
                 </h2>
-                <span className="text-xs text-faint">{t('Centang yang mau dipilah')}</span>
+                <span className="text-xs text-faint">{mode === 'ai' ? t('Centang yang mau dipilah') : t('Centang tempat fotonya dicari')}</span>
               </div>
               <div className="flex flex-col overflow-hidden rounded-xl border border-line-soft bg-panel">
                 {/* The chosen folder itself, then its subfolders as a tree under it. */}
@@ -119,11 +143,15 @@ export function Setup({ folder }: { folder: FolderInfo }) {
                 ))}
               </div>
               <p className="text-xs text-faint">
-                {t('Tiap folder dipilih sendiri, termasuk folder di dalam subfolder. Folder yang tidak dicentang tidak dipilah dan tidak diubah.')}
+                {mode === 'ai'
+                  ? t('Tiap folder dipilih sendiri, termasuk folder di dalam subfolder. Folder yang tidak dicentang tidak dipilah dan tidak diubah.')
+                  : t('Biasanya folder JPG yang dikirim ke klien. Bisa diganti lagi di halaman berikutnya.')}
               </p>
             </section>
           )}
 
+          {mode === 'ai' && (
+          <>
           <section className="flex flex-col gap-3">
             <h2 className="text-[15px] font-semibold">{t('Jenis pemotretan')}</h2>
             <button
@@ -180,9 +208,36 @@ export function Setup({ folder }: { folder: FolderInfo }) {
             />
             <p className="text-xs text-faint">{strictnessHint(options.strictness)}</p>
           </section>
+          </>
+          )}
         </div>
 
         <aside className="flex w-full max-w-[744px] shrink-0 flex-col gap-4 xl:w-[380px] xl:pt-[46px]">
+          {mode === 'pesan' ? (
+            <>
+              <div className="flex flex-col gap-2.5 rounded-2xl border border-line-soft bg-panel p-5">
+                <h2 className="text-[15px] font-semibold">{t('Pesan klien')}</h2>
+                <p className="text-xs text-muted">{t('Tempel pesan apa adanya. Kata-kata, emoji, dan salah ketik kecil kami abaikan.')}</p>
+                <textarea
+                  autoFocus
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && (e.metaKey || e.ctrlKey) && message.trim() && photos > 0 && findPicks()}
+                  placeholder={t('kak ini pilihan aku ya\nIMG_0101, 0104, 0107\n0125-0134\njpg 141 sama 0146')}
+                  className="min-h-[180px] resize-y rounded-xl border border-line bg-bg p-3.5 font-mono text-[13px] leading-6 outline-none placeholder:text-faint focus:border-gold"
+                />
+              </div>
+              <Button variant="primary" size="lg" icon={Search} disabled={!message.trim() || photos === 0} onClick={findPicks}>
+                {t('Cari foto')}
+              </Button>
+              {folder.folders.length === 0 ? (
+                <p className="text-xs text-reject">{t('Folder ini tidak berisi foto RAW atau JPEG.')}</p>
+              ) : (
+                photos === 0 && <p className="text-xs text-maybe">{t('Centang minimal satu folder.')}</p>
+              )}
+            </>
+          ) : (
+          <>
           <div className="flex flex-col rounded-2xl border border-line-soft bg-panel p-5">
             <h2 className="mb-1 text-[15px] font-semibold">{t('Yang dicek AI')}</h2>
             <Check icon={Focus} label={t('Blur / tidak fokus')} sub={t('Diukur di bagian paling tajam, bukan latar bokeh')} on={options.checkBlur} onChange={(checkBlur) => set({ checkBlur })} />
@@ -214,6 +269,8 @@ export function Setup({ folder }: { folder: FolderInfo }) {
             photos === 0 && <p className="text-xs text-maybe">{t('Centang minimal satu folder.')}</p>
           )}
           {nothingToCheck && <p className="text-xs text-maybe">{t('Nyalakan minimal satu pengecekan.')}</p>}
+          </>
+          )}
         </aside>
       </main>
     </div>
@@ -281,6 +338,28 @@ function FolderRow({
           : t('{count} foto', { n: photos, count: num(photos) })}
         {formats ? ` · ${formats}` : own && !node?.hasChildren ? ` · ${Object.keys(own.formats).join(', ')}` : ''} · {bytes(size)}
       </span>
+    </button>
+  );
+}
+
+function ModeOption({ on, icon: Icon, title, sub, onClick }: { on: boolean; icon: LucideIcon; title: string; sub: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={on}
+      onClick={onClick}
+      className={cx(
+        'flex items-start gap-3 rounded-xl border p-3.5 text-left',
+        on ? 'border-2 border-gold bg-gold/10' : 'border-line-soft bg-panel hover:border-line',
+      )}
+    >
+      <IconTile icon={Icon} size={36} color={on ? 'var(--color-gold-text)' : 'var(--color-muted)'} className={on ? 'bg-gold/20' : undefined} />
+      <span className="flex flex-1 flex-col gap-1">
+        <span className="text-sm font-semibold">{title}</span>
+        <span className="text-xs text-muted">{sub}</span>
+      </span>
+      <Radio on={on} />
     </button>
   );
 }

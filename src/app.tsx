@@ -121,13 +121,13 @@ export function App() {
     needsSession && !session ? (
       <Home dragging={dragging} />
     ) : screen.name === 'setup' ? (
-      <Setup key={screen.folder.root} folder={screen.folder} />
+      <Setup key={screen.folder.root} folder={screen.folder} mode={screen.mode} />
     ) : screen.name === 'progress' ? (
       <ProgressScreen />
     ) : screen.name === 'review' ? null : screen.name === 'compare' ? (
       <Compare key={screen.ids?.join(',') ?? screen.group} group={screen.group} ids={screen.ids} />
     ) : screen.name === 'picks' ? (
-      <ClientPicks key={screen.root} root={screen.root} back={screen.back} />
+      <ClientPicks key={screen.root} root={screen.root} back={screen.back} text={screen.text} folders={screen.folders} />
     ) : screen.name === 'kreasi' ? (
       <KreasiScreen back={screen.back} />
     ) : screen.name === 'edit' ? (

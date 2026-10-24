@@ -3,7 +3,6 @@ import {
   ArrowRight,
   Check,
   ChevronRight,
-  Clipboard,
   Clock,
   FolderDown,
   FolderSearch,
@@ -14,7 +13,6 @@ import {
   SlidersHorizontal,
   Sparkles,
   Trash2,
-  X,
   type LucideIcon,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -134,26 +132,6 @@ function Cover({ id, i }: { id: string | undefined; i: number }) {
   );
 }
 
-function SourceOption({ icon: Icon, title, sub, hint, onClick }: { icon: LucideIcon; title: string; sub: string; hint?: string; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="group flex flex-col gap-2.5 rounded-[14px] border border-line-soft bg-panel-2 p-4 text-left transition-colors outline-none hover:border-gold/70 focus-visible:border-gold/70"
-    >
-      <span className="flex items-center justify-between">
-        <span className="flex size-[34px] items-center justify-center rounded-lg bg-raised text-gold-text">
-          <Icon size={17} />
-        </span>
-        <ArrowRight size={15} className="text-faint transition-transform group-hover:translate-x-0.5 group-hover:text-fg" />
-      </span>
-      <span className="text-[15px] font-semibold">{title}</span>
-      <span className="text-xs text-muted">{sub}</span>
-      {hint && <span className="text-[11px] text-faint">{hint}</span>}
-    </button>
-  );
-}
-
 export function Home({ dragging }: { dragging: boolean }) {
   const [sessions, setSessions] = useState<SessionSummary[] | null>(null);
   const openSession = useApp((s) => s.openSession);
@@ -208,58 +186,9 @@ export function Home({ dragging }: { dragging: boolean }) {
     }
   };
 
-  // Client picks only need the file names in a folder — no analysis first.
-  const clientPicks = async () => {
-    const root = await pickFolder();
-    if (root) go({ name: 'picks', root, back: { name: 'home' } });
-  };
-  // "Pilih foto" starts from either the whole session or the client's list.
-  const [choosing, setChoosing] = useState(false);
-  useEffect(() => {
-    if (!choosing) return;
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setChoosing(false);
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [choosing]);
-
   return (
     <div className="flex h-full flex-col">
       <TitleBar />
-      {choosing && (
-        <div className="fixed inset-x-0 top-10 bottom-0 z-40 flex items-center justify-center bg-black/70 p-4" onMouseDown={() => setChoosing(false)}>
-          <div
-            role="dialog"
-            aria-label={t('Mulai dari mana?')}
-            onMouseDown={(e) => e.stopPropagation()}
-            className="flex w-[560px] max-w-full flex-col gap-5 rounded-[18px] border border-line bg-panel p-6 shadow-2xl"
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex flex-col gap-1">
-                <h2 className="text-lg font-semibold">{t('Mulai dari mana?')}</h2>
-                <p className="text-xs text-muted">{t('Pilah semua foto sesi, atau langsung cari foto yang diminta klien.')}</p>
-              </div>
-              <button type="button" onClick={() => setChoosing(false)} aria-label={t('Tutup')} className="text-muted hover:text-fg">
-                <X size={18} />
-              </button>
-            </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <SourceOption
-                icon={Sparkles}
-                title={t('Pilah folder sesi')}
-                sub={t('AI memilah semua foto jadi Pilih, Cek, dan Lewati.')}
-                hint={t('Atau seret folder ke jendela')}
-                onClick={() => (setChoosing(false), chooseFolder())}
-              />
-              <SourceOption
-                icon={Clipboard}
-                title={t('Dari pesan klien')}
-                sub={t('Tempel pesan WhatsApp berisi nomor foto, kami carikan filenya — tanpa dipilah dulu.')}
-                onClick={() => (setChoosing(false), clientPicks())}
-              />
-            </div>
-          </div>
-        </div>
-      )}
       <main className="flex-1 overflow-y-auto">
         <div className="mx-auto flex w-full max-w-[1000px] flex-col gap-7 px-6 pt-10 pb-10 lg:px-8 lg:pt-12">
           <div className="flex flex-wrap items-end justify-between gap-4">
@@ -285,7 +214,7 @@ export function Home({ dragging }: { dragging: boolean }) {
               title={t('Pilih foto##mode')}
               sub={t('Ratusan foto sesi dipilah otomatis jadi Pilih, Cek, dan Lewati, lengkap dengan alasannya.')}
               tags={[t('Offline'), 'RAW & JPEG', '⌘O']}
-              onClick={() => setChoosing(true)}
+              onClick={() => chooseFolder()}
             />
             <ModeCard
               preview="/home/edit.jpg"
