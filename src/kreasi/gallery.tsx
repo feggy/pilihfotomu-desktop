@@ -43,8 +43,12 @@ export function Gallery({ onBack }: { onBack: () => void }) {
   const fail = useApp((s) => s.fail);
   useEffect(() => {
     loadTemplates().then(setAll, (e) => setError(String(e)));
-    listDrafts().then(setDrafts);
   }, []);
+  // Again once the design just left is saved, so its card shows the latest.
+  const savedAt = useKreasi((s) => s.savedAt);
+  useEffect(() => {
+    listDrafts().then(setDrafts);
+  }, [savedAt]);
 
   const resume = async (d: Draft) => {
     const tp = all && templateOfDraft(all, d);

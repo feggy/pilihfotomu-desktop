@@ -44,6 +44,8 @@ interface KreasiState {
   source: Source | null;
   /** The photo place being filled / edited. */
   active: number;
+  /** Opened from "Lanjutkan desain": back from the editor goes to the templates, not the photos. */
+  resumed: boolean;
   past: CollageDoc[];
   future: CollageDoc[];
   /** The design when a drag began; one undo step for the whole drag. */
@@ -124,6 +126,7 @@ export const useKreasi = create<KreasiState>((set, get) => ({
   doc: null,
   source: null,
   active: 0,
+  resumed: false,
   past: [],
   future: [],
   gesture: null,
@@ -140,12 +143,13 @@ export const useKreasi = create<KreasiState>((set, get) => ({
       past: [],
       future: [],
       step: 'isi',
+      resumed: false,
       draftId: newDraftId(),
       name: template.name,
       savedAt: null,
     }),
   openDraft: (d, template) =>
-    set({ template, doc: d.doc, source: d.source, draftId: d.id, name: d.name, savedAt: d.savedAt, active: 0, past: [], future: [], step: 'edit' }),
+    set({ template, doc: d.doc, source: d.source, draftId: d.id, name: d.name, savedAt: d.savedAt, active: 0, past: [], future: [], step: 'edit', resumed: true }),
   setName: (name) => set({ name }),
   setSavedAt: (savedAt) => set({ savedAt }),
   setSource: (source) => set({ source }),
@@ -232,5 +236,5 @@ export const useKreasi = create<KreasiState>((set, get) => ({
       const next = future[0];
       return next && doc ? { doc: next, past: [...past, doc], future: future.slice(1), gesture: null } : { gesture: null };
     }),
-  reset: () => set({ step: 'galeri', template: null, doc: null, active: 0, past: [], future: [], draftId: null, name: '', savedAt: null }),
+  reset: () => set({ step: 'galeri', template: null, doc: null, active: 0, resumed: false, past: [], future: [], draftId: null, name: '', savedAt: null }),
 }));

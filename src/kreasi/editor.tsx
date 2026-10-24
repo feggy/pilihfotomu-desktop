@@ -237,7 +237,7 @@ export function Editor() {
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-line-soft px-5">
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          <button type="button" onClick={() => setStep('isi')} title={t('Kembali')} className="text-muted hover:text-fg">
+          <button type="button" onClick={() => setStep(useKreasi.getState().resumed ? 'galeri' : 'isi')} title={t('Kembali')} className="text-muted hover:text-fg">
             <ArrowLeft size={18} />
           </button>
           <NameField value={name} onChange={setName} />
