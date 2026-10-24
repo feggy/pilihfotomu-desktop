@@ -155,12 +155,16 @@ export function LayersPanel({
   );
 }
 
+/** A sticker's, shape's or gradient's name in the current language. */
+export const elementLabel = (name: string) => t(`${name}##elemen`);
+
 /** What an element is called in the list: its sticker or shape name, "Gradasi" for a gradient band. */
 export function elementName(st: { sticker: string; gradient?: unknown } | undefined): string {
   if (!st) return t('Elemen');
   if (st.gradient) return t('Gradasi##lapisan');
   if (isPicturePlace(st)) return t('Gambar latar');
-  return stickerById(st.sticker)?.name ?? shapeById(st.sticker)?.name ?? t('Elemen');
+  const name = stickerById(st.sticker)?.name ?? shapeById(st.sticker)?.name;
+  return name ? elementLabel(name) : t('Elemen');
 }
 
 function IconBtn({ label, onClick, on, children }: { label: string; onClick: () => void; on?: boolean; children: React.ReactNode }) {
@@ -224,8 +228,10 @@ export function TextPanel({ onAdd }: { onAdd: (a: { edit: Edit; id: string }) =>
 export function ElementsPanel({ onAdd }: { onAdd: (a: { edit: Edit; id: string }) => void }) {
   const [q, setQ] = useState('');
   const query = q.trim().toLowerCase();
-  const stickers = STICKERS.filter((s) => !s.retired && (!query || s.name.toLowerCase().includes(query)));
-  const shapes = SHAPES.filter((s) => !query || s.name.toLowerCase().includes(query));
+  // Found by its name in either language.
+  const named = (name: string) => !query || name.toLowerCase().includes(query) || elementLabel(name).toLowerCase().includes(query);
+  const stickers = STICKERS.filter((s) => !s.retired && named(s.name));
+  const shapes = SHAPES.filter((s) => named(s.name));
   return (
     <div className="flex flex-col gap-2">
       <label className="flex h-8 items-center gap-2 rounded-lg border border-line bg-bg px-2.5 focus-within:border-gold">
@@ -237,7 +243,7 @@ export function ElementsPanel({ onAdd }: { onAdd: (a: { edit: Edit; id: string }
           <Title>{t('Gradasi')}</Title>
           <div className="grid grid-cols-3 gap-1.5">
             {GRADIENT_PRESETS.map((g) => (
-              <button key={g.id} type="button" title={g.name} onClick={() => onAdd(addGradient(g))} className="rounded-md ring-1 ring-line-soft hover:ring-gold">
+              <button key={g.id} type="button" title={elementLabel(g.name)} onClick={() => onAdd(addGradient(g))} className="rounded-md ring-1 ring-line-soft hover:ring-gold">
                 <Lazy id={`grad:${g.id}`} width={90} make={() => stage(addGradient(g).edit, '#c9b8a0')} />
               </button>
             ))}
@@ -247,7 +253,7 @@ export function ElementsPanel({ onAdd }: { onAdd: (a: { edit: Edit; id: string }
       {shapes.length > 0 && <Title>{t('Bentuk')}</Title>}
       <div className="grid grid-cols-4 gap-1.5">
         {shapes.map((s) => (
-          <button key={s.id} type="button" title={s.name} onClick={() => onAdd(addShape(s))} className="rounded-md ring-1 ring-line-soft hover:ring-gold">
+          <button key={s.id} type="button" title={elementLabel(s.name)} onClick={() => onAdd(addShape(s))} className="rounded-md ring-1 ring-line-soft hover:ring-gold">
             <Lazy fit id={`shape:${s.id}`} width={64} make={() => stage(addShape({ ...s, size: s.kind === 'line' ? 0.15 : 0.6, opacity: 1, color: '#d9bd88' }).edit)} />
           </button>
         ))}
@@ -260,7 +266,7 @@ export function ElementsPanel({ onAdd }: { onAdd: (a: { edit: Edit; id: string }
             <Title>{t(c.label)}</Title>
             <div className="grid grid-cols-4 gap-1.5">
               {list.map((s) => (
-                <button key={s.id} type="button" title={s.name} onClick={() => onAdd(addSticker(s))} className="rounded-md ring-1 ring-line-soft hover:ring-gold">
+                <button key={s.id} type="button" title={elementLabel(s.name)} onClick={() => onAdd(addSticker(s))} className="rounded-md ring-1 ring-line-soft hover:ring-gold">
                   <Lazy
                     fit
                     id={`sticker:${s.id}`}
