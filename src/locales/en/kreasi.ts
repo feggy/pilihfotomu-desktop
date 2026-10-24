@@ -227,4 +227,13 @@ export default {
   Pakai: 'Use',
   'Kanvas kosong': 'Blank canvas',
   'Susun foto dan teks sendiri': 'Arrange photos and text yourself',
+  '{count} item dipilih': '{count} items selected',
+  'Ratakan': 'Align',
+  'Seret salah satunya untuk memindah semuanya. Shift + klik untuk menambah atau mengurangi.': 'Drag any of them to move them all. Shift + click to add or remove.',
+  'Rata kiri': 'Align left',
+  'Rata tengah': 'Align centre',
+  'Rata kanan': 'Align right',
+  'Rata atas': 'Align top',
+  'Rata tengah (tegak)': 'Align middle',
+  'Rata bawah': 'Align bottom',
 } as Record<string, string | [string, string]>;

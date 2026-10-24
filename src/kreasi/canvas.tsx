@@ -100,6 +100,10 @@ export interface CanvasHandlers {
   onCommit?: () => void;
   /** Free layout: a photo frame moved, resized or turned (live, during the drag). */
   onFrame?: (index: number, patch: Partial<FreeCell>) => void;
+  /** Several things picked (a box dragged, Shift + click); an empty list drops them. */
+  onMulti?: (list: Multi) => void;
+  /** The picked things dragged together (live). */
+  onMove?: (moves: Placed[]) => void;
   /** Free layout: a photo from the list dropped on empty canvas, at (x, y) as 0–1 of it. */
   onDropNew?: (photoId: number, x: number, y: number) => void;
   /** Double-click on a photo: "Atur ukuran" for it. */
@@ -177,7 +181,12 @@ function nearest(mid: number, half: number, lines: number[], px: number, isEdge:
 export type Box = { cx: number; cy: number; w: number; h: number; rotate: number };
 type Item = Extract<Selection, { kind: 'text' | 'sticker' }>;
 
-const sameSel = (a: Selection, b: Selection) =>
+/** Several things picked at once (drag a box, or Shift + click): texts, elements, free photo frames. */
+export type Multi = NonNullable<Selection>[];
+/** Where a picked thing is: a text's or element's middle, a free frame's corner (0–1 of the canvas). */
+export type Placed = { sel: NonNullable<Selection>; x: number; y: number };
+
+export const sameSel = (a: Selection, b: Selection) =>
   !!a && !!b && a.kind === b.kind && (a.kind === 'cell' ? a.index === (b as { index: number }).index : 'id' in a && a.id === (b as { id: string }).id);
 
 /**
@@ -202,6 +211,8 @@ export function DocCanvas({
   cropping,
   hovered,
   hint,
+  multi = [],
+  bandFrom,
   handlers = {},
 }: {
   doc: CollageDoc;
@@ -224,6 +235,10 @@ export function DocCanvas({
   hovered?: Selection;
   /** Said in the middle of an empty canvas: how to begin. */
   hint?: string;
+  /** Picked together; `selection` is then null. */
+  multi?: Multi;
+  /** Set here: starts a selection box from a press outside the canvas (the stage around it). */
+  bandFrom?: React.MutableRefObject<((e: { clientX: number; clientY: number; shiftKey: boolean }) => void) | null>;
   handlers?: CanvasHandlers;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -369,6 +384,65 @@ export function DocCanvas({
   const keyOfItem = (sel: Item) => (sel.kind === 'text' ? textLayerKey(sel.id) : stickerLayerKey(sel.id));
   const itemOf = (sel: Item) => (sel.kind === 'text' ? doc.texts.find((t) => t.id === sel.id) : doc.stickers.find((x) => x.id === sel.id));
 
+  // ── Several at once ───────────────────────────────────────────
+  /** What can be picked with others: texts, elements and the free layout's frames. */
+  const movable = (s: Selection): s is NonNullable<Selection> => !!s && (s.kind === 'text' || s.kind === 'sticker' || (s.kind === 'cell' && free));
+  const layerKeyOf = (s: NonNullable<Selection>) => (s.kind === 'cell' ? frameKey(s.index) : keyOfItem(s as Item));
+  const placeOf = (s: NonNullable<Selection>): Placed | null => {
+    if (s.kind === 'cell') {
+      const c = doc.freeCells[s.index];
+      return c ? { sel: s, x: c.x, y: c.y } : null;
+    }
+    const it = itemOf(s as Item);
+    return it ? { sel: s, x: it.x, y: it.y } : null;
+  };
+  /** Everything unlocked and shown whose box touches the rectangle (canvas px). */
+  const within = (x0: number, y0: number, x1: number, y1: number): Multi => {
+    const l = Math.min(x0, x1), r = Math.max(x0, x1), t = Math.min(y0, y1), b = Math.max(y0, y1);
+    const all: Multi = [
+      ...doc.texts.map((x) => ({ kind: 'text', id: x.id }) as const),
+      ...doc.stickers.map((x) => ({ kind: 'sticker', id: x.id }) as const),
+      ...(free ? doc.freeCells.map((_, index) => ({ kind: 'cell', index }) as const) : []),
+    ];
+    return all.filter((s) => {
+      const key = layerKeyOf(s);
+      if (isLayerHidden(doc, key) || isLayerLocked(doc, key)) return false;
+      const bx = boxOf(s);
+      if (!bx) return false;
+      // The turned box's extent.
+      const a = (bx.rotate * Math.PI) / 180;
+      const hw = (Math.abs(Math.cos(a)) * bx.w + Math.abs(Math.sin(a)) * bx.h) / 2;
+      const hh = (Math.abs(Math.sin(a)) * bx.w + Math.abs(Math.cos(a)) * bx.h) / 2;
+      return bx.cx + hw >= l && bx.cx - hw <= r && bx.cy + hh >= t && bx.cy - hh <= b;
+    });
+  };
+  const merge = (a: Multi, b: Multi) => [...a, ...b.filter((x) => !a.some((y) => sameSel(x, y)))];
+  const [band, setBand] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+  /** A selection box from (clientX, clientY), followed until the button is let go. */
+  const beginBand = (clientX: number, clientY: number, base: Multi) => {
+    const r = ref.current?.getBoundingClientRect();
+    if (!r) return;
+    const x0 = clientX - r.left, y0 = clientY - r.top;
+    let picked = base;
+    setBand({ x0, y0, x1: x0, y1: y0 });
+    const move = (ev: PointerEvent) => {
+      const x1 = ev.clientX - r.left, y1 = ev.clientY - r.top;
+      setBand({ x0, y0, x1, y1 });
+      picked = merge(base, within(x0, y0, x1, y1));
+      handlers.onMulti?.(picked);
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      setBand(null);
+      // One thing boxed is simply that thing, with its handles.
+      if (picked.length === 1) (handlers.onMulti?.([]), handlers.onSelect?.(picked[0]!));
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+  if (bandFrom && outlines) bandFrom.current = (e) => beginBand(e.clientX, e.clientY, e.shiftKey ? multi : []);
+
   // ── Dragging ──────────────────────────────────────────────────
   type Drag =
     | { kind: 'pan'; index: number; x: number; y: number; ox: number; oy: number; overX: number; overY: number; moved: boolean; next?: Selection }
@@ -378,7 +452,8 @@ export function DocCanvas({
     | { kind: 'zoom'; index: number; cx: number; cy: number; d0: number; zoom0: number }
     | { kind: 'frame'; index: number; x: number; y: number; ix: number; iy: number; snap: SnapInfo; moved: boolean; next: Selection }
     | { kind: 'frameSize'; index: number; cx: number; cy: number; d0: number; cell: FreeCell }
-    | { kind: 'frameTurn'; index: number; cx: number; cy: number; a0: number; r0: number };
+    | { kind: 'frameTurn'; index: number; cx: number; cy: number; a0: number; r0: number }
+    | { kind: 'group'; x: number; y: number; from: Placed[]; moved: boolean };
   const drag = useRef<Drag | null>(null);
   const [dragging, setDragging] = useState(false);
   const [hover, setHover] = useState<Selection>(null);
@@ -407,9 +482,36 @@ export function DocCanvas({
       }
       handlers.onEndCrop?.();
     }
+    const hits = pickAll(x, y);
+    if (outlines) {
+      // Shift + click: in or out of the picked set.
+      const top = hits[0];
+      if (e.shiftKey && movable(top)) {
+        const base = multi.length ? multi : movable(selection) ? [selection] : [];
+        const has = base.some((m) => sameSel(m, top));
+        const list = has ? base.filter((m) => !sameSel(m, top)) : [...base, top];
+        if (list.length === 1) (handlers.onMulti?.([]), handlers.onSelect?.(list[0]!));
+        else handlers.onMulti?.(list);
+        return;
+      }
+      // On one of the picked set: they move together.
+      const member = multi.length > 1 ? hits.find((h) => multi.some((m) => sameSel(m, h))) : undefined;
+      if (member) {
+        const from = multi.map(placeOf).filter((p): p is Placed => !!p);
+        start({ kind: 'group', x, y, from, moved: false }, e);
+        return;
+      }
+      // Nothing there (or only the canvas): a selection box.
+      if (!hits.length || (free && !movable(hits[0]))) {
+        handlers.onSelect?.(null);
+        handlers.onMulti?.([]);
+        beginBand(e.clientX, e.clientY, []);
+        return;
+      }
+      if (multi.length) handlers.onMulti?.([]);
+    }
     // On what is already selected: a drag moves it (even under something
     // else); a click without moving reaches the layer under it, round and round.
-    const hits = pickAll(x, y);
     const was = hits.findIndex((h) => sameSel(h, selection));
     const s = was >= 0 ? hits[was]! : (hits[0] ?? null);
     const next = was >= 0 && hits.length > 1 ? hits[(was + 1) % hits.length]! : null;
@@ -466,7 +568,7 @@ export function DocCanvas({
     const d = drag.current;
     const { x, y } = at(e);
     if (!d) {
-      if (crop) return;
+      if (crop || band) return;
       const h = pick(x, y);
       setHover((old) => (sameSel(old, h) || (!old && !h) ? old : h));
       return;
@@ -489,6 +591,11 @@ export function DocCanvas({
     } else if (d.kind === 'zoom') {
       const k = Math.hypot(x - d.cx, y - d.cy) / Math.max(1, d.d0);
       handlers.onZoom?.(d.index, clamp(d.zoom0 * k, 1, 5));
+    } else if (d.kind === 'group') {
+      if (!d.moved && Math.hypot(x - d.x, y - d.y) < CLICK_SLOP) return;
+      d.moved = true;
+      const dx = (x - d.x) / f.width, dy = (y - d.y) / f.height;
+      handlers.onMove?.(d.from.map((p) => ({ ...p, x: p.x + dx, y: p.y + dy })));
     } else if (d.kind === 'frame') {
       if (!d.moved && Math.hypot(x - d.x, y - d.y) < CLICK_SLOP) return;
       d.moved = true;
@@ -577,6 +684,15 @@ export function DocCanvas({
     : {};
 
   const selBox = outlines && !crop ? boxOf(selection) : null;
+  // Several picked: each outlined, the quick bar over all of them.
+  const multiBoxes = outlines && multi.length > 1 ? multi.map(boxOf).filter((b): b is Box => !!b) : [];
+  const unionBox: Box | null = multiBoxes.length
+    ? (() => {
+        const l = Math.min(...multiBoxes.map((b) => b.cx - b.w / 2)), r = Math.max(...multiBoxes.map((b) => b.cx + b.w / 2));
+        const t = Math.min(...multiBoxes.map((b) => b.cy - b.h / 2)), bt = Math.max(...multiBoxes.map((b) => b.cy + b.h / 2));
+        return { cx: (l + r) / 2, cy: (t + bt) / 2, w: r - l, h: bt - t, rotate: 0 };
+      })()
+    : null;
   const editing = editingText ? doc.texts.find((x) => x.id === editingText) : null;
   const editBox = editing ? boxOf({ kind: 'text', id: editing.id }) : null;
   const canHandle =
@@ -685,7 +801,17 @@ export function DocCanvas({
           )}
         </Outline>
       )}
-      {!dragging && !editing && (crop ? overlay?.(crop.box) : selBox && overlay?.(selBox))}
+      {multiBoxes.map((b, i) => (
+        <Outline key={i} box={b} selected />
+      ))}
+      {unionBox && <span className="pointer-events-none absolute border border-dashed border-[#3b9cff]/70" style={{ left: unionBox.cx - unionBox.w / 2 - 4, top: unionBox.cy - unionBox.h / 2 - 4, width: unionBox.w + 8, height: unionBox.h + 8 }} />}
+      {band && (
+        <span
+          className="pointer-events-none absolute border border-[#3b9cff] bg-[#3b9cff]/10"
+          style={{ left: Math.min(band.x0, band.x1), top: Math.min(band.y0, band.y1), width: Math.abs(band.x1 - band.x0), height: Math.abs(band.y1 - band.y0) }}
+        />
+      )}
+      {!dragging && !editing && !band && (crop ? overlay?.(crop.box) : unionBox ? overlay?.(unionBox) : selBox && overlay?.(selBox))}
       {editing && editBox && (() => {
         // The DOM draws letters a little differently from the canvas (script
         // tails, spacing after the last letter): an em of room each side, and

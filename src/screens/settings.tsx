@@ -59,6 +59,8 @@ const KREASI: [string, string][] = [
   [isMac ? '⇧⌘Z' : 'Ctrl + Shift + Z / Ctrl + Y', 'Ulangi'],
   [`${M}T`, 'Atur ukuran foto di tempatnya'],
   [`${M}D`, 'Duplikat'],
+  ['Shift + klik', 'Pilih beberapa (atau seret kotak di area kosong)'],
+  [`${M}A`, 'Pilih semua'],
   ['Delete', 'Hapus teks atau elemen'],
   ['← → ↑ ↓ (Shift: 10 px)', 'Geser teks atau elemen'],
   ['Enter', 'Ubah teks'],

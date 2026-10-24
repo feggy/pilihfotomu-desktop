@@ -70,15 +70,21 @@ const Title = ({ children }: { children: React.ReactNode }) => (
 export function LayersPanel({
   doc,
   selection,
+  multi,
   images,
   onSelect,
+  onToggle,
   onHover,
   edit,
 }: {
   doc: CollageDoc;
   selection: Selection;
+  /** Picked together on the canvas. */
+  multi: NonNullable<Selection>[];
   images: Map<string, HTMLImageElement>;
   onSelect: (s: Selection) => void;
+  /** Shift + click: in or out of the picked set. */
+  onToggle: (s: NonNullable<Selection>) => void;
   /** The row under the pointer, to outline its layer on the canvas. */
   onHover: (s: Selection) => void;
   edit: (fn: Edit) => void;
@@ -108,7 +114,7 @@ export function LayersPanel({
     );
   };
   const photoRow = (i: number, key: string) => {
-    const on = selection?.kind === 'cell' && selection.index === i;
+    const on = (selection?.kind === 'cell' && selection.index === i) || multi.some((m) => m.kind === 'cell' && m.index === i);
     const s = slots[i];
     const img = s && images.get(s.file.fileId);
     // A free layout's frame is a layer like the others: it can be ordered, locked and hidden.
@@ -121,7 +127,7 @@ export function LayersPanel({
         onPointerLeave={() => onHover(null)}
         className={cx('group flex h-9 shrink-0 items-center gap-2 rounded-lg px-2', on ? 'bg-raised ring-1 ring-gold' : 'hover:bg-panel-2', hidden && 'opacity-50')}
       >
-        <button type="button" onClick={() => onSelect({ kind: 'cell', index: i })} className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
+        <button type="button" onClick={(e) => (e.shiftKey && movable ? onToggle({ kind: 'cell', index: i }) : onSelect({ kind: 'cell', index: i }))} className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
           <span className="flex w-6 shrink-0 justify-center">
             {img ? <img src={img.src} alt="" className="h-5 w-6 rounded-sm object-cover" /> : <ImageIcon size={14} className="text-faint" />}
           </span>
@@ -143,7 +149,7 @@ export function LayersPanel({
         const isText = key.startsWith('text:');
         const id = key.slice(isText ? 5 : 8);
         const sel: Selection = isText ? { kind: 'text', id } : { kind: 'sticker', id };
-        const on = !!selection && 'id' in selection && selection.id === id;
+        const on = (!!selection && 'id' in selection && selection.id === id) || multi.some((m) => 'id' in m && m.id === id);
         const label = isText ? (doc.texts.find((x) => x.id === id)?.text.split('\n')[0] ?? '') || t('Teks') : elementName(doc.stickers.find((x) => x.id === id));
         const hidden = isLayerHidden(doc, key);
         return (
@@ -153,7 +159,7 @@ export function LayersPanel({
             onPointerEnter={() => onHover(sel)}
             onPointerLeave={() => onHover(null)}
           >
-            <button type="button" onClick={() => onSelect(sel)} className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
+            <button type="button" onClick={(e) => (e.shiftKey && sel ? onToggle(sel) : onSelect(sel))} className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
               <span className="flex w-6 shrink-0 justify-center">{isText ? <Type size={14} className="text-faint" /> : <Shapes size={14} className="text-faint" />}</span>
               <span className={cx('truncate text-xs', on ? 'font-semibold text-fg' : 'text-muted')}>{label}</span>
             </button>

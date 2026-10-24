@@ -272,3 +272,87 @@ export const order =
   (key: string, to: LayerMove): Edit =>
   (d) =>
     moveLayer(d, key, to);
+
+// ── Several at once ───────────────────────────────────────────────
+
+type Picked = NonNullable<Selection>;
+
+/** Puts each picked thing at its place: a text's or element's middle, a free frame's corner. */
+export const placeMany =
+  (moves: { sel: Picked; x: number; y: number }[]): Edit =>
+  (d) => {
+    const keyOf2 = (s: Picked) => ('id' in s ? s.id : 'index' in s ? s.index : null);
+    const at = (kind: string, key: string | number) => moves.find((m) => m.sel.kind === kind && keyOf2(m.sel) === key);
+    return {
+      ...d,
+      texts: d.texts.map((x) => {
+        const m = at('text', x.id);
+        return m ? { ...x, x: m.x, y: m.y } : x;
+      }),
+      stickers: d.stickers.map((x) => {
+        const m = at('sticker', x.id);
+        return m ? { ...x, x: m.x, y: m.y } : x;
+      }),
+      freeCells: d.freeCells.map((c, i) => {
+        const m = at('cell', i);
+        return m ? { ...c, x: m.x, y: m.y } : c;
+      }),
+    };
+  };
+
+/** Deletes every picked thing (free frames from the last, so the others keep their places). */
+export const removeMany =
+  (list: Picked[]): Edit =>
+  (d) => {
+    const frames = list.flatMap((s) => (s.kind === 'cell' ? [s.index] : [])).sort((a, b) => b - a);
+    let next = list.filter((s) => s.kind !== 'cell').reduce((doc, s) => remove(s)(doc), d);
+    for (const i of frames) next = removeFrame(i)(next);
+    return next;
+  };
+
+/** A copy of every picked thing; the copies, to pick next. */
+export function duplicateMany(list: Picked[], d: CollageDoc): { edit: Edit; selection: Picked[] } {
+  let doc = d;
+  const picked: Picked[] = [];
+  for (const s of list) {
+    const dup = duplicate(s, doc);
+    if (!dup?.selection) continue;
+    doc = dup.edit(doc);
+    picked.push(dup.selection);
+  }
+  return { edit: () => doc, selection: picked };
+}
+
+export const nudgeMany =
+  (list: Picked[], dx: number, dy: number, width: number, height: number): Edit =>
+  (d) =>
+    list.reduce((doc, s) => nudge(s, dx, dy, width, height)(doc), d);
+
+export type Align = 'kiri' | 'tengah' | 'kanan' | 'atas' | 'tengah-v' | 'bawah';
+
+/**
+ * Lines the picked things up on the box around all of them. `bounds` is each
+ * one's box on the canvas, as 0–1 of its width and height.
+ */
+export const alignMany =
+  (list: Picked[], bounds: { l: number; r: number; t: number; b: number }[], to: Align): Edit =>
+  (d) => {
+    const L = Math.min(...bounds.map((b) => b.l)), R = Math.max(...bounds.map((b) => b.r));
+    const T = Math.min(...bounds.map((b) => b.t)), B = Math.max(...bounds.map((b) => b.b));
+    const shift = (b: (typeof bounds)[number]) =>
+      to === 'kiri'
+        ? [L - b.l, 0]
+        : to === 'kanan'
+          ? [R - b.r, 0]
+          : to === 'tengah'
+            ? [(L + R) / 2 - (b.l + b.r) / 2, 0]
+            : to === 'atas'
+              ? [0, T - b.t]
+              : to === 'bawah'
+                ? [0, B - b.b]
+                : [0, (T + B) / 2 - (b.t + b.b) / 2];
+    return list.reduce((doc, s, i) => {
+      const [dx, dy] = shift(bounds[i]!);
+      return nudge(s, dx!, dy!, 1, 1)(doc);
+    }, d);
+  };

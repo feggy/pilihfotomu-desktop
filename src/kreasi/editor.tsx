@@ -1,7 +1,13 @@
 import {
   AlignCenter,
+  AlignCenterHorizontal,
+  AlignCenterVertical,
+  AlignEndHorizontal,
+  AlignEndVertical,
   AlignLeft,
   AlignRight,
+  AlignStartHorizontal,
+  AlignStartVertical,
   ArrowLeft,
   Bold,
   Check,
@@ -36,10 +42,26 @@ import { cx } from '../components/ui';
 import { thumbUrl } from '../lib/api';
 import { fixed } from '../lib/format';
 import { t } from '../lib/i18n';
-import { duplicate, keyOf, nudge, patchFrame, patchSticker, patchText, remove, type Edit } from './actions';
-import { DocCanvas, useBox, useDocImages, type Box } from './canvas';
-import { formatRatio, isFreeLayout, isLayerLocked, isPlaceholder, type CollageDoc, type PhotoMask, type StickerLayer, type TextLayer } from './engine/document';
+import {
+  alignMany,
+  duplicate,
+  duplicateMany,
+  keyOf,
+  nudge,
+  nudgeMany,
+  patchFrame,
+  patchSticker,
+  patchText,
+  placeMany,
+  remove,
+  removeMany,
+  type Align,
+  type Edit,
+} from './actions';
+import { DocCanvas, sameSel, useBox, useDocImages, type Box, type Multi } from './canvas';
+import { formatRatio, isFreeLayout, isLayerLocked, isPlaceholder, templateOf, type CollageDoc, type PhotoMask, type StickerLayer, type TextLayer } from './engine/document';
 import { FONT_CATEGORIES, FONTS } from './engine/font-catalog';
+import { itemBounds } from './engine/bounds';
 import { frameOf, type Selection } from './engine/render';
 import { ExportDialog } from './export';
 import { CATEGORIES, EMPTY_PICTURE, fontFamilies, formatLabel, isPicturePlace, photoIdOf, photoSticker, saveMyTemplate, slotShapes, type TemplateCategory } from './kit';
@@ -79,7 +101,12 @@ export function Editor() {
   const [layerHover, setLayerHover] = useState<Selection>(null);
   if (cropping != null && (selection?.kind !== 'cell' || selection.index !== cropping || (doc ? placed(doc)[cropping] == null : true))) setCropping(null);
   // Picking something else closes the change being made to the last one (one undo step).
-  const select = (s: Selection) => (commit(), setSelection(s), setEditingText(null));
+  const select = (s: Selection) => (commit(), setSelection(s), setEditingText(null), setMulti([]));
+  // Several picked at once (a box dragged on the canvas, Shift + click); `selection` is then null.
+  const [multi, setMulti] = useState<Multi>([]);
+  const pickMany = (list: Multi) => (commit(), setMulti(list), list.length > 1 && setSelection(null));
+  // A press on the stage around the canvas starts a selection box there too.
+  const bandRef = useRef<((e: { clientX: number; clientY: number; shiftKey: boolean }) => void) | null>(null);
 
   // ⌘E from the menu bar: this design's export, not the session's.
   useEffect(() => {
@@ -146,6 +173,30 @@ export function Editor() {
       if (mod && e.key === '0') return (e.preventDefault(), setView(1));
       if (cropping != null && (e.key === 'Escape' || e.key === 'Enter')) return (e.preventDefault(), setCropping(null));
       if (e.key === 'Escape') return select(null);
+      if (mod && e.key.toLowerCase() === 'a') {
+        e.preventDefault();
+        return pickMany(allMovable(d));
+      }
+      if (multi.length > 1) {
+        if (e.key === 'Delete' || e.key === 'Backspace') {
+          e.preventDefault();
+          edit(removeMany(multi));
+          setMulti([]);
+        } else if (mod && e.key.toLowerCase() === 'd') {
+          e.preventDefault();
+          const dup = duplicateMany(multi, d);
+          edit(dup.edit);
+          setMulti(dup.selection);
+        } else if (e.key.startsWith('Arrow')) {
+          e.preventDefault();
+          const step = e.shiftKey ? 10 : 1;
+          const f = frameOf(d, 1080 * d.slides);
+          const moves: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
+          const [dx, dy] = moves[e.key] ?? [0, 0];
+          edit(nudgeMany(multi, dx, dy, f.width, f.height));
+        }
+        return;
+      }
       if (mod && e.key.toLowerCase() === 't') {
         // Photos get their picture out; texts and elements already show their handles.
         e.preventDefault();
@@ -232,6 +283,16 @@ export function Editor() {
       if (dup) (edit(dup.edit), setSelection(dup.selection));
     };
     const items: React.ReactNode[] = [];
+    if (multi.length > 1) {
+      items.push(
+        btn(<Copy size={13} />, t('Duplikat'), () => {
+          const dup = duplicateMany(multi, doc);
+          edit(dup.edit);
+          setMulti(dup.selection);
+        }),
+      );
+      items.push(btn(<Trash2 size={13} />, t('Hapus'), () => (edit(removeMany(multi)), setMulti([])), true));
+    } else
     if (selection?.kind === 'text') {
       items.push(btn(<Pencil size={13} />, t('Ubah teks'), () => setEditingText(selection.id)));
       items.push(btn(<Copy size={13} />, t('Duplikat'), copy));
@@ -330,7 +391,23 @@ export function Editor() {
           ))}
         </nav>
         <aside className="flex w-64 shrink-0 flex-col gap-1 overflow-y-auto border-r border-line-soft bg-panel p-3.5">
-          {panel === 'lapisan' && <LayersPanel doc={doc} selection={selection} images={images} onSelect={select} onHover={setLayerHover} edit={edit} />}
+          {panel === 'lapisan' && (
+            <LayersPanel
+              doc={doc}
+              selection={selection}
+              multi={multi}
+              images={images}
+              onSelect={select}
+              onToggle={(s) => {
+                const base = multi.length ? multi : selection && movableIn(doc, selection) ? [selection] : [];
+                const list = base.some((m) => sameSel(m, s)) ? base.filter((m) => !sameSel(m, s)) : [...base, s];
+                if (list.length === 1) select(list[0]!);
+                else pickMany(list);
+              }}
+              onHover={setLayerHover}
+              edit={edit}
+            />
+          )}
           {panel === 'foto' && (
             <PhotosPanel
               onPick={(p) => putPhoto(p)}
@@ -345,7 +422,7 @@ export function Editor() {
         <div className="flex min-w-0 flex-1 flex-col bg-[#08100d]">
           <div ref={stageRef} className="min-h-0 flex-1 overflow-auto">
             {/* Centred while it fits; scrollable from its edges once zoomed past the window. Room above for the quick bar. */}
-            <div className="flex min-h-full w-max min-w-full items-center justify-center px-8 pt-16 pb-8" onPointerDown={(e) => e.target === e.currentTarget && select(null)}>
+            <div className="flex min-h-full w-max min-w-full items-center justify-center px-8 pt-16 pb-8" onPointerDown={(e) => e.target === e.currentTarget && e.button === 0 && (select(null), bandRef.current?.(e))}>
               {stage.w > 0 && (
                 <DocCanvas
                   doc={doc}
@@ -359,9 +436,13 @@ export function Editor() {
                   overlay={quickBar}
                   cropping={cropping}
                   hovered={panel === 'lapisan' ? layerHover : null}
+                  multi={multi}
+                  bandFrom={bandRef}
                   hint={free && !doc.freeCells.length && !doc.texts.length && !doc.stickers.length ? t('Tambah foto dari panel Foto, atau seret ke sini.') : undefined}
                   handlers={{
                     onSelect: select,
+                    onMulti: pickMany,
+                    onMove: (moves) => live(placeMany(moves)),
                     onCropCell: (i) => placed(doc)[i] != null && (select({ kind: 'cell', index: i }), setCropping(i)),
                     onEndCrop: () => setCropping(null),
                     onPan: (i, ox, oy) => setSlot(i, { ox, oy }, true),
@@ -411,7 +492,18 @@ export function Editor() {
         </div>
 
         <aside className="flex w-80 shrink-0 flex-col gap-4 overflow-y-auto border-l border-line-soft bg-panel p-5">
-          {selText ? (
+          {multi.length > 1 ? (
+            <MultiInspector
+              count={multi.length}
+              onAlign={(to) => edit(alignMany(multi, boundsOf(doc, multi), to))}
+              onDuplicate={() => {
+                const dup = duplicateMany(multi, doc);
+                edit(dup.edit);
+                setMulti(dup.selection);
+              }}
+              onDelete={() => (edit(removeMany(multi)), setMulti([]))}
+            />
+          ) : selText ? (
             <TextInspector key={selText.id} layer={selText} doc={doc} onChange={(p) => edit(patchText(selText.id, p))} onLive={(p) => live(patchText(selText.id, p))} onCommit={commit} />
           ) : selSticker ? (
             <StickerInspector
@@ -730,6 +822,77 @@ function SaveTemplateDialog({ onClose }: { onClose: () => void }) {
         )}
       </div>
     </div>
+  );
+}
+
+/** Whether `s` can be picked with others: a text, an element, a free frame. */
+const movableIn = (d: CollageDoc, s: NonNullable<Selection>) => s.kind === 'text' || s.kind === 'sticker' || (s.kind === 'cell' && isFreeLayout(d));
+
+/** Everything unlocked and shown that can move (⌘A). */
+function allMovable(d: CollageDoc): Multi {
+  const all: Multi = [
+    ...d.texts.map((x) => ({ kind: 'text', id: x.id }) as const),
+    ...d.stickers.map((x) => ({ kind: 'sticker', id: x.id }) as const),
+    ...(isFreeLayout(d) ? d.freeCells.map((_, index) => ({ kind: 'cell', index }) as const) : []),
+  ];
+  return all.filter((s) => {
+    const key = keyOf(s, d);
+    return key && !d.layerMeta[key]?.hidden && !d.layerMeta[key]?.locked;
+  });
+}
+
+/** Each picked thing's box, as 0–1 of the canvas, for lining them up. */
+function boundsOf(d: CollageDoc, list: Multi) {
+  const f = frameOf(d, 1000);
+  const ctx = document.createElement('canvas').getContext('2d')!;
+  const all = itemBounds(d, templateOf(d), f, fontFamilies(), ctx);
+  return list.map((s) => {
+    const b = all.find((x) => x.key === keyOf(s, d));
+    return b ? { l: b.l / f.width, r: b.r / f.width, t: b.t / f.height, b: b.b / f.height } : { l: 0, r: 0, t: 0, b: 0 };
+  });
+}
+
+/** The right panel with several things picked: line them up, copy or delete them together. */
+function MultiInspector({ count, onAlign, onDuplicate, onDelete }: { count: number; onAlign: (to: Align) => void; onDuplicate: () => void; onDelete: () => void }) {
+  const aligns: [Align, typeof AlignStartVertical, string][] = [
+    ['kiri', AlignStartVertical, 'Rata kiri'],
+    ['tengah', AlignCenterVertical, 'Rata tengah'],
+    ['kanan', AlignEndVertical, 'Rata kanan'],
+    ['atas', AlignStartHorizontal, 'Rata atas'],
+    ['tengah-v', AlignCenterHorizontal, 'Rata tengah (tegak)'],
+    ['bawah', AlignEndHorizontal, 'Rata bawah'],
+  ];
+  return (
+    <>
+      <span className="text-[15px] font-semibold">{t('{count} item dipilih', { count })}</span>
+      <Section title={t('Ratakan')}>
+        <div className="grid grid-cols-6 gap-1">
+          {aligns.map(([id, Icon, label]) => (
+            <button
+              key={id}
+              type="button"
+              title={t(label)}
+              aria-label={t(label)}
+              onClick={() => onAlign(id)}
+              className="flex h-8 items-center justify-center rounded-lg border border-line bg-panel-2 text-muted hover:bg-raised hover:text-fg"
+            >
+              <Icon size={15} />
+            </button>
+          ))}
+        </div>
+      </Section>
+      <Section title={t('Lainnya')}>
+        <div className="flex gap-2">
+          <Btn onClick={onDuplicate}>
+            <Copy size={13} /> {t('Duplikat')}
+          </Btn>
+          <Btn onClick={onDelete}>
+            <Trash2 size={13} /> {t('Hapus')}
+          </Btn>
+        </div>
+        <p className="text-[11px] text-faint">{t('Seret salah satunya untuk memindah semuanya. Shift + klik untuk menambah atau mengurangi.')}</p>
+      </Section>
+    </>
   );
 }
 

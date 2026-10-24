@@ -145,4 +145,6 @@ export default {
   'Cari foto': 'Find photos',
   'Biasanya folder JPG yang dikirim ke klien. Bisa diganti lagi di halaman berikutnya.': 'Usually the JPG folder the client was sent. You can change it on the next page.',
   'Masih belum ditemukan. Pastikan drive-nya sudah tersambung.': 'Still not found. Make sure the drive is connected.',
+  'Pilih beberapa (atau seret kotak di area kosong)': 'Select several (or drag a box on empty space)',
+  'Pilih semua': 'Select all',
 } as Record<string, string | [string, string]>;
