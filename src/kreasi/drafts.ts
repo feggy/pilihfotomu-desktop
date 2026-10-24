@@ -8,7 +8,7 @@
 import { api } from '../lib/api';
 import { slotsFor, templateOf, type CollageDoc } from './engine/document';
 import { drawCollage, frameOf } from './engine/render';
-import { loadDocFonts, loadLocalImage, type Template } from './kit';
+import { blankTemplate, isBlankId, loadDocFonts, loadLocalImage, type Template } from './kit';
 import { emptyAssets } from './preview';
 import type { Source } from './store';
 
@@ -78,4 +78,6 @@ export async function reopenSource(source: Source | null): Promise<Source | null
   return { ...source, root: got.root };
 }
 
-export const templateOfDraft = (all: Template[], d: Draft) => all.find((t) => t.id === d.templateId) ?? null;
+/** The template a draft started from — bundled, own, or an empty canvas. */
+export const templateOfDraft = (all: Template[], d: Draft) =>
+  all.find((t) => t.id === d.templateId) ?? (isBlankId(d.templateId) ? blankTemplate(d.doc.format) : null);

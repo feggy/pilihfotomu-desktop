@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, Search, Trash2, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Plus, Search, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
 import { cx } from '../components/ui';
@@ -8,7 +8,19 @@ import type { FormatId } from './engine/document';
 import { api } from '../lib/api';
 import { useApp } from '../store';
 import { listDrafts, reopenSource, templateOfDraft, type Draft } from './drafts';
-import { CATEGORIES, formatLabel, loadTemplates, slotShapes, templateDoc, type Template, type TemplateCategory } from './kit';
+import {
+  BLANK_FORMATS,
+  CATEGORIES,
+  blankTemplate,
+  formatLabel,
+  loadMyTemplates,
+  loadTemplates,
+  slotShapes,
+  templateDoc,
+  type Template,
+  type TemplateCategory,
+} from './kit';
+import { sessionSource } from './sources';
 import { useKreasi } from './store';
 import { DocPicture, SHAPE_LABEL, ShapeIcon, Steps } from './ui';
 
@@ -21,6 +33,10 @@ const TABS: { id: FormatTab; label: string }[] = [
   { id: 'carousel', label: 'Carousel' },
 ];
 
+/** A small outline of a format's shape for the "Mulai dari kosong" cards. */
+const blankShape = (f: FormatId) =>
+  f === 'story' ? { width: 20, height: 34 } : f === 'feed' ? { width: 26, height: 32 } : f === 'carousel' ? { width: 44, height: 22 } : { width: 28, height: 28 };
+
 /** How many photos a template takes, computed once per template. */
 const photoCount = new Map<string, number>();
 const countOf = (tp: Template) => {
@@ -32,10 +48,27 @@ const countOf = (tp: Template) => {
 /** Layar 12 · Pilih template. */
 export function Gallery({ onBack }: { onBack: () => void }) {
   const choose = useKreasi((s) => s.choose);
-  const [all, setAll] = useState<Template[] | null>(null);
+  const [bundled, setAll] = useState<Template[] | null>(null);
+  // The photographer's own, first: "Template saya".
+  const [mine, setMine] = useState<Template[]>([]);
+  useEffect(() => {
+    loadMyTemplates().then(setMine);
+  }, []);
+  const all = useMemo(() => (bundled ? [...mine, ...bundled] : null), [bundled, mine]);
+  /**
+   * Starts a design. An empty canvas has no photo places to fill first: it
+   * goes straight to the editor, photos come from its Foto panel.
+   */
+  const start = (tp: Template) => {
+    choose(tp);
+    if (countOf(tp) === 0) {
+      const { source } = useKreasi.getState();
+      useKreasi.setState({ step: 'edit', source: source ?? sessionSource() });
+    }
+  };
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<FormatTab>('semua');
-  const [category, setCategory] = useState<TemplateCategory | null>(null);
+  const [category, setCategory] = useState<TemplateCategory | 'saya' | null>(null);
   const [query, setQuery] = useState('');
   const [picked, setPicked] = useState<string | null>(null);
 
@@ -62,6 +95,10 @@ export function Gallery({ onBack }: { onBack: () => void }) {
   };
   // Deleting asks once more: a draft is the photographer's work.
   const [confirming, setConfirming] = useState<string | null>(null);
+  const removeMine = async (tp: Template) => {
+    await api.deleteMyTemplate(tp.id).catch(fail);
+    setMine((list) => list.filter((x) => x.id !== tp.id));
+  };
   const forget = async (d: Draft) => {
     if (confirming !== d.id) return setConfirming(d.id);
     await api.deleteDraft(d.id).catch(fail);
@@ -73,16 +110,17 @@ export function Gallery({ onBack }: { onBack: () => void }) {
 
   const counts = useMemo(() => {
     const c = new Map<TemplateCategory, number>();
-    for (const tp of all ?? []) if (tab === 'semua' || tp.format === tab) c.set(tp.category, (c.get(tp.category) ?? 0) + 1);
+    for (const tp of bundled ?? []) if (tab === 'semua' || tp.format === tab) c.set(tp.category, (c.get(tp.category) ?? 0) + 1);
     return c;
-  }, [all, tab]);
+  }, [bundled, tab]);
 
+  const mineCount = mine.filter((tp) => tab === 'semua' || tp.format === tab).length;
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
     return (all ?? []).filter(
       (tp) =>
         (tab === 'semua' || tp.format === tab) &&
-        (!category || tp.category === category) &&
+        (!category || (category === 'saya' ? tp.mine : !tp.mine && tp.category === category)) &&
         filterCount(countOf(tp)) &&
         (!q || tp.name.toLowerCase().includes(q) || tp.description.toLowerCase().includes(q)),
     );
@@ -139,6 +177,11 @@ export function Gallery({ onBack }: { onBack: () => void }) {
           <Chip on={!category} onClick={() => setCategory(null)}>
             {t('Semua')}
           </Chip>
+          {mineCount > 0 && (
+            <Chip on={category === 'saya'} onClick={() => setCategory(category === 'saya' ? null : 'saya')}>
+              {t('Template saya')} <span className="opacity-60">{num(mineCount)}</span>
+            </Chip>
+          )}
           {CATEGORIES.filter((c) => counts.get(c.id)).map((c) => (
             <Chip key={c.id} on={category === c.id} onClick={() => setCategory(category === c.id ? null : c.id)}>
               {t(c.label)} <span className="opacity-60">{num(counts.get(c.id)!)}</span>
@@ -162,6 +205,27 @@ export function Gallery({ onBack }: { onBack: () => void }) {
             </button>
           ))}
         </div>
+
+        {!query && !category && photoFilter === null && (
+          <section className="flex flex-col gap-2.5">
+            <h2 className="text-[13px] font-semibold">{t('Mulai dari kosong')}</h2>
+            <div className="flex flex-wrap gap-3">
+              {BLANK_FORMATS.filter((f) => tab === 'semua' || tab === f).map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  onClick={() => start(blankTemplate(f))}
+                  className="flex h-[86px] w-[150px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-line bg-panel text-muted hover:border-gold/70 hover:text-fg"
+                >
+                  <span className="flex items-center justify-center rounded-[3px] border border-current" style={blankShape(f)}>
+                    <Plus size={13} />
+                  </span>
+                  <span className="text-xs font-medium">{t(TABS.find((x) => x.id === f)?.label ?? formatLabel(f))}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
 
         {drafts.length > 0 && !query && (
           <section className="flex flex-col gap-2.5">
@@ -206,7 +270,7 @@ export function Gallery({ onBack }: { onBack: () => void }) {
                 key={tp.id}
                 type="button"
                 onClick={() => setPicked(tp.id)}
-                onDoubleClick={() => choose(tp)}
+                onDoubleClick={() => start(tp)}
                 className="flex flex-col gap-2 text-left"
               >
                 <span
@@ -230,7 +294,9 @@ export function Gallery({ onBack }: { onBack: () => void }) {
         </div>
       </section>
 
-      {current && <TemplatePanel key={current.id} template={current} onUse={() => choose(current)} />}
+      {current && (
+        <TemplatePanel key={current.id} template={current} onUse={() => start(current)} onDelete={current.mine ? () => removeMine(current) : undefined} />
+      )}
     </div>
   );
 }
@@ -251,15 +317,16 @@ function Chip({ on, onClick, children }: { on: boolean; onClick: () => void; chi
 }
 
 /** Right panel: the selected template large, with what it needs. */
-function TemplatePanel({ template, onUse }: { template: Template; onUse: () => void }) {
+function TemplatePanel({ template, onUse, onDelete }: { template: Template; onUse: () => void; onDelete?: () => void }) {
   const doc = templateDoc(template);
   const shapes = slotShapes(doc);
+  const [confirm, setConfirm] = useState(false);
   return (
     <aside className="flex w-[360px] shrink-0 flex-col gap-4 overflow-y-auto border-l border-line-soft bg-panel p-6">
       <div className="flex flex-col gap-1">
         <h2 className="text-[17px] font-semibold">{template.name}</h2>
         <p className="text-xs text-faint">
-          {formatLabel(template.format)} · {t(CATEGORIES.find((c) => c.id === template.category)?.label ?? '')}
+          {formatLabel(template.format)} · {template.mine ? t('Template saya') : t(CATEGORIES.find((c) => c.id === template.category)?.label ?? '')}
         </p>
       </div>
       <div className="flex h-[340px] shrink-0 items-center justify-center rounded-xl bg-panel-2 p-4">
@@ -278,6 +345,19 @@ function TemplatePanel({ template, onUse }: { template: Template; onUse: () => v
         {shapes.length > 8 && <span className="text-xs text-faint">{t('dan {n} lagi', { n: shapes.length - 8 })}</span>}
       </div>
       <div className="flex-1" />
+      {onDelete && (
+        <button
+          type="button"
+          onClick={() => (confirm ? onDelete() : setConfirm(true))}
+          onMouseLeave={() => setConfirm(false)}
+          className={cx(
+            'flex h-9 shrink-0 items-center justify-center gap-2 rounded-[10px] text-[13px] font-medium',
+            confirm ? 'bg-reject text-white' : 'border border-line text-muted hover:text-reject',
+          )}
+        >
+          <Trash2 size={14} /> {confirm ? t('Hapus template ini?') : t('Hapus dari Template saya')}
+        </button>
+      )}
       <button
         type="button"
         onClick={onUse}

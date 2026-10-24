@@ -10,6 +10,8 @@ import {
   Copy,
   Download,
   FlipHorizontal,
+  Images,
+  BookmarkPlus,
   Italic,
   Layers,
   Minus,
@@ -34,20 +36,22 @@ import { cx } from '../components/ui';
 import { thumbUrl } from '../lib/api';
 import { fixed } from '../lib/format';
 import { t } from '../lib/i18n';
-import { duplicate, keyOf, nudge, patchSticker, patchText, remove, type Edit } from './actions';
+import { duplicate, keyOf, nudge, patchFrame, patchSticker, patchText, remove, type Edit } from './actions';
 import { DocCanvas, useBox, useDocImages, type Box } from './canvas';
-import { isLayerLocked, isPlaceholder, type CollageDoc, type StickerLayer, type TextLayer } from './engine/document';
+import { formatRatio, isFreeLayout, isLayerLocked, isPlaceholder, type CollageDoc, type PhotoMask, type StickerLayer, type TextLayer } from './engine/document';
 import { FONT_CATEGORIES, FONTS } from './engine/font-catalog';
 import { frameOf, type Selection } from './engine/render';
 import { ExportDialog } from './export';
-import { EMPTY_PICTURE, fontFamilies, formatLabel, isPicturePlace, photoIdOf, photoSticker, slotShapes } from './kit';
+import { CATEGORIES, EMPTY_PICTURE, fontFamilies, formatLabel, isPicturePlace, photoIdOf, photoSticker, saveMyTemplate, slotShapes, type TemplateCategory } from './kit';
+import { PhotosPanel } from './photos-panel';
 import { BackgroundPanel, ElementsPanel, LayersPanel, TextPanel, elementName } from './panels';
-import { facePan, ranked, useKreasi, type SourcePhoto } from './store';
+import { facePan, placed, ranked, useKreasi, type SourcePhoto } from './store';
 import { SHAPE_LABEL, ShapeIcon, Steps } from './ui';
 
-type Panel = 'lapisan' | 'teks' | 'elemen' | 'latar';
+type Panel = 'lapisan' | 'foto' | 'teks' | 'elemen' | 'latar';
 const RAIL: { id: Panel; icon: typeof Layers; label: string }[] = [
   { id: 'lapisan', icon: Layers, label: 'Lapisan' },
+  { id: 'foto', icon: Images, label: 'Foto##latar' },
   { id: 'teks', icon: Type, label: 'Teks' },
   { id: 'elemen', icon: Shapes, label: 'Elemen' },
   { id: 'latar', icon: PaintBucket, label: 'Latar' },
@@ -59,7 +63,12 @@ export function Editor() {
   const { setStep, setActive, live, commit, edit, undo, redo, setName } = useKreasi.getState();
   const [selection, setSelection] = useState<Selection>(null);
   const [editingText, setEditingText] = useState<string | null>(null);
-  const [panel, setPanel] = useState<Panel>('lapisan');
+  // An empty canvas opens on its photos: that is where a design from nothing starts.
+  const [panel, setPanel] = useState<Panel>(() => {
+    const d = useKreasi.getState().doc;
+    return d && isFreeLayout(d) && !d.freeCells.length ? 'foto' : 'lapisan';
+  });
+  const [savingTemplate, setSavingTemplate] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [replacing, setReplacing] = useState<number | null>(null);
   // A background-image place (by its sticker id) being given a photo.
@@ -68,7 +77,7 @@ export function Editor() {
   const [cropping, setCropping] = useState<number | null>(null);
   // The layer row under the pointer: outlined on the canvas as if hovered there.
   const [layerHover, setLayerHover] = useState<Selection>(null);
-  if (cropping != null && (selection?.kind !== 'cell' || selection.index !== cropping || !doc?.slots[cropping])) setCropping(null);
+  if (cropping != null && (selection?.kind !== 'cell' || selection.index !== cropping || (doc ? placed(doc)[cropping] == null : true))) setCropping(null);
   // Picking something else closes the change being made to the last one (one undo step).
   const select = (s: Selection) => (commit(), setSelection(s), setEditingText(null));
 
@@ -128,7 +137,7 @@ export function Editor() {
         el instanceof HTMLTextAreaElement ||
         el instanceof HTMLSelectElement ||
         (el instanceof HTMLInputElement && ['text', 'search', 'number', 'email', 'url', 'password', ''].includes(el.type));
-      if (typing || exporting || replacing != null || picturing != null) return;
+      if (typing || exporting || savingTemplate || replacing != null || picturing != null) return;
       const d = useKreasi.getState().doc;
       if (!d) return;
       const mod = e.metaKey || e.ctrlKey;
@@ -140,10 +149,10 @@ export function Editor() {
       if (mod && e.key.toLowerCase() === 't') {
         // Photos get their picture out; texts and elements already show their handles.
         e.preventDefault();
-        if (selection?.kind === 'cell' && d.slots[selection.index]) setCropping((c) => (c == null ? selection.index : null));
+        if (selection?.kind === 'cell' && placed(d)[selection.index] != null) setCropping((c) => (c == null ? selection.index : null));
         return;
       }
-      const key = keyOf(selection);
+      const key = keyOf(selection, d);
       const locked = key ? isLayerLocked(d, key) : false;
       if ((e.key === 'Delete' || e.key === 'Backspace') && key && !locked) {
         e.preventDefault();
@@ -184,6 +193,23 @@ export function Editor() {
     const d = useKreasi.getState().doc!;
     setSelection(d.texts.some((x) => x.id === a.id) ? { kind: 'text', id: a.id } : { kind: 'sticker', id: a.id });
   };
+  const free = isFreeLayout(doc);
+  /**
+   * A photo from the Foto panel: a new frame on an empty canvas; on a
+   * template, into the selected photo place, else the first empty one.
+   */
+  const putPhoto = (p: SourcePhoto, at?: { x: number; y: number }) => {
+    if (free) {
+      const index = useKreasi.getState().addFrame(p, at);
+      if (index >= 0) select({ kind: 'cell', index });
+      return;
+    }
+    const empty = placed(doc).findIndex((id) => id == null);
+    const i = selection?.kind === 'cell' ? selection.index : Math.max(0, empty);
+    useKreasi.getState().place(i, p);
+    select({ kind: 'cell', index: i });
+  };
+  const photoById = (id: number) => source?.photos.find((p) => p.id === id);
   const selText = selection?.kind === 'text' ? doc.texts.find((x) => x.id === selection.id) : undefined;
   const selSticker = selection?.kind === 'sticker' ? doc.stickers.find((x) => x.id === selection.id) : undefined;
 
@@ -226,8 +252,14 @@ export function Editor() {
       } else {
         items.push(btn(<Replace size={13} />, p ? t('Ganti') : t('Pilih foto##isi'), () => setReplacing(i)));
         if (p) items.push(btn(<Crop size={13} />, t('Atur ukuran'), () => setCropping(i)));
-        if (p?.faces?.length) items.push(btn(<ScanFace size={13} />, t('Pas wajah'), () => setSlot(i, { zoom: 1, ...facePan(p, slotShapes(doc)[i]?.ratio ?? 1) })));
-        if (p) items.push(btn(<RotateCcw size={13} />, t('Atur ulang'), () => setSlot(i, { zoom: 1, ox: 0, oy: 0, rotate: 0 })));
+        if (free) {
+          // A frame of its own: copied and deleted like any element.
+          items.push(btn(<Copy size={13} />, t('Duplikat'), copy));
+          items.push(btn(<Trash2 size={13} />, t('Hapus'), () => (edit(remove(selection)), setSelection(null)), true));
+        } else {
+          if (p?.faces?.length) items.push(btn(<ScanFace size={13} />, t('Pas wajah'), () => setSlot(i, { zoom: 1, ...facePan(p, slotShapes(doc)[i]?.ratio ?? 1) })));
+          if (p) items.push(btn(<RotateCcw size={13} />, t('Atur ulang'), () => setSlot(i, { zoom: 1, ox: 0, oy: 0, rotate: 0 })));
+        }
       }
     }
     if (!items.length) return null;
@@ -235,7 +267,7 @@ export function Editor() {
     return (
       <div
         className="absolute z-10 flex -translate-x-1/2 items-center gap-0.5 rounded-[10px] border border-line bg-raised p-1 shadow-xl"
-        style={{ left: box.cx, top: Math.max(-52, top - (selection?.kind === 'cell' ? 44 : 76)) }}
+        style={{ left: box.cx, top: Math.max(-52, top - (selection?.kind === 'cell' && !free ? 44 : 76)) }}
       >
         {items}
       </div>
@@ -246,7 +278,7 @@ export function Editor() {
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-line-soft px-5">
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          <button type="button" onClick={() => setStep(useKreasi.getState().resumed ? 'galeri' : 'isi')} title={t('Kembali')} className="text-muted hover:text-fg">
+          <button type="button" onClick={() => setStep(useKreasi.getState().resumed || free ? 'galeri' : 'isi')} title={t('Kembali')} className="text-muted hover:text-fg">
             <ArrowLeft size={18} />
           </button>
           <NameField value={name} onChange={setName} />
@@ -260,7 +292,7 @@ export function Editor() {
             )}
           </span>
         </div>
-        <Steps at={3} onGo={(n) => setStep(n === 1 ? 'galeri' : 'isi')} />
+        <Steps at={3} noPhotos={free} onGo={(n) => setStep(n === 1 ? 'galeri' : 'isi')} />
         <div className="flex flex-1 items-center justify-end gap-2.5">
           <button type="button" onClick={undo} disabled={!past.length} title={t('Urungkan')} className="text-muted hover:text-fg disabled:opacity-30">
             <Undo2 size={17} />
@@ -269,6 +301,14 @@ export function Editor() {
             <Redo2 size={17} />
           </button>
           <span className="h-5 w-px bg-line" />
+          <button
+            type="button"
+            onClick={() => setSavingTemplate(true)}
+            title={t('Simpan sebagai template saya')}
+            className="flex h-9 items-center gap-2 rounded-[10px] border border-line px-3 text-[13px] font-medium text-muted hover:text-fg"
+          >
+            <BookmarkPlus size={15} /> {t('Simpan template')}
+          </button>
           <button type="button" onClick={() => setExporting(true)} className="flex h-9 items-center gap-2 rounded-[10px] bg-gold-gradient px-4 text-[13px] font-semibold text-white">
             <Download size={15} /> {t('Ekspor')}
           </button>
@@ -291,6 +331,12 @@ export function Editor() {
         </nav>
         <aside className="flex w-64 shrink-0 flex-col gap-1 overflow-y-auto border-r border-line-soft bg-panel p-3.5">
           {panel === 'lapisan' && <LayersPanel doc={doc} selection={selection} images={images} onSelect={select} onHover={setLayerHover} edit={edit} />}
+          {panel === 'foto' && (
+            <PhotosPanel
+              onPick={(p) => putPhoto(p)}
+              hint={free ? t('Klik untuk menambah foto, atau seret ke kanvas.') : t('Klik untuk mengisi tempat foto yang dipilih, atau seret ke tempatnya.')}
+            />
+          )}
           {panel === 'teks' && <TextPanel onAdd={added} />}
           {panel === 'elemen' && <ElementsPanel onAdd={added} />}
           {panel === 'latar' && <BackgroundPanel doc={doc} images={images} edit={edit} />}
@@ -313,9 +359,10 @@ export function Editor() {
                   overlay={quickBar}
                   cropping={cropping}
                   hovered={panel === 'lapisan' ? layerHover : null}
+                  hint={free && !doc.freeCells.length && !doc.texts.length && !doc.stickers.length ? t('Tambah foto dari panel Foto, atau seret ke sini.') : undefined}
                   handlers={{
                     onSelect: select,
-                    onCropCell: (i) => doc.slots[i] && (select({ kind: 'cell', index: i }), setCropping(i)),
+                    onCropCell: (i) => placed(doc)[i] != null && (select({ kind: 'cell', index: i }), setCropping(i)),
                     onEndCrop: () => setCropping(null),
                     onPan: (i, ox, oy) => setSlot(i, { ox, oy }, true),
                     onZoom: (i, zoom) => setSlot(i, { zoom }, true),
@@ -324,6 +371,15 @@ export function Editor() {
                     onTextInput: (id, text) => live(patchText(id, { text })),
                     onEndEdit: () => (commit(), setEditingText(null)),
                     onCommit: commit,
+                    onFrame: (i, p) => live(patchFrame(i, p)),
+                    onDropPhoto: (i, id) => {
+                      const p = photoById(id);
+                      if (p) (useKreasi.getState().place(i, p), select({ kind: 'cell', index: i }));
+                    },
+                    onDropNew: (id, x, y) => {
+                      const p = photoById(id);
+                      if (p) putPhoto(p, { x, y });
+                    },
                   }}
                 />
               )}
@@ -373,6 +429,7 @@ export function Editor() {
               onChange={(p, l) => setSlot(selection.index, p, l)}
               onCommit={commit}
               onReplace={() => setReplacing(selection.index)}
+              onDoc={edit}
             />
           ) : (
             <div className="flex flex-col gap-3 text-[13px] text-muted">
@@ -386,6 +443,7 @@ export function Editor() {
         </aside>
       </div>
       {exporting && <ExportDialog onClose={() => setExporting(false)} />}
+      {savingTemplate && <SaveTemplateDialog onClose={() => setSavingTemplate(false)} />}
       {replacing != null && (
         <ReplaceDialog
           title={t('Ganti Foto {n}', { n: replacing + 1 })}
@@ -458,6 +516,7 @@ function PhotoInspector({
   onChange,
   onCommit,
   onReplace,
+  onDoc,
 }: {
   index: number;
   doc: CollageDoc;
@@ -465,9 +524,13 @@ function PhotoInspector({
   onChange: (p: Partial<NonNullable<CollageDoc['slots'][number]>>, liveOnly?: boolean) => void;
   onCommit: () => void;
   onReplace: () => void;
+  /** A change to the whole design (the free layout's frame style). */
+  onDoc: (fn: Edit) => void;
 }) {
   const slot = doc.slots[index];
   const shape = slotShapes(doc)[index];
+  const free = isFreeLayout(doc);
+  const cut = slot?.mask ?? (slot?.radius ? 'membulat' : 'kotak');
   return (
     <>
       <div className="flex items-center justify-between">
@@ -511,10 +574,162 @@ function PhotoInspector({
               <RotateCcw size={13} /> {t('Atur ulang')}
             </Btn>
           </div>
-          <p className="text-[11px] text-faint">{t('Seret foto di kanvas untuk menggeser. ⌥ + scroll untuk zoom.')}</p>
+          <p className="text-[11px] text-faint">
+            {free ? t('Seret bingkai untuk memindah. ⌘T atau dobel klik untuk menggeser foto di dalamnya.') : t('Seret foto di kanvas untuk menggeser. ⌥ + scroll untuk zoom.')}
+          </p>
+        </Section>
+      )}
+      {free && slot && (
+        <Section title={t('Bentuk##bingkai')}>
+          <div className="flex flex-wrap gap-1.5">
+            {FRAME_CUTS.map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => onDoc(cutFrame(index, id))}
+                className={cx('h-7 rounded-lg px-2.5 text-xs', cut === id ? 'bg-raised font-semibold text-fg ring-1 ring-gold' : 'bg-panel-2 text-muted hover:text-fg')}
+              >
+                {t(label)}
+              </button>
+            ))}
+          </div>
+        </Section>
+      )}
+      {free && (
+        <Section title={t('Gaya bingkai')}>
+          <div className="flex gap-1.5">
+            {(
+              [
+                ['none', 'Tanpa##bingkai'],
+                ['border', 'Garis putih##bingkai'],
+                ['polaroid', 'Polaroid##bingkai'],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => onDoc((d) => ({ ...d, freeFrame: id }))}
+                className={cx('h-7 flex-1 rounded-lg text-xs', doc.freeFrame === id ? 'bg-raised font-semibold text-fg ring-1 ring-gold' : 'bg-panel-2 text-muted hover:text-fg')}
+              >
+                {t(label)}
+              </button>
+            ))}
+          </div>
+          <p className="text-[11px] text-faint">{t('Untuk semua foto di desain ini.')}</p>
         </Section>
       )}
     </>
+  );
+}
+
+/**
+ * A free frame's photo cut to `cut`. A circle or heart wants a square frame:
+ * the frame becomes one of the same area, around the same middle.
+ */
+const cutFrame =
+  (index: number, cut: PhotoMask | 'kotak' | 'membulat'): Edit =>
+  (d) => {
+    const slot = d.slots[index];
+    const cell = d.freeCells[index];
+    if (!slot || !cell) return d;
+    const look = cut === 'kotak' ? { mask: undefined, radius: 0 } : cut === 'membulat' ? { mask: undefined, radius: 0.08 } : { mask: cut, radius: undefined };
+    let next = cell;
+    if (cut === 'lingkaran' || cut === 'hati') {
+      // Sides in pixels of one canvas width; equal sides of the same area.
+      const r = formatRatio(d) * d.slides;
+      const side = Math.sqrt(cell.w * cell.h * r);
+      const w = side, h = side / r;
+      next = { ...cell, x: cell.x + cell.w / 2 - w / 2, y: cell.y + cell.h / 2 - h / 2, w, h };
+    }
+    return { ...d, freeCells: d.freeCells.map((c, i) => (i === index ? next : c)), slots: d.slots.map((s, i) => (i === index && s ? { ...s, ...look } : s)) };
+  };
+
+/** How a free frame's photo is cut: a plain or rounded box, or a shape. */
+const FRAME_CUTS: [PhotoMask | 'kotak' | 'membulat', string][] = [
+  ['kotak', 'Kotak##bingkai'],
+  ['membulat', 'Membulat##bingkai'],
+  ['lingkaran', 'Lingkaran##bingkai'],
+  ['lengkung', 'Lengkung##bingkai'],
+  ['hati', 'Hati##bingkai'],
+];
+
+/** Editor › Simpan template: the design, photos taken out, as one of "Template saya". */
+function SaveTemplateDialog({ onClose }: { onClose: () => void }) {
+  const { doc, template, name } = useKreasi();
+  const [title, setTitle] = useState(name);
+  const [category, setCategory] = useState<TemplateCategory>(template?.mine || !template ? 'lainnya' : template.category);
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  if (!doc) return null;
+  const save = async () => {
+    setBusy(true);
+    try {
+      await saveMyTemplate(title, doc, category);
+      setDone(true);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="fixed inset-x-0 top-10 bottom-0 z-40 flex items-center justify-center bg-black/70 p-4" onMouseDown={onClose}>
+      <div onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-label={t('Simpan sebagai template saya')} className="flex w-[440px] max-w-full flex-col gap-4 rounded-[18px] border border-line bg-panel p-6 shadow-2xl">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex flex-col gap-1">
+            <h2 className="text-lg font-semibold">{t('Simpan sebagai template saya')}</h2>
+            <p className="text-xs text-muted">{t('Desain ini tanpa fotonya: tempat foto, teks, dan elemen tetap. Muncul di Template saya untuk dipakai lagi.')}</p>
+          </div>
+          <button type="button" onClick={onClose} aria-label={t('Tutup')} className="text-faint hover:text-fg">
+            <X size={18} />
+          </button>
+        </div>
+        {done ? (
+          <>
+            <p className="flex items-center gap-2 rounded-lg bg-pick/10 px-3 py-2.5 text-[13px]">
+              <Check size={15} className="text-pick" /> {t('Tersimpan di Template saya.')}
+            </p>
+            <button type="button" onClick={onClose} className="h-10 rounded-[10px] border border-line text-[13px] font-medium hover:bg-raised">
+              {t('Tutup')}
+            </button>
+          </>
+        ) : (
+          <>
+            <label className="flex flex-col gap-1.5 text-xs font-medium text-muted">
+              {t('Nama template')}
+              <input
+                autoFocus
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && !busy && save()}
+                className="h-9 rounded-lg border border-line bg-bg px-3 text-[13px] text-fg outline-none focus:border-gold"
+              />
+            </label>
+            <label className="flex flex-col gap-1.5 text-xs font-medium text-muted">
+              {t('Kategori')}
+              <select value={category} onChange={(e) => setCategory(e.target.value as TemplateCategory)} className="h-9 rounded-lg border border-line bg-bg px-2.5 text-[13px] text-fg outline-none focus:border-gold">
+                {CATEGORIES.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {t(c.label)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={onClose} className="h-10 rounded-[10px] px-4 text-[13px] font-medium text-muted hover:text-fg">
+                {t('Batal')}
+              </button>
+              <button type="button" disabled={busy} onClick={save} className="flex h-10 items-center gap-2 rounded-[10px] bg-gold-gradient px-4 text-[13px] font-semibold text-white disabled:opacity-60">
+                <BookmarkPlus size={15} /> {t('Simpan template')}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 

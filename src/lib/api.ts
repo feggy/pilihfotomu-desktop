@@ -262,6 +262,10 @@ export const api = {
   loadDraft: (id: string) => invoke<string>('load_draft', { id }),
   listDrafts: () => invoke<string[]>('list_drafts'),
   deleteDraft: (id: string) => invoke<void>('delete_draft', { id }),
+  /** The photographer's own templates (Buat konten › Template saya), kept like drafts. */
+  saveMyTemplate: (id: string, json: string) => invoke<void>('save_draft', { id, json, shelf: 'templates' }),
+  listMyTemplates: () => invoke<string[]>('list_drafts', { shelf: 'templates' }),
+  deleteMyTemplate: (id: string) => invoke<void>('delete_draft', { id, shelf: 'templates' }),
   exportJpegs: (
     root: string,
     ids: number[],

@@ -63,6 +63,15 @@ Review › Lanjutkan ▾ › Buat konten untuk memakai foto sesi yang terbuka).
   "Isi sisanya otomatis": Dipilih, bintang tertinggi, bentuk pas, tidak dua dari satu burst.
 - **Ekspor**: JPG/PNG 1080 px atau 2×, foto dari pratinjau 2048 px, disimpan ke
   `<folder sesi>/Konten/` lewat `save_export` (byte mentah, tidak pernah menimpa).
+- **Mulai dari kosong**: kanvas Story / Feed / 1:1 / Carousel tanpa template
+  (layout bebas mesin). Langsung ke editor; foto ditambah dari panel **Foto**
+  (klik, atau seret ke kanvas) sebagai bingkai yang bisa dipindah, diubah ukuran,
+  diputar, dan dipotong jadi lingkaran / lengkung / hati.
+- **Template saya**: editor › Simpan template menyimpan desain tanpa fotonya
+  (tempat foto dan bentuknya tetap) ke `<app data>/kreasi/templates/` —
+  muncul di galeri sebagai kategori Template saya, bisa dihapus dari panel kanan.
+- **Draf**: setiap desain tersimpan otomatis ke `<app data>/kreasi/<id>.json`;
+  muncul di galeri sebagai Lanjutkan desain.
 
 ## Bahasa
 

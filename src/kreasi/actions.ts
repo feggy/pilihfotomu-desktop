@@ -9,14 +9,18 @@ import {
   PHOTOS_LAYER,
   behindKeys,
   formatRatio,
+  isFreeLayout,
   layerKeys,
   moveLayer,
   newId,
   patchLayerMeta,
+  photoLayerKey,
   readableOn,
+  slotsFor,
   stickerLayerKey,
   textLayerKey,
   type CollageDoc,
+  type FreeCell,
   type LayerMove,
   type StickerLayer,
   type TextLayer,
@@ -166,15 +170,47 @@ export function addShape(def: ShapeDef): { edit: Edit; id: string } {
   };
 }
 
-/** The layer key of a selection, for hide/lock/order. */
-export function keyOf(sel: Selection): string | null {
+/** The layer key of a selection, for hide/lock/order (a photo only in the free layout). */
+export function keyOf(sel: Selection, doc?: CollageDoc): string | null {
   if (!sel) return null;
   if (sel.kind === 'text') return textLayerKey(sel.id);
   if (sel.kind === 'sticker') return stickerLayerKey(sel.id);
+  if (sel.kind === 'cell' && doc && isFreeLayout(doc)) {
+    const c = doc.freeCells[sel.index];
+    return c ? photoLayerKey(c.id) : null;
+  }
   return null;
 }
 
-/** Deletes a text or element; photo places stay (they belong to the template). */
+/** Free layout: takes away photo frame `index` and its photo. */
+export const removeFrame =
+  (index: number): Edit =>
+  (d) => ({
+    ...d,
+    freeCells: d.freeCells.filter((_, i) => i !== index),
+    slots: slotsFor(d, d.freeCells.length).filter((_, i) => i !== index),
+  });
+
+/** Free layout: a copy of frame `index` with its photo, a little down and right; the copy's index. */
+export function duplicateFrame(index: number, d: CollageDoc): { edit: Edit; index: number } | null {
+  const c = d.freeCells[index];
+  if (!c) return null;
+  const copy = { ...c, id: newId(), x: c.x + 0.02 / d.slides, y: c.y + 0.02 };
+  return {
+    index: d.freeCells.length,
+    edit: (doc) => ({
+      ...doc,
+      freeCells: [...doc.freeCells, copy],
+      slots: [...slotsFor(doc, doc.freeCells.length), doc.slots[index] ? { ...doc.slots[index]! } : null],
+    }),
+  };
+}
+
+export const patchFrame =
+  (index: number, patch: Partial<FreeCell>): Edit =>
+  (d) => ({ ...d, freeCells: d.freeCells.map((c, i) => (i === index ? { ...c, ...patch } : c)) });
+
+/** Deletes a text, element, or a free layout's photo frame; a template's photo places stay. */
 export const remove =
   (sel: Selection): Edit =>
   (d) =>
@@ -182,10 +218,16 @@ export const remove =
       ? { ...d, texts: d.texts.filter((x) => x.id !== sel.id) }
       : sel?.kind === 'sticker'
         ? { ...d, stickers: d.stickers.filter((x) => x.id !== sel.id) }
-        : d;
+        : sel?.kind === 'cell' && isFreeLayout(d)
+          ? removeFrame(sel.index)(d)
+          : d;
 
-/** A copy of a text or element, a little down and to the right; returns its selection. */
+/** A copy of a text, element or free photo frame, a little down and to the right; returns its selection. */
 export function duplicate(sel: Selection, d: CollageDoc): { edit: Edit; selection: Selection } | null {
+  if (sel?.kind === 'cell' && isFreeLayout(d)) {
+    const dup = duplicateFrame(sel.index, d);
+    return dup && { edit: dup.edit, selection: { kind: 'cell', index: dup.index } };
+  }
   const id = newId();
   if (sel?.kind === 'text') {
     const src = d.texts.find((x) => x.id === sel.id);
@@ -208,6 +250,8 @@ export const nudge =
       list.map((x) => (x.id === id ? { ...x, x: x.x + dx / width, y: x.y + dy / height } : x));
     if (sel?.kind === 'text') return { ...d, texts: mv(d.texts, sel.id) };
     if (sel?.kind === 'sticker') return { ...d, stickers: mv(d.stickers, sel.id) };
+    if (sel?.kind === 'cell' && isFreeLayout(d))
+      return { ...d, freeCells: d.freeCells.map((c, i) => (i === sel.index ? { ...c, x: c.x + dx / width, y: c.y + dy / height } : c)) };
     return d;
   };
 

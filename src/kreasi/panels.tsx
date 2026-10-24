@@ -86,24 +86,49 @@ export function LayersPanel({
   // Top of the stack first, as in every design app; photo places at the bottom.
   const keys = layerKeys(doc).reverse();
   const slots = slotsFor(doc, templateOf(doc).cells.length);
+  /** Order, lock and visibility of a movable layer; shown on hover, or while it matters. */
+  const rowActions = (key: string, on: boolean) => {
+    const hidden = isLayerHidden(doc, key);
+    const locked = isLayerLocked(doc, key);
+    return (
+      <span className={cx('shrink-0 items-center gap-0.5', on || hidden || locked ? 'flex' : 'hidden group-hover:flex')}>
+        <IconBtn label={t('Naikkan')} onClick={() => edit(order(key, 'forward'))}>
+          <ArrowUp size={12} />
+        </IconBtn>
+        <IconBtn label={t('Turunkan')} onClick={() => edit(order(key, 'backward'))}>
+          <ArrowDown size={12} />
+        </IconBtn>
+        <IconBtn label={locked ? t('Buka kunci') : t('Kunci')} onClick={() => edit(toggleMeta(key, 'locked'))} on={locked}>
+          {locked ? <Lock size={12} /> : <Unlock size={12} />}
+        </IconBtn>
+        <IconBtn label={hidden ? t('Tampilkan') : t('Sembunyikan')} onClick={() => edit(toggleMeta(key, 'hidden'))} on={hidden}>
+          {hidden ? <EyeOff size={12} /> : <Eye size={12} />}
+        </IconBtn>
+      </span>
+    );
+  };
   const photoRow = (i: number, key: string) => {
     const on = selection?.kind === 'cell' && selection.index === i;
     const s = slots[i];
     const img = s && images.get(s.file.fileId);
+    // A free layout's frame is a layer like the others: it can be ordered, locked and hidden.
+    const movable = key.startsWith('photo:');
+    const hidden = movable && isLayerHidden(doc, key);
     return (
-      <button
+      <div
         key={key}
-        type="button"
-        onClick={() => onSelect({ kind: 'cell', index: i })}
         onPointerEnter={() => onHover({ kind: 'cell', index: i })}
         onPointerLeave={() => onHover(null)}
-        className={cx('flex h-9 shrink-0 items-center gap-2.5 rounded-lg px-2 text-left', on ? 'bg-raised ring-1 ring-gold' : 'hover:bg-panel-2')}
+        className={cx('group flex h-9 shrink-0 items-center gap-2 rounded-lg px-2', on ? 'bg-raised ring-1 ring-gold' : 'hover:bg-panel-2', hidden && 'opacity-50')}
       >
-        <span className="flex w-6 shrink-0 justify-center">
-          {img ? <img src={img.src} alt="" className="h-5 w-6 rounded-sm object-cover" /> : <ImageIcon size={14} className="text-faint" />}
-        </span>
-        <span className={cx('truncate text-xs', on ? 'font-semibold text-fg' : 'text-muted')}>{t('Foto {n}', { n: i + 1 })}</span>
-      </button>
+        <button type="button" onClick={() => onSelect({ kind: 'cell', index: i })} className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
+          <span className="flex w-6 shrink-0 justify-center">
+            {img ? <img src={img.src} alt="" className="h-5 w-6 rounded-sm object-cover" /> : <ImageIcon size={14} className="text-faint" />}
+          </span>
+          <span className={cx('truncate text-xs', on ? 'font-semibold text-fg' : 'text-muted')}>{t('Foto {n}', { n: i + 1 })}</span>
+        </button>
+        {movable && rowActions(key, on)}
+      </div>
     );
   };
   return (
@@ -121,7 +146,6 @@ export function LayersPanel({
         const on = !!selection && 'id' in selection && selection.id === id;
         const label = isText ? (doc.texts.find((x) => x.id === id)?.text.split('\n')[0] ?? '') || t('Teks') : elementName(doc.stickers.find((x) => x.id === id));
         const hidden = isLayerHidden(doc, key);
-        const locked = isLayerLocked(doc, key);
         return (
           <div
             key={key}
@@ -133,20 +157,7 @@ export function LayersPanel({
               <span className="flex w-6 shrink-0 justify-center">{isText ? <Type size={14} className="text-faint" /> : <Shapes size={14} className="text-faint" />}</span>
               <span className={cx('truncate text-xs', on ? 'font-semibold text-fg' : 'text-muted')}>{label}</span>
             </button>
-            <span className={cx('shrink-0 items-center gap-0.5', on || hidden || locked ? 'flex' : 'hidden group-hover:flex')}>
-              <IconBtn label={t('Naikkan')} onClick={() => edit(order(key, 'forward'))}>
-                <ArrowUp size={12} />
-              </IconBtn>
-              <IconBtn label={t('Turunkan')} onClick={() => edit(order(key, 'backward'))}>
-                <ArrowDown size={12} />
-              </IconBtn>
-              <IconBtn label={locked ? t('Buka kunci') : t('Kunci')} onClick={() => edit(toggleMeta(key, 'locked'))} on={locked}>
-                {locked ? <Lock size={12} /> : <Unlock size={12} />}
-              </IconBtn>
-              <IconBtn label={hidden ? t('Tampilkan') : t('Sembunyikan')} onClick={() => edit(toggleMeta(key, 'hidden'))} on={hidden}>
-                {hidden ? <EyeOff size={12} /> : <Eye size={12} />}
-              </IconBtn>
-            </span>
+            {rowActions(key, on)}
           </div>
         );
       })}

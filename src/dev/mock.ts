@@ -76,6 +76,13 @@ const folder: FolderInfo = {
   ],
 };
 
+const shelves = new Map<string, Map<string, string>>();
+const shelf = (name: unknown) => {
+  const key = String(name ?? 'drafts');
+  if (!shelves.has(key)) shelves.set(key, new Map());
+  return shelves.get(key)!;
+};
+
 export async function installMock() {
   mockWindows('main');
   mockIPC(
@@ -88,6 +95,15 @@ export async function installMock() {
           ];
         case 'open_session':
           return session;
+        // Drafts and own templates, kept for the page's life (src-tauri: save_draft…).
+        case 'save_draft':
+          shelf(a.shelf).set(String(a.id), String(a.json));
+          return null;
+        case 'list_drafts':
+          return [...shelf(a.shelf).values()].reverse();
+        case 'delete_draft':
+          shelf(a.shelf).delete(String(a.id));
+          return null;
         case 'inspect_folder':
           return folder;
         case 'set_status':

@@ -6,7 +6,8 @@ import { TitleBar } from '../components/title-bar';
 import { t } from '../lib/i18n';
 import { useApp, type Screen } from '../store';
 import { Editor } from './editor';
-import { Fill, sessionSource } from './fill';
+import { Fill } from './fill';
+import { sessionSource } from './sources';
 import { Gallery } from './gallery';
 import { useKreasi } from './store';
 

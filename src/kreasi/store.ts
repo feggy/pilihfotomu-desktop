@@ -5,7 +5,7 @@
 
 import { create } from 'zustand';
 
-import { emptyPhotoFile, slotsFor, templateOf, withSlot, type CollageDoc, type Slot } from './engine/document';
+import { emptyPhotoFile, formatRatio, newId, slotsFor, templateOf, withSlot, type CollageDoc, type Slot } from './engine/document';
 import { newDraftId } from './drafts';
 import { photoFile, slotShapes, shapeOf, templateDoc, type Shape, type Template } from './kit';
 
@@ -66,6 +66,11 @@ interface KreasiState {
   setActive: (i: number) => void;
   /** Puts `photo` in place `i` (null empties it); moves on to the next empty place. */
   place: (i: number, photo: SourcePhoto | null) => void;
+  /**
+   * Free layout: a new photo frame for `photo`, shaped like it, centred at
+   * `at` (0–1 of the whole canvas) or in the first slide; its index.
+   */
+  addFrame: (photo: SourcePhoto, at?: { x: number; y: number }) => number;
   /** Fills the empty places with the best photos that fit their shape. */
   autoFill: () => void;
   /** Any change to the design, undoable. */
@@ -98,7 +103,7 @@ export function facePan(p: SourcePhoto, slotRatio: number): { ox: number; oy: nu
   return { ox: pan((x0 + x1) / 2, dw, overX, slotRatio / 2), oy: pan((y0 + y1) / 2, dh, overY, 0.42) };
 }
 
-const slotFor = (root: string, p: SourcePhoto, old: Slot | null, slotRatio = 1): Slot => ({
+export const slotFor = (root: string, p: SourcePhoto, old: Slot | null, slotRatio = 1): Slot => ({
   ...(old ?? { zoom: 1, ox: 0, oy: 0, rotate: 0, flip: false }),
   file: photoFile({ root, id: p.id, name: p.name, thumb: p.thumb }),
   // A new photo starts unzoomed with its faces in view; the place keeps its look.
@@ -158,6 +163,32 @@ export const useKreasi = create<KreasiState>((set, get) => ({
       source ? { source: { ...source, photos: source.photos.map((p) => (r.has(p.id) ? { ...p, ratio: r.get(p.id) } : p)) } } : {},
     ),
   setActive: (active) => set({ active }),
+
+  addFrame: (photo, at) => {
+    const { doc, source } = get();
+    if (!doc || !source) return -1;
+    const ratio = photo.ratio ?? 1.5;
+    // A share of one slide's width; the height from the photo's own shape.
+    let wu = 0.46;
+    let hu = wu / ratio / formatRatio(doc);
+    if (hu > 0.7) {
+      wu *= 0.7 / hu;
+      hu = 0.7;
+    }
+    const n = doc.freeCells.length;
+    const w = wu / doc.slides;
+    // Several added in a row step down a little, so they don't hide each other.
+    const nudge = at ? 0 : (n % 4) * 0.035;
+    const cx = at ? at.x : (0.5 + nudge) / doc.slides;
+    const cy = at ? at.y : 0.5 + nudge;
+    const cell = { id: newId(), x: cx - w / 2, y: cy - hu / 2, w, h: hu, rotate: 0 };
+    get().edit((d) => ({
+      ...d,
+      freeCells: [...d.freeCells, cell],
+      slots: withSlot(slotsFor(d, d.freeCells.length), n, slotFor(source.root, photo, null, ratio)),
+    }));
+    return n;
+  },
 
   place: (i, photo) => {
     const { doc, source } = get();

@@ -9,11 +9,13 @@ import {
   isLayerHidden,
   isLayerLocked,
   layerKeys,
+  photoLayerKey,
   slotsFor,
   stickerLayerKey,
   templateOf,
   textLayerKey,
   type CollageDoc,
+  type FreeCell,
   type StickerLayer,
 } from './engine/document';
 import { itemBounds } from './engine/bounds';
@@ -96,6 +98,10 @@ export interface CanvasHandlers {
   onDropPhoto?: (index: number, photoId: number) => void;
   /** Gesture finished (one undo step per drag). */
   onCommit?: () => void;
+  /** Free layout: a photo frame moved, resized or turned (live, during the drag). */
+  onFrame?: (index: number, patch: Partial<FreeCell>) => void;
+  /** Free layout: a photo from the list dropped on empty canvas, at (x, y) as 0–1 of it. */
+  onDropNew?: (photoId: number, x: number, y: number) => void;
   /** Double-click on a photo: "Atur ukuran" for it. */
   onCropCell?: (index: number) => void;
   /** Leaves "Atur ukuran" (a click outside the photo). */
@@ -195,6 +201,7 @@ export function DocCanvas({
   safe,
   cropping,
   hovered,
+  hint,
   handlers = {},
 }: {
   doc: CollageDoc;
@@ -215,6 +222,8 @@ export function DocCanvas({
   cropping?: number | null;
   /** Outlined as hovered from outside the canvas (the layer list). */
   hovered?: Selection;
+  /** Said in the middle of an empty canvas: how to begin. */
+  hint?: string;
   handlers?: CanvasHandlers;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -313,6 +322,9 @@ export function DocCanvas({
     const lx = dx * Math.cos(a) - dy * Math.sin(a), ly = dx * Math.sin(a) + dy * Math.cos(a);
     return Math.abs(lx) <= b.w / 2 && Math.abs(ly) <= b.h / 2;
   };
+  const free = isFreeLayout(doc);
+  /** Free layout: a frame's layer key. */
+  const frameKey = (index: number) => photoLayerKey(doc.freeCells[index]?.id ?? '');
   /**
    * Everything under (x, y), top first: texts by their box, elements by their
    * drawn shape (a ring's empty middle, a sticker's clear corners let clicks
@@ -331,8 +343,14 @@ export function DocCanvas({
           const st = doc.stickers.find((s) => s.id === key.slice(8));
           const b = st && boxOf({ kind: 'sticker', id: st.id });
           if (st && b && inside(b, x, y) && paintedAt(st, f, x, y)) hits.push({ kind: 'sticker', id: st.id });
+        } else if (free && key.startsWith('photo:')) {
+          const index = doc.freeCells.findIndex((c) => photoLayerKey(c.id) === key);
+          const b = index >= 0 ? boxOf({ kind: 'cell', index }) : null;
+          if (b && inside(b, x, y)) hits.push({ kind: 'cell', index });
         }
       }
+      // The free layout's frames were among the layers; a template's photos sit under everything.
+      if (free) return hits;
     } else {
       const ctx = ref.current!.getContext('2d')!;
       for (let i = doc.texts.length - 1; i >= 0; i--) {
@@ -357,7 +375,10 @@ export function DocCanvas({
     | { kind: 'move'; sel: Item; x: number; y: number; ix: number; iy: number; snap: SnapInfo; moved: boolean; next: Selection }
     | { kind: 'resize'; sel: Item; cx: number; cy: number; d0: number; size0: number }
     | { kind: 'turn'; sel: Item; cx: number; cy: number; a0: number; r0: number }
-    | { kind: 'zoom'; index: number; cx: number; cy: number; d0: number; zoom0: number };
+    | { kind: 'zoom'; index: number; cx: number; cy: number; d0: number; zoom0: number }
+    | { kind: 'frame'; index: number; x: number; y: number; ix: number; iy: number; snap: SnapInfo; moved: boolean; next: Selection }
+    | { kind: 'frameSize'; index: number; cx: number; cy: number; d0: number; cell: FreeCell }
+    | { kind: 'frameTurn'; index: number; cx: number; cy: number; a0: number; r0: number };
   const drag = useRef<Drag | null>(null);
   const [dragging, setDragging] = useState(false);
   const [hover, setHover] = useState<Selection>(null);
@@ -398,6 +419,12 @@ export function DocCanvas({
       if (isLayerLocked(doc, keyOfItem(s))) return next && handlers.onSelect?.(next);
       const it = itemOf(s)!;
       start({ kind: 'move', sel: s, x, y, ix: it.x, iy: it.y, snap: snapInfo(doc, f, ref.current!.getContext('2d')!, keyOfItem(s)), moved: false, next }, e);
+    } else if (s.kind === 'cell' && free) {
+      // A free frame moves like any element; its picture moves in "Atur ukuran".
+      const cell = doc.freeCells[s.index];
+      if (!cell || isLayerLocked(doc, frameKey(s.index))) return next && handlers.onSelect?.(next);
+      const snap = snapInfo(doc, f, ref.current!.getContext('2d')!, frameKey(s.index));
+      start({ kind: 'frame', index: s.index, x, y, ix: cell.x + cell.w / 2, iy: cell.y + cell.h / 2, snap, moved: false, next }, e);
     } else if (s.kind === 'cell') {
       const slot = doc.slots[s.index];
       const img = slot && images.get(slot.file.fileId);
@@ -418,6 +445,15 @@ export function DocCanvas({
       return;
     }
     const sel = selection;
+    if (sel?.kind === 'cell' && free) {
+      const cell = doc.freeCells[sel.index];
+      const b = boxOf(sel);
+      if (!cell || !b) return;
+      const { x, y } = at(e);
+      if (kind === 'resize') start({ kind: 'frameSize', index: sel.index, cx: b.cx, cy: b.cy, d0: Math.hypot(x - b.cx, y - b.cy), cell }, e);
+      else start({ kind: 'frameTurn', index: sel.index, cx: b.cx, cy: b.cy, a0: Math.atan2(y - b.cy, x - b.cx), r0: cell.rotate }, e);
+      return;
+    }
     if (!sel || (sel.kind !== 'text' && sel.kind !== 'sticker')) return;
     const b = boxOf(sel)!;
     const { x, y } = at(e);
@@ -453,6 +489,29 @@ export function DocCanvas({
     } else if (d.kind === 'zoom') {
       const k = Math.hypot(x - d.cx, y - d.cy) / Math.max(1, d.d0);
       handlers.onZoom?.(d.index, clamp(d.zoom0 * k, 1, 5));
+    } else if (d.kind === 'frame') {
+      if (!d.moved && Math.hypot(x - d.x, y - d.y) < CLICK_SLOP) return;
+      d.moved = true;
+      const cell = doc.freeCells[d.index];
+      if (!cell) return;
+      const px = d.ix + (x - d.x) / f.width;
+      const py = d.iy + (y - d.y) / f.height;
+      const loose = e.metaKey || e.ctrlKey;
+      const isEdgeX = (t: number) => t <= 0 || t >= 1 || Math.abs(t * doc.slides - Math.round(t * doc.slides)) < 1e-9;
+      const sx = loose ? null : nearest(px, d.snap.hw, d.snap.tx, f.width, isEdgeX);
+      const sy = loose ? null : nearest(py, d.snap.hh, d.snap.ty, f.height, (t) => t <= 0 || t >= 1);
+      setGuides((g) => ({ x: sx?.line ?? g.x, y: sy?.line ?? g.y, showX: !!sx, showY: !!sy }));
+      handlers.onFrame?.(d.index, { x: px + (sx?.shift ?? 0) - cell.w / 2, y: py + (sy?.shift ?? 0) - cell.h / 2 });
+    } else if (d.kind === 'frameSize') {
+      // From the middle, keeping the frame's shape.
+      const k = clamp(Math.hypot(x - d.cx, y - d.cy) / Math.max(1, d.d0), 0.05 / Math.max(d.cell.w, d.cell.h), 3);
+      const w = d.cell.w * k, h = d.cell.h * k;
+      handlers.onFrame?.(d.index, { x: d.cell.x + d.cell.w / 2 - w / 2, y: d.cell.y + d.cell.h / 2 - h / 2, w, h });
+    } else if (d.kind === 'frameTurn') {
+      const a = ((Math.atan2(y - d.cy, x - d.cx) - d.a0) * 180) / Math.PI;
+      let deg = d.r0 + a;
+      deg = ((((deg + 180) % 360) + 360) % 360) - 180;
+      handlers.onFrame?.(d.index, { rotate: e.shiftKey ? Math.round(deg / 15) * 15 : snapAngle(deg) });
     } else if (d.kind === 'turn') {
       const a = ((Math.atan2(y - d.cy, x - d.cx) - d.a0) * 180) / Math.PI;
       let deg = d.r0 + a;
@@ -469,8 +528,8 @@ export function DocCanvas({
   };
   const onPointerUp = () => {
     const d = drag.current;
-    if (d && (d.kind === 'resize' || d.kind === 'turn' || d.kind === 'zoom' || d.moved)) handlers.onCommit?.();
-    else if (d && (d.kind === 'move' || d.kind === 'pan') && d.next) handlers.onSelect?.(d.next);
+    if (d && (d.kind === 'resize' || d.kind === 'turn' || d.kind === 'zoom' || d.kind === 'frameSize' || d.kind === 'frameTurn' || d.moved)) handlers.onCommit?.();
+    else if (d && (d.kind === 'move' || d.kind === 'pan' || d.kind === 'frame') && d.next) handlers.onSelect?.(d.next);
     drag.current = null;
     setDragging(false);
     setGuides((g) => ({ ...g, showX: false, showY: false }));
@@ -509,10 +568,10 @@ export function DocCanvas({
           const i = dropIndex(e);
           const id = Number(e.dataTransfer.getData('application/x-pilihfotomu-foto'));
           setDropAt(null);
-          if (i != null && Number.isFinite(id)) {
-            e.preventDefault();
-            handlers.onDropPhoto!(i, id);
-          }
+          if (!Number.isFinite(id)) return;
+          e.preventDefault();
+          if (i != null) handlers.onDropPhoto!(i, id);
+          else if (free) handlers.onDropNew?.(id, at(e).x / f.width, at(e).y / f.height);
         },
       }
     : {};
@@ -520,7 +579,11 @@ export function DocCanvas({
   const selBox = outlines && !crop ? boxOf(selection) : null;
   const editing = editingText ? doc.texts.find((x) => x.id === editingText) : null;
   const editBox = editing ? boxOf({ kind: 'text', id: editing.id }) : null;
-  const canHandle = !!selection && (selection.kind === 'text' || selection.kind === 'sticker') && !isLayerLocked(doc, keyOfItem(selection as Item)) && !editing;
+  const canHandle =
+    !!selection &&
+    !editing &&
+    ((selection.kind === 'cell' && free && !!doc.freeCells[selection.index] && !isLayerLocked(doc, frameKey(selection.index))) ||
+      ((selection.kind === 'text' || selection.kind === 'sticker') && !isLayerLocked(doc, keyOfItem(selection as Item))));
 
   return (
     <div className="relative shrink-0" style={{ width: f.width, height: f.height }} {...dnd}>
@@ -589,6 +652,11 @@ export function DocCanvas({
             ))}
           </Outline>
         </>
+      )}
+      {hint && (
+        <span className="pointer-events-none absolute inset-0 flex items-center justify-center p-6">
+          <span className="max-w-[80%] rounded-lg bg-black/55 px-3 py-2 text-center text-xs text-white">{hint}</span>
+        </span>
       )}
       {safe && <SafeZones doc={doc} />}
       {dropAt != null && <Outline box={boxOf({ kind: 'cell', index: dropAt })} drop />}

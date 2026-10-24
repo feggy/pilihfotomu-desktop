@@ -10,11 +10,14 @@ import { previewOf } from './preview';
 const STEPS = ['Pilih template', 'Isi foto', 'Edit & ekspor'];
 
 /** 1 Pilih template — 2 Isi foto — 3 Edit & ekspor; earlier steps can be clicked. */
-export function Steps({ at, onGo }: { at: 1 | 2 | 3; onGo?: (step: 1 | 2 | 3) => void }) {
+export function Steps({ at, onGo, noPhotos }: { at: 1 | 2 | 3; onGo?: (step: 1 | 2 | 3) => void; noPhotos?: boolean }) {
   return (
     <div className="flex items-center gap-2.5">
       {STEPS.map((label, i) => {
         const n = (i + 1) as 1 | 2 | 3;
+        // A design from an empty canvas gets its photos in the editor: no Isi foto step.
+        if (noPhotos && n === 2) return null;
+        const shown = noPhotos && n === 3 ? 2 : n;
         const done = n < at;
         const current = n === at;
         return (
@@ -32,7 +35,7 @@ export function Steps({ at, onGo }: { at: 1 | 2 | 3; onGo?: (step: 1 | 2 | 3) =>
                   done || current ? 'bg-gold text-bg' : 'bg-raised text-faint',
                 )}
               >
-                {done ? <Check size={12} strokeWidth={3} /> : n}
+                {done ? <Check size={12} strokeWidth={3} /> : shown}
               </span>
               <span className={cx('text-[13px]', current ? 'font-semibold text-fg' : done ? 'font-medium text-muted' : 'font-medium text-faint')}>
                 {t(label)}

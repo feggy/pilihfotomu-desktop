@@ -483,37 +483,44 @@ async fn export_jpegs(
     .map_err(|e| e.to_string())
 }
 
-fn drafts_dir(app: &AppHandle) -> CmdResult<PathBuf> {
-    app.path().app_data_dir().map(|d| d.join("kreasi")).map_err(|e| e.to_string())
+/// Where Buat konten keeps its files: drafts in `<app data>/kreasi/`, the
+/// photographer's own templates (`shelf: "templates"`) in `kreasi/templates/`.
+fn drafts_dir(app: &AppHandle, shelf: Option<&str>) -> CmdResult<PathBuf> {
+    let dir = app.path().app_data_dir().map(|d| d.join("kreasi")).map_err(|e| e.to_string())?;
+    match shelf {
+        None => Ok(dir),
+        Some("templates") => Ok(dir.join("templates")),
+        Some(_) => Err("Tempat simpan tidak dikenal.".into()),
+    }
 }
 
 /// Draft ids are made by the UI; anything but [a-z0-9-] is refused so an id
 /// can never point outside the drafts folder.
-fn draft_path(app: &AppHandle, id: &str) -> CmdResult<PathBuf> {
+fn draft_path(app: &AppHandle, shelf: Option<&str>, id: &str) -> CmdResult<PathBuf> {
     if id.is_empty() || id.len() > 64 || !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
         return Err("Id draf tidak valid.".into());
     }
-    Ok(drafts_dir(app)?.join(format!("{id}.json")))
+    Ok(drafts_dir(app, shelf)?.join(format!("{id}.json")))
 }
 
 /// Saves a Buat konten design (JSON made by the UI) as `<app data>/kreasi/<id>.json`.
 #[tauri::command]
-fn save_draft(app: AppHandle, id: String, json: String) -> CmdResult<()> {
-    let path = draft_path(&app, &id)?;
+fn save_draft(app: AppHandle, id: String, json: String, shelf: Option<String>) -> CmdResult<()> {
+    let path = draft_path(&app, shelf.as_deref(), &id)?;
     std::fs::create_dir_all(path.parent().unwrap()).map_err(|e| e.to_string())?;
     let tmp = path.with_extension("json.tmp");
     std::fs::write(&tmp, json).and_then(|_| std::fs::rename(&tmp, &path)).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn load_draft(app: AppHandle, id: String) -> CmdResult<String> {
-    std::fs::read_to_string(draft_path(&app, &id)?).map_err(|_| "Draf tidak ditemukan.".to_string())
+fn load_draft(app: AppHandle, id: String, shelf: Option<String>) -> CmdResult<String> {
+    std::fs::read_to_string(draft_path(&app, shelf.as_deref(), &id)?).map_err(|_| "Draf tidak ditemukan.".to_string())
 }
 
 /// Every saved draft as its JSON text, newest first (the UI reads the summary fields).
 #[tauri::command]
-fn list_drafts(app: AppHandle) -> CmdResult<Vec<String>> {
-    let Ok(entries) = std::fs::read_dir(drafts_dir(&app)?) else { return Ok(vec![]) };
+fn list_drafts(app: AppHandle, shelf: Option<String>) -> CmdResult<Vec<String>> {
+    let Ok(entries) = std::fs::read_dir(drafts_dir(&app, shelf.as_deref())?) else { return Ok(vec![]) };
     let mut files: Vec<(std::time::SystemTime, PathBuf)> = entries
         .filter_map(|e| e.ok())
         .map(|e| e.path())
@@ -525,8 +532,8 @@ fn list_drafts(app: AppHandle) -> CmdResult<Vec<String>> {
 }
 
 #[tauri::command]
-fn delete_draft(app: AppHandle, id: String) -> CmdResult<()> {
-    match std::fs::remove_file(draft_path(&app, &id)?) {
+fn delete_draft(app: AppHandle, id: String, shelf: Option<String>) -> CmdResult<()> {
+    match std::fs::remove_file(draft_path(&app, shelf.as_deref(), &id)?) {
         Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e.to_string()),
         _ => Ok(()),
     }

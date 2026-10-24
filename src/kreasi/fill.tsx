@@ -1,76 +1,19 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { open } from '@tauri-apps/plugin-dialog';
 import { ArrowLeft, ArrowRight, Folder, ImageOff, ImagePlus, Images, MousePointerClick, Sparkles, Star, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Switch, cx } from '../components/ui';
-import { api, thumbUrl, type Photo } from '../lib/api';
+import { thumbUrl } from '../lib/api';
 import { num } from '../lib/format';
 import { t, tj } from '../lib/i18n';
 import { useApp } from '../store';
 import { DocCanvas, useBox, useDocImages } from './canvas';
 import { slotShapes, formatLabel } from './kit';
-import { fits, placed, ranked, useKreasi, type Source, type SourcePhoto } from './store';
+import { filesSource, folderSource, sessionSource, useSourceThumbs } from './sources';
+import { fits, placed, ranked, useKreasi, type SourcePhoto } from './store';
 import { SHAPE_LABEL, ShapeIcon, Steps } from './ui';
 
 type Filter = 'pick' | 'five' | 'all';
-
-/** The open session as a photo source. */
-export function sessionSource(): Source | null {
-  const s = useApp.getState().session;
-  if (!s) return null;
-  return {
-    root: s.root,
-    name: s.name,
-    saveDir: s.root,
-    photos: s.photos.map((p) => ({
-      id: p.id,
-      name: p.name,
-      thumb: p.thumb,
-      status: p.status,
-      rating: p.rating,
-      group: p.group,
-      faces: p.faces?.map(({ x, y, w, h }) => ({ x, y, w, h })),
-    })),
-  };
-}
-
-const fileName = (p: Photo) => (p.raw ?? p.jpeg ?? '').split(/[\\/]/).pop() || p.stem;
-
-/** Any folder: its photos by name, thumbnails made as they are needed. */
-async function folderSource(): Promise<Source | null> {
-  const root = await open({ directory: true, title: t('Pilih folder foto') });
-  if (typeof root !== 'string') return null;
-  const photos = await api.scanPhotos(root);
-  return {
-    root,
-    name: root.split(/[\\/]/).pop() || root,
-    saveDir: root,
-    photos: photos.map((p) => ({ id: p.id, name: fileName(p), thumb: null })),
-  };
-}
-
-/** Photos picked one by one — the usual case: a template needs only a few. */
-async function filesSource(): Promise<Source | null> {
-  const picked = await open({
-    multiple: true,
-    title: t('Pilih foto##isi'),
-    filters: [{ name: t('Foto'), extensions: PHOTO_EXTS }],
-  });
-  const paths = Array.isArray(picked) ? picked : typeof picked === 'string' ? [picked] : [];
-  if (!paths.length) return null;
-  const got = await api.openFiles(paths);
-  return {
-    root: got.root,
-    name: t('{count} foto dipilih', { n: got.photos.length, count: num(got.photos.length) }),
-    saveDir: got.dir,
-    files: paths,
-    photos: got.photos.map((p) => ({ id: p.id, name: fileName(p), thumb: null })),
-  };
-}
-
-/** What the file picker offers: JPEG and the RAW kinds the scanner reads (src-tauri/src/scan.rs). */
-const PHOTO_EXTS = ['jpg', 'jpeg', 'cr3', 'cr2', 'crw', 'nef', 'nrw', 'arw', 'srf', 'sr2', 'raf', 'orf', 'rw2', 'dng', 'pef', 'srw', '3fr', 'iiq', 'x3f'];
 
 /** Layar 13 · Isi foto: the template's photo places, filled from a session or folder. */
 export function Fill() {
@@ -86,24 +29,7 @@ export function Fill() {
     if (!useKreasi.getState().source) setSource(sessionSource());
   }, [setSource]);
 
-  // Folder sources have no thumbnails yet: make them, a page at a time.
-  useEffect(() => {
-    if (!source || source.photos.every((p) => p.thumb)) return;
-    let alive = true;
-    (async () => {
-      const missing = source.photos.filter((p) => !p.thumb).map((p) => p.id);
-      for (let i = 0; i < missing.length && alive; i += 48) {
-        const got = await api.thumbnails(source.root, missing.slice(i, i + 48)).catch(() => ({}) as Record<number, string | null>);
-        if (!alive) return;
-        useKreasi.setState(({ source: s }) =>
-          s ? { source: { ...s, photos: s.photos.map((p) => (got[p.id] ? { ...p, thumb: got[p.id] } : p)) } } : {},
-        );
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [source?.root, source?.photos.length]);
+  useSourceThumbs(source);
 
   // Shapes are learned from thumbnails as they load, in batches.
   const pending = useRef(new Map<number, number>());

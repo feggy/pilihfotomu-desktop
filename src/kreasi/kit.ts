@@ -6,8 +6,11 @@
 
 import { convertFileSrc } from '@tauri-apps/api/core';
 
+import { api } from '../lib/api';
+import { t } from '../lib/i18n';
 import {
   BACKGROUND_PLACEHOLDER,
+  blankDoc,
   FORMATS,
   IMAGE_STICKER_PREFIX,
   emptyPhotoFile,
@@ -60,8 +63,73 @@ export interface Template {
   slides: number;
   /** `{"doc": CollageDoc}` as text; parsed on first use. */
   document: string;
+  /** One of the photographer's own (Template saya), saved on this computer. */
+  mine?: boolean;
+  /** Own templates: when saved, for the newest first. */
+  savedAt?: number;
 }
 
+// ── Starting from nothing ─────────────────────────────────────────
+
+const BLANK_PREFIX = 'kosong-';
+/** The canvases "Mulai dari kosong" offers. */
+export const BLANK_FORMATS: FormatId[] = ['story', 'feed', 'square', 'carousel'];
+
+/** An empty canvas of a format (a carousel starts with three slides), as a template. */
+export function blankTemplate(format: FormatId): Template {
+  return {
+    id: `${BLANK_PREFIX}${format}`,
+    name: t('Desain kosong'),
+    description: '',
+    category: 'lainnya',
+    format,
+    slides: format === 'carousel' ? 3 : 1,
+    document: JSON.stringify({ doc: blankDoc(format, 3) }),
+  };
+}
+export const isBlankId = (id: string) => id.startsWith(BLANK_PREFIX);
+
+// ── Template saya ─────────────────────────────────────────────────
+
+/** The photographer's own templates, newest first. */
+export async function loadMyTemplates(): Promise<Template[]> {
+  const raw = await api.listMyTemplates().catch(() => [] as string[]);
+  return (raw ?? []).flatMap((r) => {
+    try {
+      const tp = JSON.parse(r) as Template;
+      return tp.mine ? [tp] : [];
+    } catch {
+      return [];
+    }
+  });
+}
+
+/**
+ * Saves `doc` as one of the photographer's own templates: the design without
+ * its photos — the places stay, a background picture goes back to an empty
+ * place — so it can be filled again for the next client.
+ */
+export async function saveMyTemplate(name: string, doc: CollageDoc, category: TemplateCategory): Promise<Template> {
+  const kept: CollageDoc = {
+    ...doc,
+    // Each place keeps its look (shape, corners) without its photo.
+    slots: doc.slots.map((s, i) => s && { ...s, file: emptyPhotoFile(i + 1), zoom: 1, ox: 0, oy: 0, rotate: 0, flip: false }),
+    stickers: doc.stickers.map((s) => (photoIdOfSticker(s.sticker) != null ? { ...s, sticker: BACKGROUND_PLACEHOLDER } : s)),
+  };
+  const tp: Template = {
+    id: `t${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+    name: name.trim() || t('Template saya'),
+    description: '',
+    category,
+    format: doc.format,
+    slides: doc.slides,
+    document: JSON.stringify({ doc: kept }),
+    mine: true,
+    savedAt: Date.now(),
+  };
+  await api.saveMyTemplate(tp.id, JSON.stringify(tp));
+  return tp;
+}
 let templates: Promise<Template[]> | null = null;
 export const loadTemplates = () =>
   (templates ??= fetch('/kreasi/templates.json').then((r) => {
