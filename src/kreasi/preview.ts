@@ -5,7 +5,7 @@
  * rest of the session.
  */
 
-import { templateOf, type CollageDoc } from './engine/document';
+import { isPlaceholder, templateOf, type CollageDoc } from './engine/document';
 import { itemBounds } from './engine/bounds';
 import { drawCollage, frameOf, type DrawAssets } from './engine/render';
 import { fontFamilies, loadDocFonts } from './kit';
@@ -50,7 +50,9 @@ export function previewOf(key: string, doc: CollageDoc, width: number, numbered 
       canvas.height = Math.round(f.height * dpr);
       const ctx = canvas.getContext('2d')!;
       ctx.scale(dpr, dpr);
-      drawCollage(ctx, { width: f.width, doc, template: templateOf(doc), assets: emptyAssets(), editor: sceneEditor(numbered) });
+      // An empty background-picture place is the editor's grey box: not part of how the design looks.
+      const shown = { ...doc, stickers: doc.stickers.filter((st) => !isPlaceholder(st.sticker)) };
+      drawCollage(ctx, { width: f.width, doc: shown, template: templateOf(doc), assets: emptyAssets(), editor: sceneEditor(numbered) });
       // Let the window breathe between thumbnails.
       await new Promise((r) => setTimeout(r, 0));
       return canvas.toDataURL('image/jpeg', 0.86);

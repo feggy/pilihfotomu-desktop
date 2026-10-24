@@ -32,6 +32,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { cx } from '../components/ui';
 import { thumbUrl } from '../lib/api';
+import { fixed } from '../lib/format';
 import { t } from '../lib/i18n';
 import { duplicate, keyOf, nudge, patchSticker, patchText, remove, type Edit } from './actions';
 import { DocCanvas, useBox, useDocImages, type Box } from './canvas';
@@ -444,7 +445,7 @@ function Slider({ label, value, min, max, step, show, onChange, onDone }: { labe
 
 function Btn({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
   return (
-    <button type="button" onClick={onClick} className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg border border-line bg-panel-2 text-xs hover:bg-raised">
+    <button type="button" onClick={onClick} className="flex h-8 min-h-8 flex-1 items-center justify-center gap-1.5 rounded-lg border border-line bg-panel-2 text-xs hover:bg-raised">
       {children}
     </button>
   );
@@ -477,7 +478,7 @@ function PhotoInspector({
           </span>
         )}
       </div>
-      <Section title={t('Foto')}>
+      <Section title={t('Foto##latar')}>
         {photo ? (
           <div className="flex items-center gap-2.5">
             {photo.thumb && <img src={thumbUrl(photo.thumb)} alt="" className="h-12 w-[68px] rounded-md object-cover" />}
@@ -496,7 +497,7 @@ function PhotoInspector({
       {photo && slot && (
         <Section title={t('Posisi di tempatnya')}>
           <Slider label={t('Zoom')} value={slot.zoom} min={1} max={3} step={0.01} show={`${Math.round(slot.zoom * 100)}%`} onChange={(zoom) => onChange({ zoom }, true)} onDone={onCommit} />
-          <Slider label={t('Putar')} value={slot.rotate} min={-45} max={45} step={0.5} show={`${slot.rotate.toFixed(1).replace('.', ',')}°`} onChange={(rotate) => onChange({ rotate }, true)} onDone={onCommit} />
+          <Slider label={t('Putar')} value={slot.rotate} min={-45} max={45} step={0.5} show={`${fixed(slot.rotate, 1)}°`} onChange={(rotate) => onChange({ rotate }, true)} onDone={onCommit} />
           <div className="flex gap-2">
             {photo.faces?.length ? (
               <Btn onClick={() => onChange({ zoom: 1, ...facePan(photo, shape?.ratio ?? 1) })}>
@@ -561,7 +562,7 @@ function TextInspector({ layer, doc, onChange, onLive, onCommit }: { layer: Text
       <Section title={t('Huruf')}>
         <FontPicker value={layer.font} onChange={(font) => onChange({ font })} />
         <Slider label={t('Ukuran')} value={layer.size} min={0.015} max={0.3} step={0.001} show={`${Math.round(layer.size * 1080)} px`} onChange={(size) => onLive({ size })} onDone={onCommit} />
-        <Slider label={t('Jarak huruf')} value={layer.spacing} min={-0.05} max={0.6} step={0.01} show={layer.spacing.toFixed(2).replace('.', ',')} onChange={(spacing) => onLive({ spacing })} onDone={onCommit} />
+        <Slider label={t('Jarak huruf')} value={layer.spacing} min={-0.05} max={0.6} step={0.01} show={fixed(layer.spacing, 2)} onChange={(spacing) => onLive({ spacing })} onDone={onCommit} />
         <div className="flex gap-1.5">
           <IconToggle on={layer.weight >= 600} onClick={() => onChange({ weight: layer.weight >= 600 ? 400 : 700 })} label={t('Tebal')}>
             <Bold size={14} />

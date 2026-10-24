@@ -16,6 +16,9 @@ import { eyesClosed, smiling, type PhotoEntry, type Reason, type Status } from '
 import { locale, t } from './i18n';
 
 export const num = (n: number) => new Intl.NumberFormat(locale()).format(n);
+/** `n` with exactly `digits` decimals, in the language's own way (0,5 / 0.5). */
+export const fixed = (n: number, digits: number) =>
+  new Intl.NumberFormat(locale(), { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(n);
 
 export function bytes(n: number) {
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
