@@ -187,4 +187,5 @@ export default {
   'Foto diambil dari pratinjau 2048 px tiap foto. File asli tidak diubah.':
     'Photos come from each one’s 2048 px preview. Originals are not changed.',
   'Ekspor {format}': 'Export {format}',
+  'Slide {n}': 'Slide {n}',
 } as Record<string, string | [string, string]>;

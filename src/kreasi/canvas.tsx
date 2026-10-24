@@ -2,6 +2,7 @@ import { convertFileSrc } from '@tauri-apps/api/core';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { api } from '../lib/api';
+import { t } from '../lib/i18n';
 import {
   isFreeLayout,
   isLayerHidden,
@@ -457,6 +458,19 @@ export function DocCanvas({
         className={`pointer-events-none absolute inset-x-0 h-px bg-[#3b9cff] transition-opacity ${guides.showY ? 'opacity-100 duration-0' : 'opacity-0 duration-300'}`}
         style={{ top: `${guides.y * 100}%`, transform: guides.y >= 1 ? 'translateY(-100%)' : undefined }}
       />
+      {/* A carousel's slides, numbered above the canvas where each one starts. */}
+      {outlines &&
+        doc.slides > 1 &&
+        Array.from({ length: doc.slides }, (_, i) => (
+          <span
+            key={i}
+            aria-hidden
+            className="pointer-events-none absolute -top-6 text-center text-[11px] text-faint"
+            style={{ left: `${(i / doc.slides) * 100}%`, width: `${100 / doc.slides}%` }}
+          >
+            {t('Slide {n}', { n: i + 1 })}
+          </span>
+        ))}
       {safe && <SafeZones doc={doc} />}
       {dropAt != null && <Outline box={boxOf({ kind: 'cell', index: dropAt })} drop />}
       {/* Hover: a thin outline on what the pointer is over. Selection: a firm one with handles. */}
@@ -475,7 +489,7 @@ export function DocCanvas({
             ))}
           {canHandle && (
             <span
-              title="Putar"
+              title={t('Putar')}
               onPointerDown={(e) => onHandleDown(e, 'turn')}
               onPointerMove={onPointerMove}
               onPointerUp={onPointerUp}
