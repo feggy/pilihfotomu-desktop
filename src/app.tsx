@@ -16,6 +16,27 @@ import { Setup } from './screens/setup';
 import { lang, syncNativeLang, t, tRust, useLang } from './lib/i18n';
 import { useApp, type Screen } from './store';
 
+/**
+ * Where ⌘Z undoes typing: a text box. A slider, colour or checkbox that kept
+ * focus after a click must not swallow it.
+ */
+function isTyping(el: Element | null) {
+  return (
+    el instanceof HTMLTextAreaElement ||
+    (el instanceof HTMLInputElement && ['text', 'search', 'number', 'email', 'url', 'password', ''].includes(el.type)) ||
+    (el instanceof HTMLElement && el.isContentEditable)
+  );
+}
+
+let lastKeyUndo = 0;
+
+/** Undo / redo for whatever the open screen keeps a history of. */
+function undoRedo(which: 'undo' | 'redo') {
+  const current = useApp.getState().screen;
+  if (current.name === 'review' || current.name === 'compare') useApp.getState()[which]();
+  else if (current.name === 'kreasi') useKreasi.getState()[which]();
+}
+
 export function App() {
   const screen = useApp((s) => s.screen);
   const session = useApp((s) => s.session);
@@ -44,24 +65,32 @@ export function App() {
     };
   }, []);
 
+  // ⌘Z / ⇧⌘Z (Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y) caught in the page first: on
+  // macOS the web view answers ⌘Z itself (its own typing history) before the
+  // menu bar sees it, so the menu item alone can't be relied on. In a text
+  // field the keys stay the field's.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.altKey || isTyping(document.activeElement)) return;
+      const k = e.key.toLowerCase();
+      const which = k === 'z' ? (e.shiftKey ? 'redo' : 'undo') : k === 'y' && !e.shiftKey ? 'redo' : null;
+      if (!which) return;
+      e.preventDefault();
+      lastKeyUndo = Date.now();
+      undoRedo(which);
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, []);
+
   // Native menu bar items (src-tauri/src/menu.rs).
   useEffect(() => {
     const off = listen<string>('menu', ({ payload }) => {
       const { screen: current, session: open, go: goTo } = useApp.getState();
       if (payload === 'undo' || payload === 'redo') {
-        // Only where text is typed does ⌘Z undo typing; a slider, colour or
-        // checkbox that kept focus after a click must not swallow it.
-        const field = document.activeElement;
-        const typing =
-          field instanceof HTMLTextAreaElement ||
-          (field instanceof HTMLInputElement && ['text', 'search', 'number', 'email', 'url', 'password', ''].includes(field.type));
-        if (typing) {
-          document.execCommand(payload);
-        } else if (current.name === 'review' || current.name === 'compare') {
-          useApp.getState()[payload]();
-        } else if (current.name === 'kreasi') {
-          useKreasi.getState()[payload]();
-        }
+        if (isTyping(document.activeElement)) document.execCommand(payload);
+        // The same key press already handled in the page (some systems send both).
+        else if (Date.now() - lastKeyUndo > 300) undoRedo(payload);
         return;
       }
       if (current.name === 'progress') return; // don't walk away from a running analysis

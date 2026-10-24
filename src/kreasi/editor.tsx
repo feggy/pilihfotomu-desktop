@@ -114,7 +114,7 @@ export function Editor() {
     return () => el.removeEventListener('wheel', onWheel);
   });
 
-  // Keyboard: Delete, ⌘D, ⌘T, arrows, Enter, Esc, ⌘= / ⌘− / ⌘0, Ctrl+Y. ⌘Z / ⇧⌘Z come from the menu bar.
+  // Keyboard: Delete, ⌘D, ⌘T, arrows, Enter, Esc, ⌘= / ⌘− / ⌘0. Undo / redo keys: app.tsx.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target;
@@ -130,7 +130,6 @@ export function Editor() {
       if (mod && (e.key === '=' || e.key === '+')) return (e.preventDefault(), zoomBy(1.25));
       if (mod && e.key === '-') return (e.preventDefault(), zoomBy(0.8));
       if (mod && e.key === '0') return (e.preventDefault(), setView(1));
-      if (mod && !e.shiftKey && e.key.toLowerCase() === 'y') return (e.preventDefault(), redo());
       if (cropping != null && (e.key === 'Escape' || e.key === 'Enter')) return (e.preventDefault(), setCropping(null));
       if (e.key === 'Escape') return select(null);
       if (mod && e.key.toLowerCase() === 't') {
