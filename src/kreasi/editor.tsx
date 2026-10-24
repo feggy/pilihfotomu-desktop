@@ -63,6 +63,8 @@ export function Editor() {
   const [replacing, setReplacing] = useState<number | null>(null);
   // "Atur ukuran" (⌘T, double-click): the photo place whose whole picture is out to drag and resize.
   const [cropping, setCropping] = useState<number | null>(null);
+  // The layer row under the pointer: outlined on the canvas as if hovered there.
+  const [layerHover, setLayerHover] = useState<Selection>(null);
   if (cropping != null && (selection?.kind !== 'cell' || selection.index !== cropping || !doc?.slots[cropping])) setCropping(null);
   // Picking something else closes the change being made to the last one (one undo step).
   const select = (s: Selection) => (commit(), setSelection(s), setEditingText(null));
@@ -281,7 +283,7 @@ export function Editor() {
           ))}
         </nav>
         <aside className="flex w-64 shrink-0 flex-col gap-1 overflow-y-auto border-r border-line-soft bg-panel p-3.5">
-          {panel === 'lapisan' && <LayersPanel doc={doc} selection={selection} images={images} onSelect={select} edit={edit} />}
+          {panel === 'lapisan' && <LayersPanel doc={doc} selection={selection} images={images} onSelect={select} onHover={setLayerHover} edit={edit} />}
           {panel === 'teks' && <TextPanel onAdd={added} />}
           {panel === 'elemen' && <ElementsPanel onAdd={added} />}
           {panel === 'latar' && <BackgroundPanel doc={doc} images={images} edit={edit} />}
@@ -303,6 +305,7 @@ export function Editor() {
                   editingText={editingText}
                   overlay={quickBar}
                   cropping={cropping}
+                  hovered={panel === 'lapisan' ? layerHover : null}
                   handlers={{
                     onSelect: select,
                     onCropCell: (i) => doc.slots[i] && (select({ kind: 'cell', index: i }), setCropping(i)),

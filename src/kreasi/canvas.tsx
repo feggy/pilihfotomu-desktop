@@ -5,6 +5,7 @@ import { api } from '../lib/api';
 import { t } from '../lib/i18n';
 import {
   isFreeLayout,
+  isImageSticker,
   isLayerHidden,
   isLayerLocked,
   layerKeys,
@@ -13,10 +14,11 @@ import {
   templateOf,
   textLayerKey,
   type CollageDoc,
+  type StickerLayer,
 } from './engine/document';
 import { itemBounds } from './engine/bounds';
 import { safeArea } from './engine/instagram';
-import { cellLayouts, drawCollage, frameOf, hitCell, photoPlacement, placeImage, stickerBox, textBox, type Selection } from './engine/render';
+import { cellLayouts, drawCollage, drawSticker, frameOf, hitCell, photoPlacement, placeImage, stickerBox, textBox, type Frame2D, type Selection } from './engine/render';
 import { fontFamilies, loadDocFonts, loadLocalImage, photoIdOf } from './kit';
 import { emptyAssets } from './preview';
 
@@ -181,6 +183,7 @@ export function DocCanvas({
   overlay,
   safe,
   cropping,
+  hovered,
   handlers = {},
 }: {
   doc: CollageDoc;
@@ -199,6 +202,8 @@ export function DocCanvas({
   safe?: boolean;
   /** "Atur ukuran": this photo place shows its whole picture, to drag and resize inside the place. */
   cropping?: number | null;
+  /** Outlined as hovered from outside the canvas (the layer list). */
+  hovered?: Selection;
   handlers?: CanvasHandlers;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -297,35 +302,48 @@ export function DocCanvas({
     const lx = dx * Math.cos(a) - dy * Math.sin(a), ly = dx * Math.sin(a) + dy * Math.cos(a);
     return Math.abs(lx) <= b.w / 2 && Math.abs(ly) <= b.h / 2;
   };
-  /** Topmost visible text or element at (x, y), then a photo place. */
-  const pick = (x: number, y: number): Selection => {
+  /**
+   * Everything under (x, y), top first: texts by their box, elements by their
+   * drawn shape (a ring's empty middle, a sticker's clear corners let clicks
+   * through), then the photo place.
+   */
+  const pickAll = (x: number, y: number): NonNullable<Selection>[] => {
+    const hits: NonNullable<Selection>[] = [];
     if (outlines) {
-      const keys = layerKeys(doc).reverse();
-      for (const key of keys) {
+      for (const key of layerKeys(doc).reverse()) {
         if (isLayerHidden(doc, key)) continue;
-        const sel: Selection = key.startsWith('text:') ? { kind: 'text', id: key.slice(5) } : key.startsWith('sticker:') ? { kind: 'sticker', id: key.slice(8) } : null;
-        const b = sel && boxOf(sel);
-        if (sel && b && inside(b, x, y)) return sel;
+        if (key.startsWith('text:')) {
+          const sel = { kind: 'text', id: key.slice(5) } as const;
+          const b = boxOf(sel);
+          if (b && inside(b, x, y)) hits.push(sel);
+        } else if (key.startsWith('sticker:')) {
+          const st = doc.stickers.find((s) => s.id === key.slice(8));
+          const b = st && boxOf({ kind: 'sticker', id: st.id });
+          if (st && b && inside(b, x, y) && paintedAt(st, f, x, y)) hits.push({ kind: 'sticker', id: st.id });
+        }
       }
     } else {
       const ctx = ref.current!.getContext('2d')!;
       for (let i = doc.texts.length - 1; i >= 0; i--) {
         const tx = doc.texts[i]!;
         const b = textBox(ctx, tx, f, fam);
-        if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) return { kind: 'text', id: tx.id };
+        if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) hits.push({ kind: 'text', id: tx.id });
       }
     }
     const layouts = cellLayouts(templateOf(doc), f, doc.style, doc.slots);
     const i = hitCell(layouts, x, y);
-    return i >= 0 ? { kind: 'cell', index: i } : null;
+    if (i >= 0) hits.push({ kind: 'cell', index: i });
+    return hits;
   };
+  /** Topmost visible text or element at (x, y), then a photo place. */
+  const pick = (x: number, y: number): Selection => pickAll(x, y)[0] ?? null;
   const keyOfItem = (sel: Item) => (sel.kind === 'text' ? textLayerKey(sel.id) : stickerLayerKey(sel.id));
   const itemOf = (sel: Item) => (sel.kind === 'text' ? doc.texts.find((t) => t.id === sel.id) : doc.stickers.find((x) => x.id === sel.id));
 
   // ── Dragging ──────────────────────────────────────────────────
   type Drag =
-    | { kind: 'pan'; index: number; x: number; y: number; ox: number; oy: number; overX: number; overY: number; moved: boolean }
-    | { kind: 'move'; sel: Item; x: number; y: number; ix: number; iy: number; snap: SnapInfo; moved: boolean }
+    | { kind: 'pan'; index: number; x: number; y: number; ox: number; oy: number; overX: number; overY: number; moved: boolean; next?: Selection }
+    | { kind: 'move'; sel: Item; x: number; y: number; ix: number; iy: number; snap: SnapInfo; moved: boolean; next: Selection }
     | { kind: 'resize'; sel: Item; cx: number; cy: number; d0: number; size0: number }
     | { kind: 'turn'; sel: Item; cx: number; cy: number; a0: number; r0: number }
     | { kind: 'zoom'; index: number; cx: number; cy: number; d0: number; zoom0: number };
@@ -338,7 +356,12 @@ export function DocCanvas({
   const start = (d: Drag, e: React.PointerEvent) => {
     drag.current = d;
     setDragging(true);
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    // A pointer already gone (lifted during a slow frame) can't be captured; the drag still works.
+    try {
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    } catch {
+      /* nothing to hold */
+    }
   };
 
   const onPointerDown = (e: React.PointerEvent) => {
@@ -352,20 +375,25 @@ export function DocCanvas({
       }
       handlers.onEndCrop?.();
     }
-    const s = pick(x, y);
+    // On what is already selected: a drag moves it (even under something
+    // else); a click without moving reaches the layer under it, round and round.
+    const hits = pickAll(x, y);
+    const was = hits.findIndex((h) => sameSel(h, selection));
+    const s = was >= 0 ? hits[was]! : (hits[0] ?? null);
+    const next = was >= 0 && hits.length > 1 ? hits[(was + 1) % hits.length]! : null;
     handlers.onSelect?.(s);
     if (!s) return;
     if (s.kind === 'text' || s.kind === 'sticker') {
-      if (isLayerLocked(doc, keyOfItem(s))) return;
+      if (isLayerLocked(doc, keyOfItem(s))) return next && handlers.onSelect?.(next);
       const it = itemOf(s)!;
-      start({ kind: 'move', sel: s, x, y, ix: it.x, iy: it.y, snap: snapInfo(doc, f, ref.current!.getContext('2d')!, keyOfItem(s)), moved: false }, e);
+      start({ kind: 'move', sel: s, x, y, ix: it.x, iy: it.y, snap: snapInfo(doc, f, ref.current!.getContext('2d')!, keyOfItem(s)), moved: false, next }, e);
     } else if (s.kind === 'cell') {
       const slot = doc.slots[s.index];
       const img = slot && images.get(slot.file.fileId);
-      if (!slot || !img) return;
+      if (!slot || !img) return next && handlers.onSelect?.(next);
       const layout = cellLayouts(templateOf(doc), f, doc.style, doc.slots)[s.index]!;
       const p = placeImage(img, layout.photo, slot);
-      start({ kind: 'pan', index: s.index, x, y, ox: slot.ox, oy: slot.oy, overX: p.overX, overY: p.overY, moved: false }, e);
+      start({ kind: 'pan', index: s.index, x, y, ox: slot.ox, oy: slot.oy, overX: p.overX, overY: p.overY, moved: false, next }, e);
     }
   };
 
@@ -431,6 +459,7 @@ export function DocCanvas({
   const onPointerUp = () => {
     const d = drag.current;
     if (d && (d.kind === 'resize' || d.kind === 'turn' || d.kind === 'zoom' || d.moved)) handlers.onCommit?.();
+    else if (d && (d.kind === 'move' || d.kind === 'pan') && d.next) handlers.onSelect?.(d.next);
     drag.current = null;
     setDragging(false);
     setGuides((g) => ({ ...g, showX: false, showY: false }));
@@ -553,7 +582,7 @@ export function DocCanvas({
       {safe && <SafeZones doc={doc} />}
       {dropAt != null && <Outline box={boxOf({ kind: 'cell', index: dropAt })} drop />}
       {/* Hover: a thin outline on what the pointer is over. Selection: a firm one with handles. */}
-      {outlines && !dragging && !sameSel(hover, selection) && <Outline box={boxOf(hover)} />}
+      {outlines && !dragging && !sameSel(hovered ?? hover, selection) && <Outline box={boxOf(hovered ?? hover)} />}
       {selBox && (
         <Outline box={selBox} selected>
           {canHandle &&
@@ -676,6 +705,43 @@ function Outline({ box, selected, drop, children }: { box: Box | null; selected?
 }
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+
+/** Within this many screen pixels of an element's paint, a click still takes it (thin lines). */
+const HIT_SLOP = 4;
+const masks = new Map<string, { data: Uint8ClampedArray; w: number; h: number; k: number }>();
+
+/**
+ * Whether element `st` paints anything near (x, y): drawn alone, small, into a
+ * mask kept until it changes — so a click in a ring's empty middle or a
+ * sticker's clear corner goes through to what is under it.
+ */
+function paintedAt(st: StickerLayer, f: Frame2D, x: number, y: number) {
+  // An uploaded picture has no shape to go by here: its box counts.
+  if (isImageSticker(st.sticker)) return true;
+  const key = `${JSON.stringify(st)}@${Math.round(f.width)}x${Math.round(f.height)}`;
+  let m = masks.get(key);
+  if (!m) {
+    const k = Math.min(1, 600 / Math.max(f.width, f.height));
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(f.width * k));
+    c.height = Math.max(1, Math.round(f.height * k));
+    const ctx = c.getContext('2d', { willReadFrequently: true })!;
+    ctx.scale(k, k);
+    // Faint or shadowed, it still counts where it is drawn.
+    drawSticker(ctx, { ...st, opacity: 1, shadow: undefined }, f, new Map());
+    m = { data: ctx.getImageData(0, 0, c.width, c.height).data, w: c.width, h: c.height, k };
+    if (masks.size > 200) masks.clear();
+    masks.set(key, m);
+  }
+  const r = Math.max(1, Math.round(HIT_SLOP * m.k));
+  const cx = Math.round(x * m.k), cy = Math.round(y * m.k);
+  for (let dy = -r; dy <= r; dy++)
+    for (let dx = -r; dx <= r; dx++) {
+      const px = cx + dx, py = cy + dy;
+      if (px >= 0 && py >= 0 && px < m.w && py < m.h && m.data[(py * m.w + px) * 4 + 3]! > 24) return true;
+    }
+  return false;
+}
 
 /** Size of an element, kept up to date. */
 export function useBox<T extends HTMLElement>() {

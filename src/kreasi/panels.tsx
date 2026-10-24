@@ -71,12 +71,15 @@ export function LayersPanel({
   selection,
   images,
   onSelect,
+  onHover,
   edit,
 }: {
   doc: CollageDoc;
   selection: Selection;
   images: Map<string, HTMLImageElement>;
   onSelect: (s: Selection) => void;
+  /** The row under the pointer, to outline its layer on the canvas. */
+  onHover: (s: Selection) => void;
   edit: (fn: Edit) => void;
 }) {
   // Top of the stack first, as in every design app; photo places at the bottom.
@@ -91,6 +94,8 @@ export function LayersPanel({
         key={key}
         type="button"
         onClick={() => onSelect({ kind: 'cell', index: i })}
+        onPointerEnter={() => onHover({ kind: 'cell', index: i })}
+        onPointerLeave={() => onHover(null)}
         className={cx('flex h-9 shrink-0 items-center gap-2.5 rounded-lg px-2 text-left', on ? 'bg-raised ring-1 ring-gold' : 'hover:bg-panel-2')}
       >
         <span className="flex w-6 shrink-0 justify-center">
@@ -120,6 +125,8 @@ export function LayersPanel({
           <div
             key={key}
             className={cx('group flex h-9 shrink-0 items-center gap-2 rounded-lg px-2', on ? 'bg-raised ring-1 ring-gold' : 'hover:bg-panel-2', hidden && 'opacity-50')}
+            onPointerEnter={() => onHover(sel)}
+            onPointerLeave={() => onHover(null)}
           >
             <button type="button" onClick={() => onSelect(sel)} className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
               <span className="flex w-6 shrink-0 justify-center">{isText ? <Type size={14} className="text-faint" /> : <Shapes size={14} className="text-faint" />}</span>

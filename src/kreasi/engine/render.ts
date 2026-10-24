@@ -1120,7 +1120,7 @@ function gradientPattern(
   return { fill: grad, matrix: null };
 }
 
-function drawSticker(
+export function drawSticker(
   ctx: CanvasRenderingContext2D,
   layer: StickerLayer,
   f: Frame2D,
