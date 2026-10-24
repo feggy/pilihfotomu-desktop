@@ -161,6 +161,13 @@ export function Editor() {
   // A press on the stage around the canvas starts a selection box there too.
   const bandRef = useRef<((e: { clientX: number; clientY: number; shiftKey: boolean }) => void) | null>(null);
 
+  // Edit › Urungkan / Ulangi from the menu bar.
+  useEffect(() => {
+    const go = (e: Event) => ((e as CustomEvent<'undo' | 'redo'>).detail === 'redo' ? redo() : undo());
+    window.addEventListener('pfm:undo', go);
+    return () => window.removeEventListener('pfm:undo', go);
+  }, [undo, redo]);
+
   // ⌘E from the menu bar: this design's export, not the session's.
   useEffect(() => {
     const go = () => setExporting(true);
@@ -226,6 +233,13 @@ export function Editor() {
       if (mod && e.key === '0') return (e.preventDefault(), setView(1));
       if (cropping != null && (e.key === 'Escape' || e.key === 'Enter')) return (e.preventDefault(), setCropping(null));
       if (e.key === 'Escape') return select(null);
+      // ⌘Z / ⇧⌘Z / Ctrl+Y: this design's history (app.tsx leaves them to the editor).
+      if (mod && !e.altKey && (e.key.toLowerCase() === 'z' || (e.key.toLowerCase() === 'y' && !e.shiftKey))) {
+        e.preventDefault();
+        if (e.key.toLowerCase() === 'z' && !e.shiftKey) undo();
+        else redo();
+        return;
+      }
       // ] / [ one layer up / down (⌘ too); with Shift all the way. By key position, whatever the keyboard layout types.
       if (!e.altKey && (e.code === 'BracketRight' || e.code === 'BracketLeft')) {
         e.preventDefault();

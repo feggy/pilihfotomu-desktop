@@ -4,7 +4,6 @@ import { TriangleAlert, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { KreasiScreen } from './kreasi/screen';
-import { useKreasi } from './kreasi/store';
 import { ClientPicks } from './screens/client-picks';
 import { EditPhotos } from './screens/edit-photos';
 import { Compare } from './screens/compare';
@@ -33,7 +32,6 @@ function isTyping(el: Element | null) {
 function undoRedo(which: 'undo' | 'redo') {
   const current = useApp.getState().screen;
   if (current.name === 'review' || current.name === 'compare') useApp.getState()[which]();
-  else if (current.name === 'kreasi') useKreasi.getState()[which]();
 }
 
 export function App() {
@@ -79,9 +77,14 @@ export function App() {
       }
       const which = k === 'z' ? (e.shiftKey ? 'redo' : 'undo') : k === 'y' && !e.shiftKey ? 'redo' : null;
       if (!which) return;
-      e.preventDefault();
-      if (typing) document.execCommand(which);
-      else undoRedo(which);
+      if (typing) {
+        e.preventDefault();
+        document.execCommand(which);
+      } else if (useApp.getState().screen.name !== 'kreasi') {
+        // Buat konten's editor handles its own (editor.tsx), next to its other keys.
+        e.preventDefault();
+        undoRedo(which);
+      }
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
@@ -93,6 +96,7 @@ export function App() {
       const { screen: current, session: open, go: goTo } = useApp.getState();
       if (payload === 'undo' || payload === 'redo') {
         if (isTyping(document.activeElement)) document.execCommand(payload);
+        else if (current.name === 'kreasi') window.dispatchEvent(new CustomEvent('pfm:undo', { detail: payload }));
         else undoRedo(payload);
         return;
       }
