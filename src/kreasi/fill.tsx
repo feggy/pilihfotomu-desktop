@@ -257,7 +257,8 @@ export function Fill() {
           </label>
         </div>
 
-        <div className="-mx-1 min-h-0 flex-1 overflow-y-auto px-1 pb-8">
+        {/* Room on every side for the selected photo's ring, which the scroll area would clip. */}
+        <div className="-mx-1 -mt-1 min-h-0 flex-1 overflow-y-auto px-1 pt-1 pb-8">
           {!source ? (
             <div className="flex flex-col items-center gap-3 py-20 text-center text-sm text-muted">
               <ImagePlus size={28} className="text-faint" />
