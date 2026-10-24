@@ -129,7 +129,6 @@ export function Gallery({ onBack }: { onBack: () => void }) {
   }, [all, tab, category, query, photoFilter]);
 
   const preview = shown.find((tp) => tp.id === picked) ?? null;
-  const blankFormats = BLANK_FORMATS.filter((f) => tab === 'semua' || tab === f);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -138,7 +137,7 @@ export function Gallery({ onBack }: { onBack: () => void }) {
           <button type="button" onClick={onBack} aria-label={t('Kembali')} className="text-muted hover:text-fg">
             <ArrowLeft size={18} />
           </button>
-          <h1 className="text-[20px] font-semibold">{t('Pilih template')}</h1>
+          <h1 className="text-[20px] font-semibold">{t('Mulai desain')}</h1>
         </div>
         <Steps at={1} />
       </div>
@@ -186,23 +185,33 @@ export function Gallery({ onBack }: { onBack: () => void }) {
         </nav>
 
         <section className="flex min-w-0 flex-1 flex-col gap-6 overflow-y-auto px-6 pt-5 pb-10 lg:px-8">
-          <div className="flex shrink-0 flex-wrap items-center gap-3">
-            <label className="flex h-10 min-w-0 flex-1 basis-72 items-center gap-2 rounded-[10px] border border-line bg-panel px-3 focus-within:border-gold">
-              <Search size={15} className="shrink-0 text-faint" />
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder={t('Cari template…')}
-                className="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-faint"
-              />
-              {query && (
-                <button type="button" onClick={() => setQuery('')} aria-label={t('Hapus')}>
-                  <X size={14} className="text-faint" />
-                </button>
-              )}
-            </label>
-            <NewDesignButton formats={BLANK_FORMATS} onStart={(f) => start(blankTemplate(f))} />
-          </div>
+          {/* First: a design of one's own — the way to a template of one's own too. */}
+          {category !== 'saya' && (
+            <section className="flex shrink-0 flex-col gap-3">
+              <div className="flex flex-col gap-0.5">
+                <h2 className="text-[17px] font-semibold">{t('Buat desain sendiri')}</h2>
+                <p className="text-xs text-muted">{t('Mulai dari kanvas kosong: susun foto, teks, dan elemen sendiri, lalu simpan jadi template saya.')}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {BLANK_FORMATS.map((f) => (
+                  <button
+                    key={f}
+                    type="button"
+                    onClick={() => start(blankTemplate(f))}
+                    className="group flex h-[132px] flex-col items-center justify-center gap-3 rounded-xl border border-line bg-panel text-muted transition-colors hover:border-gold hover:bg-gold/[0.06] hover:text-fg"
+                  >
+                    <span className="flex items-center justify-center rounded-[4px] border-[1.5px] border-current" style={blankShape(f, 1.3)}>
+                      <Plus size={16} className="text-gold-text" />
+                    </span>
+                    <span className="flex flex-col items-center gap-0.5">
+                      <span className="text-[13px] font-semibold text-fg">{t(TABS.find((x) => x.id === f)?.label ?? '')}</span>
+                      <span className="text-[11px] text-faint">{t('Kanvas kosong')}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
 
           {drafts.length > 0 && !query && (
             <section className="flex flex-col gap-2.5">
@@ -235,12 +244,27 @@ export function Gallery({ onBack }: { onBack: () => void }) {
           )}
 
           <section className="flex flex-col gap-3">
-            <h2 className="text-[13px] font-semibold">
-              {category === 'saya' ? t('Template saya') : t('Template')} <span className="font-normal text-faint">{num(shown.length)}</span>
-            </h2>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-[17px] font-semibold">
+                {category === 'saya' ? t('Template saya') : t('Atau pakai template')} <span className="text-[13px] font-normal text-faint">{num(shown.length)}</span>
+              </h2>
+              <label className="flex h-9 w-64 items-center gap-2 rounded-[10px] border border-line bg-panel px-3 focus-within:border-gold">
+                <Search size={14} className="shrink-0 text-faint" />
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder={t('Cari template…')}
+                  className="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-faint"
+                />
+                {query && (
+                  <button type="button" onClick={() => setQuery('')} aria-label={t('Hapus')}>
+                    <X size={14} className="text-faint" />
+                  </button>
+                )}
+              </label>
+            </div>
             {error && <p className="text-sm text-reject">{error}</p>}
             <div className="grid grid-cols-[repeat(auto-fill,minmax(176px,1fr))] gap-5">
-              {!query && category !== 'saya' && blankFormats.length > 0 && <BlankCard formats={blankFormats} onStart={(f) => start(blankTemplate(f))} />}
               {shown.map((tp) => {
                 const n = countOf(tp);
                 return (
@@ -329,43 +353,6 @@ function FilterItem({ on, onClick, icon, count, children }: { on: boolean; onCli
 function FormatGlyph({ format }: { format: FormatTab }) {
   const size = format === 'semua' ? { width: 12, height: 12 } : blankShape(format, 0.5);
   return <span className={cx('block rounded-[2px] border-[1.5px] border-current', format === 'semua' && 'border-dashed')} style={size} />;
-}
-
-/** "Kanvas kosong": the first card, an empty canvas of each format shown. */
-function BlankCard({ formats, onStart }: { formats: FormatId[]; onStart: (f: FormatId) => void }) {
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="flex aspect-[200/248] w-full flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-line bg-panel p-3">
-        {formats.length === 1 ? (
-          <button type="button" onClick={() => onStart(formats[0]!)} className="flex size-full flex-col items-center justify-center gap-3 rounded-lg text-muted hover:bg-panel-2 hover:text-fg">
-            <span className="flex items-center justify-center rounded-[4px] border-[1.5px] border-current" style={blankShape(formats[0]!, 1.6)}>
-              <Plus size={18} />
-            </span>
-          </button>
-        ) : (
-          <div className="grid size-full grid-cols-2 gap-2">
-            {formats.map((f) => (
-              <button
-                key={f}
-                type="button"
-                onClick={() => onStart(f)}
-                className="flex flex-col items-center justify-center gap-1.5 rounded-lg bg-panel-2 text-muted hover:text-fg hover:ring-1 hover:ring-gold"
-              >
-                <span className="flex items-center justify-center rounded-[3px] border-[1.5px] border-current" style={blankShape(f)}>
-                  <Plus size={11} />
-                </span>
-                <span className="text-[10px] leading-tight font-medium">{t(TABS.find((x) => x.id === f)?.label ?? '')}</span>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-      <span className="flex flex-col gap-0.5 px-0.5">
-        <span className="truncate text-[13px] font-medium">{t('Buat desain sendiri')}</span>
-        <span className="text-[11px] text-faint">{t('Mulai dari kanvas kosong, simpan jadi template saya')}</span>
-      </span>
-    </div>
-  );
 }
 
 /** "Buat desain sendiri": the canvases to start from, in a small menu. */

@@ -242,4 +242,7 @@ export default {
   'Belum ada template sendiri': 'No templates of your own yet',
   'Buat desain dari kanvas kosong, atau ubah template mana pun, lalu klik Simpan template di editor. Template itu muncul di sini untuk dipakai lagi dengan foto lain.':
     'Design from a blank canvas, or change any template, then click Save template in the editor. It shows up here to use again with other photos.',
+  'Mulai dari kanvas kosong: susun foto, teks, dan elemen sendiri, lalu simpan jadi template saya.': 'Start from a blank canvas: arrange photos, text and elements yourself, then save it as your template.',
+  'Atau pakai template': 'Or use a template',
+  'Mulai desain': 'Start a design',
 } as Record<string, string | [string, string]>;
