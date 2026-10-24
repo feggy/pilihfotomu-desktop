@@ -72,8 +72,9 @@ function ModeCard({
       type="button"
       onClick={onClick}
       className={cx(
-        'group flex flex-col gap-3.5 rounded-[18px] border bg-panel p-3 text-left transition-colors',
-        highlight ? 'border-2 border-gold bg-raised' : primary ? 'border-gold/70 hover:border-gold' : 'border-line-soft hover:border-line',
+        'group flex flex-col gap-3.5 rounded-[18px] border bg-panel p-3 text-left transition-colors outline-none',
+        // Gold only while pointed at (or a folder is dragged over): a click opens the mode, nothing stays selected.
+        highlight ? 'border-2 border-gold bg-raised' : 'border-line-soft hover:border-gold/70 focus-visible:border-gold/70',
       )}
     >
       <img src={preview} alt="" className="aspect-[296/196] w-full rounded-xl object-cover" draggable={false} />
