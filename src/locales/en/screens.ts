@@ -147,4 +147,6 @@ export default {
   'Masih belum ditemukan. Pastikan drive-nya sudah tersambung.': 'Still not found. Make sure the drive is connected.',
   'Pilih beberapa (atau seret kotak di area kosong)': 'Select several (or drag a box on empty space)',
   'Pilih semua': 'Select all',
+  'Naikkan / turunkan lapisan': 'Bring forward / send backward',
+  'Paling atas / paling bawah': 'Bring to front / send to back',
 } as Record<string, string | [string, string]>;

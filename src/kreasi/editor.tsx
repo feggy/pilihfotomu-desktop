@@ -49,6 +49,7 @@ import {
   keyOf,
   nudge,
   nudgeMany,
+  order,
   patchFrame,
   patchSticker,
   patchText,
@@ -59,7 +60,7 @@ import {
   type Edit,
 } from './actions';
 import { DocCanvas, sameSel, useBox, useDocImages, type Box, type Multi } from './canvas';
-import { formatRatio, isFreeLayout, isLayerLocked, isPlaceholder, templateOf, type CollageDoc, type PhotoMask, type StickerLayer, type TextLayer } from './engine/document';
+import { formatRatio, isFreeLayout, isLayerLocked, isPlaceholder, layerKeys, templateOf, type LayerMove, type CollageDoc, type PhotoMask, type StickerLayer, type TextLayer } from './engine/document';
 import { FONT_CATEGORIES, FONTS } from './engine/font-catalog';
 import { itemBounds } from './engine/bounds';
 import { frameOf, type Selection } from './engine/render';
@@ -173,6 +174,20 @@ export function Editor() {
       if (mod && e.key === '0') return (e.preventDefault(), setView(1));
       if (cropping != null && (e.key === 'Escape' || e.key === 'Enter')) return (e.preventDefault(), setCropping(null));
       if (e.key === 'Escape') return select(null);
+      // ⌘] / ⌘[ one layer up / down; with Shift all the way (by key position, whatever the layout types).
+      if (mod && (e.code === 'BracketRight' || e.code === 'BracketLeft')) {
+        e.preventDefault();
+        const up = e.code === 'BracketRight';
+        const to: LayerMove = e.shiftKey ? (up ? 'front' : 'back') : up ? 'forward' : 'backward';
+        const picked = multi.length > 1 ? multi : selection ? [selection] : [];
+        const keys = picked.map((x) => keyOf(x, d)).filter((k): k is string => !!k && !isLayerLocked(d, k));
+        // Several keep their order among themselves: the one nearest where they go moves first.
+        const at = layerKeys(d);
+        const first = to === 'forward' || to === 'back' ? -1 : 1;
+        keys.sort((a, b) => first * (at.indexOf(a) - at.indexOf(b)));
+        if (keys.length) edit((doc) => keys.reduce((x, k) => order(k, to)(x), doc));
+        return;
+      }
       if (mod && e.key.toLowerCase() === 'a') {
         e.preventDefault();
         return pickMany(allMovable(d));

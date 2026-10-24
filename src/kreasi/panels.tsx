@@ -7,6 +7,7 @@
 import { ArrowDown, ArrowUp, ChevronDown, Eye, EyeOff, Image as ImageIcon, Lock, Search, Shapes, Type, Unlock } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { isMac } from '../components/title-bar';
 import { cx } from '../components/ui';
 import { t } from '../lib/i18n';
 import { addGradient, addPreset, addShape, addSticker, addText, order, toggleMeta, type Edit } from './actions';
@@ -98,10 +99,10 @@ export function LayersPanel({
     const locked = isLayerLocked(doc, key);
     return (
       <span className={cx('shrink-0 items-center gap-0.5', on || hidden || locked ? 'flex' : 'hidden group-hover:flex')}>
-        <IconBtn label={t('Naikkan')} onClick={() => edit(order(key, 'forward'))}>
+        <IconBtn label={`${t('Naikkan')} (${isMac ? '⌘' : 'Ctrl+'}])`} onClick={() => edit(order(key, 'forward'))}>
           <ArrowUp size={12} />
         </IconBtn>
-        <IconBtn label={t('Turunkan')} onClick={() => edit(order(key, 'backward'))}>
+        <IconBtn label={`${t('Turunkan')} (${isMac ? '⌘' : 'Ctrl+'}[)`} onClick={() => edit(order(key, 'backward'))}>
           <ArrowDown size={12} />
         </IconBtn>
         <IconBtn label={locked ? t('Buka kunci') : t('Kunci')} onClick={() => edit(toggleMeta(key, 'locked'))} on={locked}>
