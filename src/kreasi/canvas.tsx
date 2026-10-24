@@ -578,37 +578,50 @@ export function DocCanvas({
         </Outline>
       )}
       {!dragging && !editing && (crop ? overlay?.(crop.box) : selBox && overlay?.(selBox))}
-      {editing && editBox && (
-        <textarea
-          autoFocus
-          value={editing.text}
-          onChange={(e) => handlers.onTextInput?.(editing.id, e.target.value)}
-          onBlur={() => handlers.onEndEdit?.()}
-          onKeyDown={(e) => {
-            e.stopPropagation();
-            if (e.key === 'Escape' || (e.key === 'Enter' && (e.metaKey || e.ctrlKey))) (e.currentTarget as HTMLTextAreaElement).blur();
-          }}
-          spellCheck={false}
-          className="absolute resize-none overflow-hidden border-[1.5px] border-[#3b9cff] bg-transparent p-0 outline-none"
-          style={{
-            left: editBox.cx - editBox.w / 2,
-            top: editBox.cy - editBox.h / 2,
-            width: Math.max(editBox.w, 60),
-            height: editBox.h,
-            transform: editBox.rotate ? `rotate(${editBox.rotate}deg)` : undefined,
-            fontFamily: fam[editing.font],
-            fontSize: editing.size * f.unit,
-            fontWeight: editing.weight,
-            fontStyle: editing.italic ? 'italic' : 'normal',
-            color: editing.color,
-            textAlign: editing.align,
-            letterSpacing: `${editing.spacing}em`,
-            lineHeight: editing.lineHeight ?? 1.15,
-            caretColor: '#3b9cff',
-            padding: f.unit * 0.012,
-          }}
-        />
-      )}
+      {editing && editBox && (() => {
+        // The DOM draws letters a little differently from the canvas (script
+        // tails, spacing after the last letter): an em of room each side, and
+        // lines that only break where the text does, so nothing wraps out of sight.
+        const em = editing.size * f.unit;
+        const w = editBox.w + 2 * em;
+        return (
+          <textarea
+            autoFocus
+            value={editing.text}
+            onChange={(e) => handlers.onTextInput?.(editing.id, e.target.value)}
+            onBlur={() => handlers.onEndEdit?.()}
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              if (e.key === 'Escape' || (e.key === 'Enter' && (e.metaKey || e.ctrlKey))) (e.currentTarget as HTMLTextAreaElement).blur();
+            }}
+            spellCheck={false}
+            wrap={editing.width ? 'soft' : 'off'}
+            className="absolute resize-none overflow-hidden border-0 bg-transparent p-0 outline-none"
+            style={{
+              left: editBox.cx - w / 2,
+              top: editBox.cy - editBox.h / 2,
+              width: w,
+              height: editBox.h,
+              transform: editBox.rotate ? `rotate(${editBox.rotate}deg)` : undefined,
+              // Wrapped text keeps the canvas's own line length.
+              paddingInline: editing.width ? em + (editBox.w - editing.width * f.unit) / 2 : 0,
+              boxSizing: 'border-box',
+              whiteSpace: editing.width ? 'pre-wrap' : 'pre',
+              fontFamily: fam[editing.font],
+              fontSize: em,
+              fontWeight: editing.weight,
+              fontStyle: editing.italic ? 'italic' : 'normal',
+              textTransform: editing.textCase === 'besar' ? 'uppercase' : editing.textCase === 'kecil' ? 'lowercase' : editing.textCase === 'kata' ? 'capitalize' : 'none',
+              color: editing.color,
+              textAlign: editing.align,
+              letterSpacing: `${editing.spacing}em`,
+              lineHeight: editing.lineHeight ?? 1.15,
+              caretColor: '#3b9cff',
+              paddingBlock: f.unit * 0.012,
+            }}
+          />
+        );
+      })()}
     </div>
   );
 }
