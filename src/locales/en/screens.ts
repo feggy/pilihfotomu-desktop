@@ -135,4 +135,11 @@ export default {
   'Zoom foto di tempatnya': 'Zoom the photo in its place',
   'Geser tanpa magnet': 'Move without snapping',
   'Ekspor desain': 'Export design',
+  'Mulai dari mana?': 'Where do you want to start?',
+  'Pilah semua foto sesi, atau langsung cari foto yang diminta klien.': 'Cull the whole session, or go straight to the photos the client asked for.',
+  'Pilah folder sesi': 'Cull a session folder',
+  'AI memilah semua foto jadi Pilih, Cek, dan Lewati.': 'AI sorts every photo into Pick, Check and Skip.',
+  'Atau seret folder ke jendela': 'Or drag a folder onto the window',
+  'Dari pesan klien': 'From the client’s message',
+  'Tempel pesan WhatsApp berisi nomor foto, kami carikan filenya — tanpa dipilah dulu.': 'Paste the WhatsApp message with photo numbers and we find the files — no culling needed.',
 } as Record<string, string | [string, string]>;

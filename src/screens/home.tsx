@@ -8,11 +8,13 @@ import {
   FolderDown,
   FolderSearch,
   FolderX,
+  Image as ImageIcon,
   LayoutTemplate,
   RotateCw,
   SlidersHorizontal,
   Sparkles,
   Trash2,
+  X,
   type LucideIcon,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -55,7 +57,6 @@ function ModeCard({
   sub,
   tags,
   onClick,
-  primary,
   highlight,
 }: {
   preview: string;
@@ -64,7 +65,6 @@ function ModeCard({
   sub: string;
   tags: string[];
   onClick: () => void;
-  primary?: boolean;
   highlight?: boolean;
 }) {
   return (
@@ -89,7 +89,7 @@ function ModeCard({
           <span
             className={cx(
               'flex size-[30px] items-center justify-center rounded-full text-white transition-transform group-hover:translate-x-0.5',
-              primary ? 'bg-gold-gradient' : 'bg-raised',
+              'bg-raised group-hover:bg-gold-gradient',
             )}
           >
             <ArrowRight size={15} />
@@ -105,6 +105,51 @@ function ModeCard({
           </span>
         ))}
       </span>
+    </button>
+  );
+}
+
+/**
+ * One photo of a session's cover stack. A thumbnail that is gone (the cache
+ * was cleared, the folder moved) shows a quiet tile, not the browser's
+ * broken-image mark.
+ */
+function Cover({ id, i }: { id: string | undefined; i: number }) {
+  const [broken, setBroken] = useState(false);
+  const style = { left: i * 9, opacity: i ? 0.75 - i * 0.15 : 1 };
+  if (!id || broken)
+    return (
+      <span className="absolute top-0 flex h-11 w-14 items-center justify-center rounded-md bg-raised text-faint ring-2 ring-panel" style={style}>
+        {i === 0 && <ImageIcon size={16} />}
+      </span>
+    );
+  return (
+    <img
+      src={thumbUrl(id)}
+      alt=""
+      onError={() => setBroken(true)}
+      className="absolute top-0 h-11 w-14 rounded-md object-cover ring-2 ring-panel"
+      style={style}
+    />
+  );
+}
+
+function SourceOption({ icon: Icon, title, sub, hint, onClick }: { icon: LucideIcon; title: string; sub: string; hint?: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="group flex flex-col gap-2.5 rounded-[14px] border border-line-soft bg-panel-2 p-4 text-left transition-colors outline-none hover:border-gold/70 focus-visible:border-gold/70"
+    >
+      <span className="flex items-center justify-between">
+        <span className="flex size-[34px] items-center justify-center rounded-lg bg-raised text-gold-text">
+          <Icon size={17} />
+        </span>
+        <ArrowRight size={15} className="text-faint transition-transform group-hover:translate-x-0.5 group-hover:text-fg" />
+      </span>
+      <span className="text-[15px] font-semibold">{title}</span>
+      <span className="text-xs text-muted">{sub}</span>
+      {hint && <span className="text-[11px] text-faint">{hint}</span>}
     </button>
   );
 }
@@ -168,10 +213,53 @@ export function Home({ dragging }: { dragging: boolean }) {
     const root = await pickFolder();
     if (root) go({ name: 'picks', root, back: { name: 'home' } });
   };
+  // "Pilih foto" starts from either the whole session or the client's list.
+  const [choosing, setChoosing] = useState(false);
+  useEffect(() => {
+    if (!choosing) return;
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setChoosing(false);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [choosing]);
 
   return (
     <div className="flex h-full flex-col">
       <TitleBar />
+      {choosing && (
+        <div className="fixed inset-x-0 top-10 bottom-0 z-40 flex items-center justify-center bg-black/70 p-4" onMouseDown={() => setChoosing(false)}>
+          <div
+            role="dialog"
+            aria-label={t('Mulai dari mana?')}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="flex w-[560px] max-w-full flex-col gap-5 rounded-[18px] border border-line bg-panel p-6 shadow-2xl"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex flex-col gap-1">
+                <h2 className="text-lg font-semibold">{t('Mulai dari mana?')}</h2>
+                <p className="text-xs text-muted">{t('Pilah semua foto sesi, atau langsung cari foto yang diminta klien.')}</p>
+              </div>
+              <button type="button" onClick={() => setChoosing(false)} aria-label={t('Tutup')} className="text-muted hover:text-fg">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <SourceOption
+                icon={Sparkles}
+                title={t('Pilah folder sesi')}
+                sub={t('AI memilah semua foto jadi Pilih, Cek, dan Lewati.')}
+                hint={t('Atau seret folder ke jendela')}
+                onClick={() => (setChoosing(false), chooseFolder())}
+              />
+              <SourceOption
+                icon={Clipboard}
+                title={t('Dari pesan klien')}
+                sub={t('Tempel pesan WhatsApp berisi nomor foto, kami carikan filenya — tanpa dipilah dulu.')}
+                onClick={() => (setChoosing(false), clientPicks())}
+              />
+            </div>
+          </div>
+        </div>
+      )}
       <main className="flex-1 overflow-y-auto">
         <div className="mx-auto flex w-full max-w-[1000px] flex-col gap-7 px-6 pt-10 pb-10 lg:px-8 lg:pt-12">
           <div className="flex flex-wrap items-end justify-between gap-4">
@@ -191,14 +279,13 @@ export function Home({ dragging }: { dragging: boolean }) {
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3 lg:gap-5">
             <ModeCard
-              primary
               highlight={dragging}
               preview="/home/pilih.jpg"
               icon={Sparkles}
               title={t('Pilih foto##mode')}
               sub={t('Ratusan foto sesi dipilah otomatis jadi Pilih, Cek, dan Lewati, lengkap dengan alasannya.')}
               tags={[t('Offline'), 'RAW & JPEG', '⌘O']}
-              onClick={() => chooseFolder()}
+              onClick={() => setChoosing(true)}
             />
             <ModeCard
               preview="/home/edit.jpg"
@@ -217,19 +304,6 @@ export function Home({ dragging }: { dragging: boolean }) {
               onClick={() => go({ name: 'kreasi', back: { name: 'home' } })}
             />
           </div>
-
-          <button
-            type="button"
-            onClick={clientPicks}
-            className="-mt-3 flex items-center gap-3 self-start rounded-xl border border-line-soft bg-panel px-3.5 py-2.5 text-left hover:border-line"
-          >
-            <Clipboard size={16} className="shrink-0 text-gold-text" />
-            <span className="text-[13px]">
-              <span className="font-medium">{t('Klien kirim daftar foto?')}</span>{' '}
-              <span className="text-muted">{t('Tempel pesan WhatsApp-nya, kami carikan fotonya — tanpa perlu dipilah dulu.')}</span>
-            </span>
-            <ChevronRight size={15} className="shrink-0 text-faint" />
-          </button>
 
           <section className="flex flex-col gap-2.5">
             <h2 className="text-sm font-semibold">{t('Sesi terakhir')}</h2>
@@ -294,17 +368,7 @@ export function Home({ dragging }: { dragging: boolean }) {
                     {/* A small stack of covers: three photos, fanned, in the space of one. */}
                     <span className="relative hidden h-11 w-[74px] shrink-0 sm:block">
                       {[2, 1, 0].map((i) =>
-                        s.covers[i] ? (
-                          <img
-                            key={i}
-                            src={thumbUrl(s.covers[i])}
-                            alt=""
-                            className="absolute top-0 h-11 w-14 rounded-md object-cover ring-2 ring-panel"
-                            style={{ left: i * 9, opacity: i ? 0.75 - i * 0.15 : 1 }}
-                          />
-                        ) : (
-                          i === 0 && <span key={i} className="absolute top-0 left-0 h-11 w-14 rounded-md bg-raised" />
-                        ),
+                        s.covers[i] || i === 0 ? <Cover key={i} id={s.covers[i]} i={i} /> : null,
                       )}
                     </span>
                     <span className="flex min-w-0 flex-1 flex-col gap-1">
