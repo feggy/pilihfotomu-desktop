@@ -314,7 +314,7 @@ export function Fill() {
             />
           )}
         </div>
-        <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto">
+        <div className="-mx-1 flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-1 py-px">
           {filled.map((id, i) => {
             const p = id != null ? source?.photos.find((x) => x.id === id) : null;
             const on = i === active;
