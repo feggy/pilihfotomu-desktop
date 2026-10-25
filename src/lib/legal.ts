@@ -195,7 +195,7 @@ export const PRIVACY: Record<'id' | 'en', LegalDoc> = {
       {
         heading: '2. Data yang diolah di perangkat Anda',
         body: [
-          'Aplikasi membaca foto di folder yang Anda pilih. Dari foto itu aplikasi menyimpan hasil analisis: ketajaman, eksposur, posisi wajah, skor mata dan senyum, dan nomor kelompok orang. Aplikasi juga menyimpan status dan bintang yang Anda beri, thumbnail, dan pengaturan.',
+          'Aplikasi membaca foto di folder yang Anda pilih. Dari foto itu aplikasi menyimpan hasil analisis: ketajaman, eksposur, posisi wajah, skor mata dan senyum, dan nomor kelompok orang. Aplikasi juga menyimpan status dan bintang yang Anda beri, thumbnail, pengaturan, draf Buat konten, dan potongan foto hasil Hapus latar.',
           'Semua data itu disimpan di folder data dan cache aplikasi di perangkat ini. Lokasinya terlihat di Pengaturan › Penyimpanan & cache.',
         ],
       },
@@ -247,7 +247,7 @@ export const PRIVACY: Record<'id' | 'en', LegalDoc> = {
       {
         heading: '2. Data processed on your device',
         body: [
-          'The app reads the photos in the folders you choose. From them it keeps analysis results: sharpness, exposure, face positions, eye and smile scores, and person group numbers. It also keeps the statuses and stars you set, thumbnails and settings.',
+          'The app reads the photos in the folders you choose. From them it keeps analysis results: sharpness, exposure, face positions, eye and smile scores, and person group numbers. It also keeps the statuses and stars you set, thumbnails, settings, Create content drafts and the cut-outs made with Remove background.',
           'All of this stays in the app’s data and cache folders on this device. You can see where under Settings › Storage & cache.',
         ],
       },

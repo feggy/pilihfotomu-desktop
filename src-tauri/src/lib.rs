@@ -1,6 +1,7 @@
 pub mod analyze;
 mod client_picks;
 pub mod cull;
+pub mod cutout;
 mod export;
 pub mod faces;
 pub mod full_res;
@@ -412,6 +413,41 @@ fn open_files(state: State<'_, AppState>, paths: Vec<PathBuf>) -> CmdResult<Pick
     Ok(PickedFiles { root, dir, photos })
 }
 
+/// Files dragged in from Finder, added to the photos of `root` (a folder, a
+/// session or picked files) with new ids after the last one, so the photos
+/// already placed keep theirs. A file added before keeps its id; the same
+/// files added again in the same order (a draft reopened) get the same ids.
+#[tauri::command]
+fn add_files(state: State<'_, AppState>, root: PathBuf, paths: Vec<PathBuf>) -> CmdResult<Vec<Photo>> {
+    state.photos(&root)?;
+    let first = paths.first().ok_or("Belum ada foto yang dipilih.")?;
+    let mut base = first.parent().map(Path::to_path_buf).ok_or("Lokasi foto tidak valid.")?;
+    while !paths.iter().all(|p| p.starts_with(&base)) {
+        if !base.pop() {
+            break;
+        }
+    }
+    let found = scan::from_files(&base, &paths);
+    if found.is_empty() {
+        return Err("File yang diseret bukan foto RAW atau JPEG.".into());
+    }
+    let mut cache = state.scanned.lock().unwrap();
+    let list = cache.get_mut(&root).ok_or("Folder foto tidak ditemukan.")?;
+    let mut next = list.iter().map(|p| p.id + 1).max().unwrap_or(0);
+    let mut out = Vec::new();
+    for mut p in found {
+        if let Some(known) = list.iter().find(|e| e.source() == p.source()) {
+            out.push(known.clone());
+            continue;
+        }
+        p.id = next;
+        next += 1;
+        list.push(p.clone());
+        out.push(p);
+    }
+    Ok(out)
+}
+
 /// Thumbnails for some photos of a folder, made on demand and cached in the
 /// same place an analysis puts them.
 #[tauri::command]
@@ -532,6 +568,35 @@ fn draft_path(app: &AppHandle, shelf: Option<&str>, id: &str) -> CmdResult<PathB
     Ok(drafts_dir(app, shelf)?.join(format!("{id}.json")))
 }
 
+/// A picture element made in Buat konten (a photo with its background
+/// removed), as `<app data>/kreasi/assets/<id>.png`; ids as for drafts.
+fn asset_path(app: &AppHandle, id: &str) -> CmdResult<PathBuf> {
+    if id.is_empty() || id.len() > 64 || !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+        return Err("Id gambar tidak valid.".into());
+    }
+    Ok(drafts_dir(app, None)?.join("assets").join(format!("{id}.png")))
+}
+
+/// Saves a picture element: PNG bytes as the raw body, its id as a header.
+#[tauri::command]
+fn save_asset(app: AppHandle, request: tauri::ipc::Request<'_>) -> CmdResult<()> {
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+        return Err("Data gambar tidak terbaca.".into());
+    };
+    let id = request.headers().get("id").and_then(|v| v.to_str().ok()).ok_or("Id gambar tidak valid.")?;
+    let path = asset_path(&app, id)?;
+    std::fs::create_dir_all(path.parent().unwrap()).map_err(|e| e.to_string())?;
+    let tmp = path.with_extension("png.tmp");
+    std::fs::write(&tmp, bytes).and_then(|_| std::fs::rename(&tmp, &path)).map_err(|e| e.to_string())
+}
+
+/// A picture element's PNG bytes.
+#[tauri::command]
+fn load_asset(app: AppHandle, id: String) -> CmdResult<tauri::ipc::Response> {
+    let bytes = std::fs::read(asset_path(&app, &id)?).map_err(|_| "Gambar elemen tidak ditemukan.".to_string())?;
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
 /// Saves a Buat konten design (JSON made by the UI) as `<app data>/kreasi/<id>.json`.
 #[tauri::command]
 fn save_draft(app: AppHandle, id: String, json: String, shelf: Option<String>) -> CmdResult<()> {
@@ -569,6 +634,23 @@ fn delete_draft(app: AppHandle, id: String, shelf: Option<String>) -> CmdResult<
 }
 
 /// Saves a picture made in the UI (Buat konten export) into `<root>/<folder>/`.
+/// Hapus latar: the subject's mask of a picture the page sends at the model's
+/// size (RGB bytes as the raw body; `mode`, `width`, `height` as headers),
+/// one alpha byte per pixel back. Runs off the main thread.
+#[tauri::command]
+async fn cutout_mask(request: tauri::ipc::Request<'_>) -> CmdResult<tauri::ipc::Response> {
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+        return Err("Data gambar tidak terbaca.".into());
+    };
+    let header = |k: &str| request.headers().get(k).and_then(|v| v.to_str().ok()).map(str::to_owned);
+    let mode = header("mode").as_deref().and_then(cutout::Mode::parse).ok_or("Data gambar tidak terbaca.")?;
+    let size = |k: &str| header(k).and_then(|v| v.parse::<u32>().ok()).filter(|&v| v > 0 && v <= 4096);
+    let (w, h) = (size("width").ok_or("Data gambar tidak terbaca.")?, size("height").ok_or("Data gambar tidak terbaca.")?);
+    let rgb = bytes.clone();
+    let alpha = tauri::async_runtime::spawn_blocking(move || cutout::mask(mode, w, h, &rgb)).await.map_err(|e| e.to_string())??;
+    Ok(tauri::ipc::Response::new(alpha))
+}
+
 /// The bytes come as the raw request body; root, folder and file name as
 /// URI-encoded headers. Never overwrites: a name already taken gets " (2)".
 #[tauri::command]
@@ -669,6 +751,10 @@ pub fn run() {
             full_res_image,
             scan_photos,
             open_files,
+            add_files,
+            cutout_mask,
+            save_asset,
+            load_asset,
             thumbnails,
             resolve_client_picks,
             export_xmp,

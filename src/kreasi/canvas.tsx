@@ -22,6 +22,8 @@ import { itemBounds } from './engine/bounds';
 import { safeArea } from './engine/instagram';
 import { cellLayouts, drawCollage, drawSticker, frameOf, hitCell, photoPlacement, placeImage, stickerBox, textBox, type Frame2D, type Selection } from './engine/render';
 import { coverCrop, fontFamilies, loadDocFonts, loadLocalImage, photoIdOf, photoIdOfSticker } from './kit';
+import { assetIdOf, assetImage } from './assets';
+import { LOGO_STICKER, useBrand, useBrandLogo } from './brand';
 import { emptyAssets } from './preview';
 
 const previewPaths = new Map<string, Promise<string>>();
@@ -44,8 +46,13 @@ export function previewUrl(root: string, id: number): Promise<string> {
 export function useDocImages(doc: CollageDoc | null, root: string | null, sharp: boolean) {
   const [images, setImages] = useState<Map<string, HTMLImageElement>>(new Map());
   const pictures = doc ? doc.stickers.filter((s) => photoIdOfSticker(s.sticker) != null) : [];
+  const elements = doc ? doc.stickers.filter((s) => assetIdOf(s.sticker) != null) : [];
   const key = doc
-    ? [...slotsFor(doc, templateOf(doc).cells.length).map((s) => s?.file.fileId ?? ''), ...pictures.map((s) => `${s.sticker}:${(s.ratio ?? 1).toFixed(3)}`)].join(',')
+    ? [
+        ...slotsFor(doc, templateOf(doc).cells.length).map((s) => s?.file.fileId ?? ''),
+        ...pictures.map((s) => `${s.sticker}:${(s.ratio ?? 1).toFixed(3)}`),
+        ...elements.map((s) => s.sticker),
+      ].join(',')
     : '';
   useEffect(() => {
     if (!doc) return;
@@ -73,12 +80,29 @@ export function useDocImages(doc: CollageDoc | null, root: string | null, sharp:
           .then(loadLocalImage)
           .then((img) => alive && setImages((m) => new Map(m).set(st.sticker, coverCrop(img, st.ratio ?? 1) as unknown as HTMLImageElement)), () => {});
       }
+    // Picture elements (a photo without its background), from their files.
+    for (const st of elements)
+      assetImage(assetIdOf(st.sticker)!).then((img) => alive && setImages((m) => (m.has(st.sticker) ? m : new Map(m).set(st.sticker, img))), () => {});
     return () => {
       alive = false;
     };
     // The photo list is what matters, not every edit of the design.
   }, [key, root, sharp]);
   return images;
+}
+
+/** Resize arrows turned 45° clockwise at a time: ↗ → ↔ → ↘ → ↕. */
+const RESIZE_CURSORS = ['nesw-resize', 'ew-resize', 'nwse-resize', 'ns-resize'] as const;
+
+/**
+ * The resize cursor for a corner handle (its position classes), along the
+ * diagonal it pulls: ↘ at top-left and bottom-right, ↗ at the other two,
+ * turned with the box.
+ */
+function cornerCursor(pos: string, rotate: number): string {
+  const start = pos.includes('-right-') === pos.includes('-top-') ? 0 : 2;
+  const step = Math.round(rotate / 45);
+  return RESIZE_CURSORS[(((start + step) % 4) + 4) % 4]!;
 }
 
 export interface CanvasHandlers {
@@ -254,6 +278,10 @@ export function DocCanvas({
     loadDocFonts(doc).then(() => setFontsReady((n) => n + 1));
   }, [doc.texts]);
 
+  // The studio's name and logo (Pengaturan › Brand studio): the "Nama
+  // Studio" texts, the watermark, and the logo placed as an element.
+  const studio = useBrand((b) => b.studio);
+  const logo = useBrandLogo();
   useLayoutEffect(() => {
     const c = ref.current;
     if (!c) return;
@@ -268,7 +296,13 @@ export function DocCanvas({
       width: f.width,
       doc,
       template: templateOf(doc),
-      assets: { ...emptyAssets(), images, stickerImages: images },
+      assets: {
+        ...emptyAssets(),
+        images,
+        stickerImages: logo ? new Map(images).set(LOGO_STICKER, logo) : images,
+        watermark: logo,
+        studioName: studio,
+      },
       editor: {
         selection: outlines ? null : selection,
         swapTarget: null,
@@ -279,7 +313,7 @@ export function DocCanvas({
         accent: '#c9a96e',
       },
     });
-  }, [doc, images, selection, f.width, f.height, numbered, fontsReady, outlines, editingText]);
+  }, [doc, images, selection, f.width, f.height, numbered, fontsReady, outlines, editingText, logo, studio]);
 
   /** An item's box on the canvas (CSS px): centre, size, tilt. */
   const boxOf = (sel: Selection): Box | null => {
@@ -779,7 +813,8 @@ export function DocCanvas({
                 onPointerDown={(e) => onHandleDown(e, 'resize')}
                 onPointerMove={onPointerMove}
                 onPointerUp={onPointerUp}
-                className={`pointer-events-auto absolute size-[10px] cursor-nwse-resize border-[1.5px] border-[#3b9cff] bg-white ${pos}`}
+                className={`pointer-events-auto absolute size-[10px] border-[1.5px] border-[#3b9cff] bg-white ${pos}`}
+                style={{ cursor: cornerCursor(pos, crop.box.rotate) }}
               />
             ))}
           </Outline>
@@ -803,7 +838,8 @@ export function DocCanvas({
                 onPointerDown={(e) => onHandleDown(e, 'resize')}
                 onPointerMove={onPointerMove}
                 onPointerUp={onPointerUp}
-                className={`pointer-events-auto absolute size-[10px] cursor-nwse-resize border-[1.5px] border-[#3b9cff] bg-white ${pos}`}
+                className={`pointer-events-auto absolute size-[10px] border-[1.5px] border-[#3b9cff] bg-white ${pos}`}
+                style={{ cursor: cornerCursor(pos, selBox.rotate) }}
               />
             ))}
           {canHandle && (

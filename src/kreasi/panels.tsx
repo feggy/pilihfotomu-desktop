@@ -10,6 +10,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { cx } from '../components/ui';
 import { t } from '../lib/i18n';
 import { addGradient, addPreset, addShape, addSticker, addText, order, toggleMeta, type Edit } from './actions';
+import { assetIdOf } from './assets';
+import { useBrand } from './brand';
 import {
   FREE_LAYOUT_ID,
   initialDoc,
@@ -187,6 +189,7 @@ export function elementName(st: { sticker: string; gradient?: unknown } | undefi
   if (!st) return t('Elemen');
   if (st.gradient) return t('Gradasi##lapisan');
   if (isPicturePlace(st)) return t('Gambar latar');
+  if (assetIdOf(st.sticker) != null) return t('Potongan foto');
   const name = stickerById(st.sticker)?.name ?? shapeById(st.sticker)?.name;
   return name ? elementLabel(name) : t('Elemen');
 }
@@ -242,7 +245,7 @@ export function TextPanel({ onAdd }: { onAdd: (a: { edit: Edit; id: string }) =>
       </label>
       <div className="grid grid-cols-2 gap-2">
         {presets.map((p) => (
-          <button key={p.id} type="button" title={p.name} onClick={() => onAdd(addPreset(p))} className="rounded-md ring-1 ring-line-soft hover:ring-gold">
+          <button key={p.id} type="button" title={p.name} onClick={() => onAdd(addPreset(p, useBrand.getState().studio))} className="rounded-md ring-1 ring-line-soft hover:ring-gold">
             <Lazy fit id={`preset:${p.id}`} width={120} make={() => stage(addPreset(p).edit)} />
           </button>
         ))}
@@ -323,6 +326,7 @@ const NEUTRALS = ['#ffffff', '#faf6ee', '#e8e2d4', '#c9a96e', '#8c6a30', '#2b3a3
 export function BackgroundPanel({ doc, images, edit }: { doc: CollageDoc; images: Map<string, HTMLImageElement>; edit: (fn: Edit) => void }) {
   // Colors that actually occur in the photos: a background that belongs to them.
   const fromPhotos = useMemo(() => (images.size ? extractPalette([...images.values()], 8) : []), [images]);
+  const brandColors = useBrand((b) => b.colors);
   const set = (background: string) => edit((d) => ({ ...d, style: { ...d.style, background } }));
   const current = doc.style.background.toLowerCase();
   const swatch = (c: string) => (
@@ -345,6 +349,12 @@ export function BackgroundPanel({ doc, images, edit }: { doc: CollageDoc; images
         </label>
         <span className="font-mono text-xs text-muted uppercase">{doc.style.background}</span>
       </div>
+      {brandColors.length > 0 && (
+        <>
+          <Title>{t('Warna brand')}</Title>
+          <div className="grid grid-cols-4 gap-2">{brandColors.map(swatch)}</div>
+        </>
+      )}
       {fromPhotos.length > 0 && (
         <>
           <Title>{t('Dari foto')}</Title>

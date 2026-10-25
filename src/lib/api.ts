@@ -267,6 +267,14 @@ export const api = {
   scanPhotos: (root: string) => invoke<Photo[]>('scan_photos', { root }),
   /** Photos picked file by file: a key to use as `root`, the folder results go to, and the photos. */
   openFiles: (paths: string[]) => invoke<{ root: string; dir: string; photos: Photo[] }>('open_files', { paths }),
+  /** Hapus latar: the subject's mask (one alpha byte per pixel) of an RGB picture already at the model's size. */
+  cutoutMask: (mode: 'potret' | 'objek', width: number, height: number, rgb: Uint8Array) =>
+    invoke<ArrayBuffer>('cutout_mask', rgb, { headers: { mode, width: String(width), height: String(height) } }),
+  /** A Buat konten picture element (PNG), kept under `<app data>/kreasi/assets/`. */
+  saveAsset: (id: string, png: Uint8Array) => invoke<void>('save_asset', png, { headers: { id } }),
+  loadAsset: (id: string) => invoke<ArrayBuffer>('load_asset', { id }),
+  /** Files dragged in from Finder, added to `root`'s photos with new ids. */
+  addFiles: (root: string, paths: string[]) => invoke<Photo[]>('add_files', { root, paths }),
   thumbnails: (root: string, ids: number[]) =>
     invoke<Record<number, string | null>>('thumbnails', { root, ids }),
   resolveClientPicks: (root: string, folders: string[], text: string) =>

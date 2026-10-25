@@ -19,6 +19,17 @@ MediaPipe Face Blendshapes (face_blendshapes.onnx)
   Dari face_landmarker.task resmi, dikonversi ke ONNX oleh
   scripts/blendshapes-to-onnx.py
 
+MODNet portrait matting (modnet_f16.onnx)
+  Zhanghan Ke et al. — https://github.com/ZHKKKe/MODNet
+  Licensed under the Apache License, Version 2.0
+  ONNX: https://huggingface.co/Xenova/modnet; bobot float16 oleh
+  scripts/onnx-fp16-weights.py
+
+U²-Netp salient object detection (u2netp.onnx)
+  Xuebin Qin et al. — https://github.com/xuebinqin/U-2-Net
+  Licensed under the Apache License, Version 2.0
+  ONNX: https://huggingface.co/BritishWerewolf/U-2-Netp
+
 SFace face recognition (face_recognition_sface_2021dec_f16.onnx)
   Yaoyao Zhong (model), Chengrui Wang (ONNX), OpenCV Zoo
   Licensed under the Apache License, Version 2.0

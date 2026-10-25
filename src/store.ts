@@ -16,7 +16,7 @@ export type Screen =
   | { name: 'kreasi'; back: Screen }
   /** Edit foto: develop photos like Lightroom. */
   | { name: 'edit'; back: Screen }
-  | { name: 'settings'; back: Screen; section?: 'license' | 'language' | 'analysis' | 'storage' | 'keys' | 'legal' | 'about' };
+  | { name: 'settings'; back: Screen; section?: 'license' | 'language' | 'analysis' | 'storage' | 'keys' | 'brand' | 'legal' | 'about' };
 
 export interface RecentPhoto {
   id: number;

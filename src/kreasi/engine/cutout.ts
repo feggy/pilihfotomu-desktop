@@ -4,19 +4,13 @@ import { colorFiltered } from './filter-fallback';
 import { adjustFilter, drawAdjustOverlays, photoPlacement, type Rect } from './render';
 
 /**
- * Hapus background: done entirely in this browser — the photo is never sent
- * anywhere, and nothing is kept on our server. Each mode has its own model,
- * fetched once from Hugging Face's CDN the first time that mode is used and
- * kept in the browser's cache; the library that runs them is only loaded the
- * first time the button is used.
+ * Hapus latar: done entirely on this computer — the photo is never sent
+ * anywhere. Both models ship with the app (`src-tauri/models/`) and run in
+ * Rust on the CPU (`cutout.rs`), about half a second a photo:
  *
- * - `potret`: MODNet (Apache-2.0, 13 MB) — people: hair and fine edges.
- * - `objek`: U²-Netp (Apache-2.0, 4.6 MB) — products, animals, vehicles,
- *   logos: firm edges round one clear subject.
- *
- * Both always run on the CPU (WebAssembly): the same result on every
- * computer, a second or two a photo. The graphics-card path gave broken masks
- * on some machines, and 8-bit models leave holes.
+ * - `potret`: MODNet (Apache-2.0) — people: hair and fine edges.
+ * - `objek`: U²-Netp (Apache-2.0) — products, animals, vehicles, logos:
+ *   firm edges round one clear subject.
  */
 export type { CutoutMode } from './document';
 
@@ -29,15 +23,6 @@ export type CutoutProgress = { stage: 'unduh'; progress: number } | { stage: 'pr
 type Masker = (img: HTMLImageElement) => Promise<HTMLCanvasElement>;
 
 const maskers = new Map<CutoutMode, Promise<Masker>>();
-/** Whoever waits for a model now hears how the download goes. */
-let listener: ((p: CutoutProgress) => void) | null = null;
-
-const onDownload = (info: { status: string; progress?: number }) => {
-  if (info.status === 'progress_total') {
-    listener?.({ stage: 'unduh', progress: Math.round(info.progress ?? 0) });
-  }
-};
-
 /** `img` drawn onto a canvas `w` × `h`, smoothly. */
 function resized(img: CanvasImageSource, w: number, h: number): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
@@ -60,78 +45,38 @@ function maskCanvas(w: number, h: number, alpha: (i: number) => number): HTMLCan
   return canvas;
 }
 
-/** MODNet judges people best at its training size: the short side 512 px. */
-async function loadPortrait(): Promise<Masker> {
-  const { pipeline, env, RawImage } = await import('@huggingface/transformers');
-  env.allowLocalModels = false;
-  const run = (await pipeline('background-removal', 'Xenova/modnet', {
-    device: 'wasm',
-    dtype: 'fp16',
-    progress_callback: onDownload,
-  })) as unknown as (image: unknown) => Promise<{
-    data: Uint8ClampedArray | Uint8Array;
-    width: number;
-    height: number;
-    channels: number;
-  }>;
-  return async (img) => {
-    const k = 512 / Math.min(img.width, img.height);
-    // The model reads three channels; a canvas gives four.
-    const out = await run(RawImage.fromCanvas(resized(img, img.width * k, img.height * k)).rgb());
-    return maskCanvas(out.width, out.height, (i) =>
-      out.channels === 4 ? out.data[i * 4 + 3]! : 255,
-    );
-  };
-}
-
 /**
- * U²-Netp, as rembg runs it: the photo squeezed to 320 × 320, the salient
- * subject's mask out. Pinned to one revision of the upload, so the file can
- * never change under us.
+ * A mode's model, run by the app itself (`cutout.rs`): the picture squeezed
+ * to the model's size here, its mask back from Rust. MODNet reads the short
+ * side at 512 px (both sides a multiple of 32); U²-Netp a 320 × 320 square.
  */
-async function loadObject(): Promise<Masker> {
-  const { AutoModel, Tensor, env } = await import('@huggingface/transformers');
-  env.allowLocalModels = false;
-  const model = await AutoModel.from_pretrained('BritishWerewolf/U-2-Netp', {
-    revision: '7112208dbac3a3642496c8d54e2f0f9bb3dc1dc8',
-    device: 'wasm',
-    dtype: 'fp32',
-    progress_callback: onDownload,
-  });
-  const S = 320;
-  const MEAN = [0.485, 0.456, 0.406];
-  const STD = [0.229, 0.224, 0.225];
+async function loadMasker(mode: CutoutMode): Promise<Masker> {
+  const { api } = await import('../../lib/api');
   return async (img) => {
-    const px = resized(img, S, S).getContext('2d')!.getImageData(0, 0, S, S).data;
-    let max = 1;
-    for (let i = 0; i < S * S; i++) max = Math.max(max, px[i * 4]!, px[i * 4 + 1]!, px[i * 4 + 2]!);
-    const input = new Float32Array(3 * S * S);
-    for (let i = 0; i < S * S; i++) {
-      for (let c = 0; c < 3; c++)
-        input[c * S * S + i] = (px[i * 4 + c]! / max - MEAN[c]!) / STD[c]!;
+    let w = 320;
+    let h = 320;
+    if (mode === 'potret') {
+      const k = 512 / Math.min(img.width, img.height);
+      w = Math.max(32, Math.round((img.width * k) / 32) * 32);
+      h = Math.max(32, Math.round((img.height * k) / 32) * 32);
     }
-    const out = (await model({ 'input.1': new Tensor('float32', input, [1, 3, S, S]) })) as Record<
-      string,
-      { data: Float32Array }
-    >;
-    // The fused output; the others are the model's side views.
-    const pred = out['1959']!.data;
-    let lo = Infinity;
-    let hi = -Infinity;
-    for (const v of pred) {
-      if (v < lo) lo = v;
-      if (v > hi) hi = v;
+    const px = resized(img, w, h).getContext('2d')!.getImageData(0, 0, w, h).data;
+    const rgb = new Uint8Array(w * h * 3);
+    for (let i = 0; i < w * h; i++) {
+      rgb[i * 3] = px[i * 4]!;
+      rgb[i * 3 + 1] = px[i * 4 + 1]!;
+      rgb[i * 3 + 2] = px[i * 4 + 2]!;
     }
-    const range = hi - lo || 1;
-    return maskCanvas(S, S, (i) => Math.round((255 * (pred[i]! - lo)) / range));
+    const alpha = new Uint8Array(await api.cutoutMask(mode, w, h, rgb));
+    return maskCanvas(w, h, (i) => alpha[i]!);
   };
 }
 
 function masker(mode: CutoutMode): Promise<Masker> {
   let m = maskers.get(mode);
   if (!m) {
-    m = (mode === 'potret' ? loadPortrait() : loadObject()).catch((err: unknown) => {
-      // A failed download can be tried again.
+    m = loadMasker(mode).catch((err: unknown) => {
+      // A failure can be tried again.
       maskers.delete(mode);
       throw err;
     });
@@ -173,36 +118,31 @@ export async function cutOutPhoto(
   mode: CutoutMode | null,
   onProgress: (p: CutoutProgress) => void,
 ): Promise<{ canvas: HTMLCanvasElement; scale: number }> {
-  listener = onProgress;
-  try {
-    let mask: HTMLCanvasElement | null = null;
-    if (mode) {
-      const run = await masker(mode);
-      onProgress({ stage: 'proses' });
-      mask = await run(img);
-    }
-    const p = photoPlacement(img, photo, slot);
-    const scale = Math.min(img.width / p.dw, MAX_SIDE / Math.max(photo.w, photo.h));
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.max(1, Math.round(photo.w * scale));
-    canvas.height = Math.max(1, Math.round(photo.h * scale));
-    const ctx = canvas.getContext('2d')!;
-    ctx.scale(scale, scale);
-    const adjust = shownAdjust(slot.adjust);
-    const dev = developed(img, adjust);
-    const colors = dev ? '' : adjustFilter(adjust);
-    const shown = dev ?? (colors ? colorFiltered(img, colors) : img);
-    drawPlaced(ctx, shown, img, photo, slot);
-    drawAdjustOverlays(ctx, { x: 0, y: 0, w: photo.w, h: photo.h }, adjust, Boolean(dev));
-    if (mask) {
-      // The mask, smoothly stretched over the photo and placed the same way, keeps the subject.
-      ctx.globalCompositeOperation = 'destination-in';
-      drawPlaced(ctx, mask, img, photo, slot);
-    }
-    return { canvas, scale };
-  } finally {
-    listener = null;
+  let mask: HTMLCanvasElement | null = null;
+  if (mode) {
+    const run = await masker(mode);
+    onProgress({ stage: 'proses' });
+    mask = await run(img);
   }
+  const p = photoPlacement(img, photo, slot);
+  const scale = Math.min(img.width / p.dw, MAX_SIDE / Math.max(photo.w, photo.h));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(photo.w * scale));
+  canvas.height = Math.max(1, Math.round(photo.h * scale));
+  const ctx = canvas.getContext('2d')!;
+  ctx.scale(scale, scale);
+  const adjust = shownAdjust(slot.adjust);
+  const dev = developed(img, adjust);
+  const colors = dev ? '' : adjustFilter(adjust);
+  const shown = dev ?? (colors ? colorFiltered(img, colors) : img);
+  drawPlaced(ctx, shown, img, photo, slot);
+  drawAdjustOverlays(ctx, { x: 0, y: 0, w: photo.w, h: photo.h }, adjust, Boolean(dev));
+  if (mask) {
+    // The mask, smoothly stretched over the photo and placed the same way, keeps the subject.
+    ctx.globalCompositeOperation = 'destination-in';
+    drawPlaced(ctx, mask, img, photo, slot);
+  }
+  return { canvas, scale };
 }
 
 /**
@@ -256,22 +196,17 @@ export async function subjectMask(
   img: HTMLImageElement,
   onProgress: (p: CutoutProgress) => void,
 ): Promise<HTMLCanvasElement | null> {
-  listener = onProgress;
-  try {
-    for (const mode of ['potret', 'objek'] as const) {
-      const run = await masker(mode);
-      onProgress({ stage: 'proses' });
-      const mask = await run(img);
-      const ctx = mask.getContext('2d');
-      if (!ctx) continue;
-      const data = ctx.getImageData(0, 0, mask.width, mask.height).data;
-      let on = 0;
-      for (let i = 3; i < data.length; i += 4) if (data[i]! > 128) on++;
-      // Less than one percent: nothing found; try the other model.
-      if (on > (mask.width * mask.height) / 100) return mask;
-    }
-    return null;
-  } finally {
-    listener = null;
+  for (const mode of ['potret', 'objek'] as const) {
+    const run = await masker(mode);
+    onProgress({ stage: 'proses' });
+    const mask = await run(img);
+    const ctx = mask.getContext('2d');
+    if (!ctx) continue;
+    const data = ctx.getImageData(0, 0, mask.width, mask.height).data;
+    let on = 0;
+    for (let i = 3; i < data.length; i += 4) if (data[i]! > 128) on++;
+    // Less than one percent: nothing found; try the other model.
+    if (on > (mask.width * mask.height) / 100) return mask;
   }
+  return null;
 }

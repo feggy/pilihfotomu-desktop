@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { cx } from '../components/ui';
 import { num } from '../lib/format';
 import { locale, t } from '../lib/i18n';
-import type { FormatId } from './engine/document';
+import { FORMATS, type FormatId } from './engine/document';
 import { api } from '../lib/api';
 import { useApp } from '../store';
 import { listDrafts, reopenSource, templateOfDraft, type Draft } from './drafts';
@@ -35,7 +35,9 @@ const TABS: { id: FormatTab; label: string }[] = [
 
 /** A format's outline, `k` times the cards' size. */
 const blankShape = (f: FormatId, k = 1) => {
-  const [w, h] = f === 'story' ? [20, 34] : f === 'feed' ? [26, 32] : f === 'carousel' ? [44, 22] : [28, 28];
+  // Print sizes are portrait, 26 px wide at their own ratio.
+  const [w, h] =
+    f === 'story' ? [20, 34] : f === 'feed' ? [26, 32] : f === 'carousel' ? [44, 22] : FORMATS[f]?.printInches ? [24, 24 * FORMATS[f].ratio] : [28, 28];
   return { width: w * k, height: h * k };
 };
 
@@ -199,8 +201,8 @@ export function Gallery({ onBack }: { onBack: () => void }) {
                     <Plus size={16} className="text-gold-text" />
                   </span>
                   <span className="flex flex-col items-center gap-0.5">
-                    <span className="text-[13px] font-semibold text-fg">{t(TABS.find((x) => x.id === f)?.label ?? '')}</span>
-                    <span className="text-[11px] text-faint">{t('Kanvas kosong')}</span>
+                    <span className="text-[13px] font-semibold text-fg">{t(TABS.find((x) => x.id === f)?.label ?? formatLabel(f))}</span>
+                    <span className="text-[11px] text-faint">{FORMATS[f].printInches ? t(FORMATS[f].hint) : t('Kanvas kosong')}</span>
                   </span>
                 </button>
               ))}

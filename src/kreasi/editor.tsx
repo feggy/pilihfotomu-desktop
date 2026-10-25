@@ -1,3 +1,4 @@
+import { getCurrentWebview } from '@tauri-apps/api/webview';
 import {
   AlignCenter,
   AlignCenterHorizontal,
@@ -17,11 +18,14 @@ import {
   Download,
   FlipHorizontal,
   Images,
+  Info,
   BookmarkPlus,
   Italic,
   Layers,
   Minus,
+  Package,
   PaintBucket,
+  Paintbrush,
   Pencil,
   Plus,
   Redo2,
@@ -30,10 +34,12 @@ import {
   ScanFace,
   Search,
   Shapes,
+  Stamp,
   ShieldCheck,
   Trash2,
   Type,
   Undo2,
+  UserRound,
   X,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -41,7 +47,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { cx } from '../components/ui';
 import { thumbUrl } from '../lib/api';
 import { fixed } from '../lib/format';
-import { t } from '../lib/i18n';
+import { t, tRust } from '../lib/i18n';
+import { useApp } from '../store';
 import {
   alignMany,
   duplicate,
@@ -63,24 +70,31 @@ import {
   type Edit,
 } from './actions';
 import { DocCanvas, sameSel, useBox, useDocImages, type Box, type Multi } from './canvas';
-import { formatRatio, isFreeLayout, isLayerLocked, isPlaceholder, layerKeys, templateOf, type LayerMove, type CollageDoc, type PhotoMask, type StickerLayer, type TextLayer } from './engine/document';
+import { ADJUST_PRESETS, NO_ADJUST, emptyPhotoFile, formatRatio, isFreeLayout, isImageSticker, isLayerLocked, isPlaceholder, layerKeys, newId, patchLayerMeta, photoLayerKey, templateOf, type CutoutMode, type LayerMove, type CollageDoc, type PhotoAdjust, type PhotoMask, type StickerLayer, type TextLayer } from './engine/document';
 import { FONT_CATEGORIES, FONTS } from './engine/font-catalog';
 import { itemBounds } from './engine/bounds';
-import { frameOf, type Selection } from './engine/render';
+import { cutOutPhoto, trimCutout } from './engine/cutout';
+import { cellLayouts, frameOf, type Selection } from './engine/render';
+import { assetIdOf, saveCutout } from './assets';
+import { useBrand } from './brand';
+import { BrandPanel } from './brand-panel';
+import { CutoutRefine } from './cutout-refine';
 import { ExportDialog } from './export';
 import { CATEGORIES, EMPTY_PICTURE, fontFamilies, formatLabel, isPicturePlace, photoIdOf, photoSticker, saveMyTemplate, slotShapes, type TemplateCategory } from './kit';
 import { PhotosPanel } from './photos-panel';
+import { addDropped } from './sources';
 import { BackgroundPanel, ElementsPanel, LayersPanel, TextPanel, elementName } from './panels';
 import { facePan, placed, ranked, useKreasi, type SourcePhoto } from './store';
 import { SHAPE_LABEL, ShapeIcon, Steps } from './ui';
 
-type Panel = 'lapisan' | 'foto' | 'teks' | 'elemen' | 'latar';
+type Panel = 'lapisan' | 'foto' | 'teks' | 'elemen' | 'latar' | 'brand';
 const RAIL: { id: Panel; icon: typeof Layers; label: string }[] = [
   { id: 'lapisan', icon: Layers, label: 'Lapisan' },
   { id: 'foto', icon: Images, label: 'Foto##latar' },
   { id: 'teks', icon: Type, label: 'Teks' },
   { id: 'elemen', icon: Shapes, label: 'Elemen' },
   { id: 'latar', icon: PaintBucket, label: 'Latar' },
+  { id: 'brand', icon: Stamp, label: 'Brand' },
 ];
 
 /** What ⌘C / ⌘X copied, for ⌘V here or in another design; each paste steps a little further. */
@@ -224,7 +238,7 @@ export function Editor() {
         el instanceof HTMLTextAreaElement ||
         el instanceof HTMLSelectElement ||
         (el instanceof HTMLInputElement && ['text', 'search', 'number', 'email', 'url', 'password', ''].includes(el.type));
-      if (typing || exporting || savingTemplate || replacing != null || picturing != null) return;
+      if (typing || exporting || savingTemplate || replacing != null || picturing != null || refining != null) return;
       const d = useKreasi.getState().doc;
       if (!d) return;
       const mod = e.metaKey || e.ctrlKey;
@@ -347,6 +361,101 @@ export function Editor() {
     select({ kind: 'cell', index: i });
   };
   const photoById = (id: number) => source?.photos.find((p) => p.id === id);
+
+  /**
+   * Hapus latar: the subject of photo place `i`, as it shows there, becomes
+   * an element in the same spot; the photo itself goes (a free frame is
+   * hidden, a template's place emptied) — ⌘Z brings it back.
+   */
+  const [cutting, setCutting] = useState<number | null>(null);
+  /** A note over the canvas after something happened that isn't obvious; can offer "Rapikan". */
+  const [notice, setNotice] = useState<{ text: string; refine?: string } | null>(null);
+  useEffect(() => {
+    if (!notice) return;
+    const id = setTimeout(() => setNotice(null), 9000);
+    return () => clearTimeout(id);
+  }, [notice]);
+  /** The cut-out element being touched up with the brush. */
+  const [refining, setRefining] = useState<string | null>(null);
+  const cutOut = async (i: number, mode: CutoutMode) => {
+    const slot = doc.slots[i];
+    const img = slot && images.get(slot.file.fileId);
+    if (!slot || !img || cutting != null) return;
+    setCutting(i);
+    try {
+      const fr = frameOf(doc, 1080 * doc.slides);
+      const l = cellLayouts(templateOf(doc), fr, doc.style, doc.slots)[i];
+      if (!l) return;
+      const { canvas, scale } = await cutOutPhoto(img, l.photo, slot, mode, () => {});
+      // The photo uncut, the same size: what the brush brings back.
+      const original = (await cutOutPhoto(img, l.photo, slot, null, () => {})).canvas;
+      const kept = trimCutout(canvas);
+      if (!kept) {
+        useApp.getState().fail(mode === 'potret' ? t('Tidak ada orang yang ditemukan di foto ini. Coba “Benda”.') : t('Tidak ada subjek yang jelas di foto ini. Coba “Orang”.'));
+        return;
+      }
+      const sticker = await saveCutout(kept.canvas, original, canvas);
+      // Its centre, turned with the place around the place's centre.
+      const px = l.photo.x + (kept.x + kept.w / 2) / scale, py = l.photo.y + (kept.y + kept.h / 2) / scale;
+      const rx = l.rect.x + l.rect.w / 2, ry = l.rect.y + l.rect.h / 2;
+      const c = Math.cos(l.rotate), sn = Math.sin(l.rotate);
+      const cx = rx + (px - rx) * c - (py - ry) * sn, cy = ry + (px - rx) * sn + (py - ry) * c;
+      const id = newId();
+      edit((d) => {
+        const withElement = {
+          ...d,
+          stickers: [
+            ...d.stickers,
+            { id, sticker, x: cx / fr.width, y: cy / fr.height, size: kept.w / scale / fr.unit, rotate: (l.rotate * 180) / Math.PI, color: '#ffffff', ratio: kept.h / kept.w },
+          ],
+        };
+        return isFreeLayout(d)
+          ? patchLayerMeta(withElement, photoLayerKey(d.freeCells[i]?.id ?? ''), { hidden: true })
+          : { ...withElement, slots: d.slots.map((s, j) => (j === i && s ? { ...s, file: emptyPhotoFile(i + 1) } : s)) };
+      });
+      select({ kind: 'sticker', id });
+      setNotice({ text: t('Subjeknya ditambahkan sebagai elemen baru di atas, dan foto aslinya disembunyikan. ⌘Z mengembalikan foto.'), refine: id });
+    } catch (e) {
+      useApp.getState().fail(tRust(e instanceof Error ? e.message : String(e)));
+    } finally {
+      setCutting(null);
+    }
+  };
+
+  // Photos dragged in from Finder: added to the Foto panel, the first one
+  // placed where it was dropped (a template: the selected or first empty place).
+  const [fileOver, setFileOver] = useState(false);
+  const dropRef = useRef<(paths: string[], x: number, y: number) => void>(() => {});
+  dropRef.current = async (paths, x, y) => {
+    const src = useKreasi.getState().source;
+    if (!src) return;
+    try {
+      const { source: next, added } = await addDropped(src, paths);
+      useKreasi.getState().setSource(next);
+      setPanel('foto');
+      const first = added[0];
+      if (!first) return;
+      const box = stageRef.current?.querySelector('canvas')?.getBoundingClientRect();
+      const inside = box && x >= box.left && x <= box.right && y >= box.top && y <= box.bottom;
+      putPhoto(first, inside && box ? { x: (x - box.left) / box.width, y: (y - box.top) / box.height } : undefined);
+    } catch (e) {
+      useApp.getState().fail(tRust(e instanceof Error ? e.message : String(e)));
+    }
+  };
+  useEffect(() => {
+    const off = getCurrentWebview().onDragDropEvent((e) => {
+      if (e.payload.type === 'enter' || e.payload.type === 'over') setFileOver(true);
+      else if (e.payload.type === 'leave') setFileOver(false);
+      else if (e.payload.type === 'drop') {
+        setFileOver(false);
+        const k = window.devicePixelRatio || 1;
+        if (e.payload.paths.length) dropRef.current(e.payload.paths, e.payload.position.x / k, e.payload.position.y / k);
+      }
+    });
+    return () => {
+      off.then((f) => f());
+    };
+  }, []);
   const selText = selection?.kind === 'text' ? doc.texts.find((x) => x.id === selection.id) : undefined;
   const selSticker = selection?.kind === 'sticker' ? doc.stickers.find((x) => x.id === selection.id) : undefined;
 
@@ -503,10 +612,30 @@ export function Editor() {
           {panel === 'teks' && <TextPanel onAdd={added} />}
           {panel === 'elemen' && <ElementsPanel onAdd={added} />}
           {panel === 'latar' && <BackgroundPanel doc={doc} images={images} edit={edit} />}
+          {panel === 'brand' && <BrandPanel doc={doc} edit={edit} onAdd={added} />}
         </aside>
 
-        <div className="flex min-w-0 flex-1 flex-col bg-[#08100d]">
-          <div ref={stageRef} className="min-h-0 flex-1 overflow-auto">
+        <div className="relative flex min-w-0 flex-1 flex-col bg-[#08100d]">
+          {notice && (
+            <div className="absolute top-3 left-1/2 z-30 flex w-max max-w-[min(560px,90%)] -translate-x-1/2 items-center gap-3 rounded-xl border border-line bg-panel-2 px-3.5 py-2.5 text-xs text-muted shadow-2xl">
+              <Info size={14} className="shrink-0 text-gold-text" />
+              <span className="leading-snug">{notice.text}</span>
+              {notice.refine && (
+                <button type="button" onClick={() => (setRefining(notice.refine!), setNotice(null))} className="shrink-0 font-semibold text-gold-text hover:underline">
+                  {t('Rapikan')}
+                </button>
+              )}
+              <button type="button" onClick={() => setNotice(null)} aria-label={t('Tutup')} className="shrink-0 text-faint hover:text-fg">
+                <X size={13} />
+              </button>
+            </div>
+          )}
+          <div ref={stageRef} className={cx('relative min-h-0 flex-1 overflow-auto', fileOver && 'ring-2 ring-gold ring-inset')}>
+            {fileOver && (
+              <span className="pointer-events-none absolute top-3 left-1/2 z-20 -translate-x-1/2 rounded-full bg-panel-2 px-3 py-1.5 text-xs text-gold-text shadow-xl">
+                {t('Lepas untuk menambah foto')}
+              </span>
+            )}
             {/* Centred while it fits; scrollable from its edges once zoomed past the window. Room above for the quick bar. */}
             <div className="flex min-h-full w-max min-w-full items-center justify-center px-8 pt-16 pb-8 outline-none" data-keyboard-target tabIndex={-1} onPointerDown={(e) => e.target === e.currentTarget && e.button === 0 && (e.currentTarget.focus({ preventScroll: true }), select(null), bandRef.current?.(e))}>
               {stage.w > 0 && (
@@ -607,6 +736,7 @@ export function Editor() {
               onLive={(p) => live(patchSticker(selSticker.id, p))}
               onCommit={commit}
               onPicture={() => setPicturing(selSticker.id)}
+              onRefine={() => setRefining(selSticker.id)}
             />
           ) : selection?.kind === 'cell' ? (
             <PhotoInspector
@@ -617,6 +747,8 @@ export function Editor() {
               onCommit={commit}
               onReplace={() => setReplacing(selection.index)}
               onDoc={edit}
+              onCutOut={(mode) => cutOut(selection.index, mode)}
+              cutting={cutting === selection.index}
             />
           ) : (
             <div className="flex flex-col gap-3 text-[13px] text-muted">
@@ -630,6 +762,14 @@ export function Editor() {
         </aside>
       </div>
       {exporting && <ExportDialog onClose={() => setExporting(false)} />}
+      {refining && doc.stickers.some((x) => x.id === refining) && (
+        <CutoutRefine
+          layer={doc.stickers.find((x) => x.id === refining)!}
+          doc={doc}
+          onSave={(patch) => (edit(patchSticker(refining, patch)), setRefining(null))}
+          onClose={() => setRefining(null)}
+        />
+      )}
       {savingTemplate && <SaveTemplateDialog onClose={() => setSavingTemplate(false)} />}
       {replacing != null && (
         <ReplaceDialog
@@ -688,11 +828,66 @@ function Slider({ label, value, min, max, step, show, onChange, onDone }: { labe
   );
 }
 
-function Btn({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+function Btn({ onClick, children, disabled }: { onClick: () => void; children: React.ReactNode; disabled?: boolean }) {
   return (
-    <button type="button" onClick={onClick} className="flex h-8 min-h-8 flex-1 items-center justify-center gap-1.5 rounded-lg border border-line bg-panel-2 text-xs hover:bg-raised">
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="flex h-8 min-h-8 flex-1 items-center justify-center gap-1.5 rounded-lg border border-line bg-panel-2 text-xs hover:bg-raised disabled:opacity-50"
+    >
       {children}
     </button>
+  );
+}
+
+/** Same look either way: presets set every number, sliders one. */
+const sameAdjust = (a: PhotoAdjust | undefined, b: PhotoAdjust) => JSON.stringify(a ?? NO_ADJUST) === JSON.stringify(b);
+
+/**
+ * Warna foto: a ready look, four sliders, and "Samakan ke semua foto" so a
+ * feed or carousel reads as one set.
+ */
+function PhotoLook({
+  slot,
+  onChange,
+  onCommit,
+  onDoc,
+}: {
+  slot: NonNullable<CollageDoc['slots'][number]>;
+  onChange: (p: Partial<NonNullable<CollageDoc['slots'][number]>>, liveOnly?: boolean) => void;
+  onCommit: () => void;
+  onDoc: (fn: Edit) => void;
+}) {
+  const a = slot.adjust ?? NO_ADJUST;
+  const set = (patch: Partial<PhotoAdjust>) => onChange({ adjust: { ...a, ...patch } }, true);
+  const signed = (v: number) => (v > 0 ? `+${v}` : String(v));
+  const others = (d: CollageDoc) => d.slots.filter((s) => s && s !== slot).length;
+  return (
+    <Section title={t('Warna foto')}>
+      <div className="grid grid-cols-3 gap-1.5">
+        {ADJUST_PRESETS.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            onClick={() => onChange({ adjust: p.adjust })}
+            className={cx(
+              'h-7 truncate rounded-lg px-1.5 text-[11px]',
+              sameAdjust(slot.adjust, p.adjust) ? 'bg-raised font-semibold text-fg ring-1 ring-gold' : 'bg-panel-2 text-muted hover:text-fg',
+            )}
+          >
+            {t(p.name)}
+          </button>
+        ))}
+      </div>
+      <Slider label={t('Eksposur')} value={a.brightness} min={-100} max={100} step={1} show={signed(a.brightness)} onChange={(brightness) => set({ brightness })} onDone={onCommit} />
+      <Slider label={t('Kontras')} value={a.contrast} min={-100} max={100} step={1} show={signed(a.contrast)} onChange={(contrast) => set({ contrast })} onDone={onCommit} />
+      <Slider label={t('Saturasi')} value={a.saturation} min={-100} max={100} step={1} show={signed(a.saturation)} onChange={(saturation) => set({ saturation })} onDone={onCommit} />
+      <Slider label={t('Suhu')} value={a.warmth} min={-100} max={100} step={1} show={signed(a.warmth)} onChange={(warmth) => set({ warmth })} onDone={onCommit} />
+      <Btn onClick={() => onDoc((d) => (others(d) ? { ...d, slots: d.slots.map((s) => (s ? { ...s, adjust: slot.adjust } : s)) } : d))}>
+        <Copy size={13} /> {t('Samakan ke semua foto')}
+      </Btn>
+    </Section>
   );
 }
 
@@ -704,6 +899,8 @@ function PhotoInspector({
   onCommit,
   onReplace,
   onDoc,
+  onCutOut,
+  cutting,
 }: {
   index: number;
   doc: CollageDoc;
@@ -713,6 +910,8 @@ function PhotoInspector({
   onReplace: () => void;
   /** A change to the whole design (the free layout's frame style). */
   onDoc: (fn: Edit) => void;
+  onCutOut: (mode: CutoutMode) => void;
+  cutting: boolean;
 }) {
   const slot = doc.slots[index];
   const shape = slotShapes(doc)[index];
@@ -766,6 +965,22 @@ function PhotoInspector({
           </p>
         </Section>
       )}
+      {photo && slot && (
+        <Section title={t('Hapus latar')}>
+          <div className="flex gap-2">
+            <Btn onClick={() => onCutOut('potret')} disabled={cutting}>
+              <UserRound size={13} /> {t('Orang')}
+            </Btn>
+            <Btn onClick={() => onCutOut('objek')} disabled={cutting}>
+              <Package size={13} /> {t('Benda')}
+            </Btn>
+          </div>
+          <p className="text-[11px] text-faint">
+            {cutting ? t('Memisahkan subjek…') : t('Subjeknya jadi elemen di tempat yang sama, latarnya hilang. Diproses di komputer ini.')}
+          </p>
+        </Section>
+      )}
+      {photo && slot && <PhotoLook slot={slot} onChange={onChange} onCommit={onCommit} onDoc={onDoc} />}
       {free && slot && (
         <Section title={t('Bentuk##bingkai')}>
           <div className="flex flex-wrap gap-1.5">
@@ -998,7 +1213,12 @@ function palette(doc: CollageDoc): string[] {
 }
 
 function Swatches({ doc, value, onPick }: { doc: CollageDoc; value: string; onPick: (c: string) => void }) {
-  const colors = useMemo(() => palette(doc), [doc]);
+  // The studio's own colours first (Pengaturan › Brand studio).
+  const brandColors = useBrand((b) => b.colors);
+  const colors = useMemo(() => {
+    const own = brandColors.map((c) => c.toLowerCase());
+    return [...own, ...palette(doc).filter((c) => !own.includes(c.toLowerCase()))];
+  }, [doc, brandColors]);
   return (
     <div className="flex flex-wrap gap-2">
       {colors.map((c) => (
@@ -1071,15 +1291,19 @@ function StickerInspector({
   onLive,
   onCommit,
   onPicture,
+  onRefine,
 }: {
   layer: StickerLayer;
   onChange: (p: Partial<StickerLayer>) => void;
   onLive: (p: Partial<StickerLayer>) => void;
   onCommit: () => void;
   onPicture: () => void;
+  /** A Hapus latar cut-out: touch it up with the brush. */
+  onRefine: () => void;
 }) {
   const doc = useKreasi((s) => s.doc)!;
-  const name = elementName(layer);
+  const cut = assetIdOf(layer.sticker) != null;
+  const name = cut ? t('Potongan foto') : elementName(layer);
   const picture = isPicturePlace(layer);
   const empty = isPlaceholder(layer.sticker);
   return (
@@ -1096,7 +1320,15 @@ function StickerInspector({
           {!empty && <Btn onClick={() => onChange({ sticker: EMPTY_PICTURE })}>{t('Kosongkan')}</Btn>}
         </Section>
       )}
-      {!layer.gradient && !picture && (
+      {cut && (
+        <Section title={t('Hapus latar')}>
+          <p className="text-xs text-muted">{t('Potongan dari foto. Hapus sisa latar atau kembalikan bagian yang hilang dengan kuas.')}</p>
+          <Btn onClick={onRefine}>
+            <Paintbrush size={13} /> {t('Rapikan potongan')}
+          </Btn>
+        </Section>
+      )}
+      {!layer.gradient && !picture && !isImageSticker(layer.sticker) && (
         <Section title={t('Warna')}>
           <Swatches doc={doc} value={layer.color} onPick={(color) => onChange({ color })} />
         </Section>
@@ -1132,6 +1364,7 @@ function IconToggle({ on, onClick, label, children }: { on: boolean; onClick: ()
 /** Every bundled font, each shown in its own face, grouped and searchable. */
 function FontPicker({ value, onChange }: { value: string; onChange: (id: string) => void }) {
   const fam = fontFamilies();
+  const brandFont = useBrand((b) => b.font);
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
   const box = useRef<HTMLDivElement>(null);
@@ -1162,6 +1395,20 @@ function FontPicker({ value, onChange }: { value: string; onChange: (id: string)
             )}
           </label>
           <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-2">
+            {brandFont && FONTS[brandFont] && (!query || FONTS[brandFont].label.toLowerCase().includes(query)) && (
+              <div className="flex flex-col">
+                <span className="px-2 pt-2 pb-1 text-[10px] font-semibold text-gold-text uppercase">{t('Huruf brand')}</span>
+                <button
+                  type="button"
+                  onClick={() => (onChange(brandFont), setOpen(false))}
+                  className={cx('flex h-9 shrink-0 items-center justify-between rounded-lg px-2 text-left text-[17px] hover:bg-raised', brandFont === value && 'bg-raised')}
+                  style={{ fontFamily: fam[brandFont] }}
+                >
+                  <span className="truncate">{FONTS[brandFont].label}</span>
+                  {brandFont === value && <Check size={14} className="shrink-0 text-gold-text" />}
+                </button>
+              </div>
+            )}
             {FONT_CATEGORIES.map((c) => {
               const list = Object.entries(FONTS).filter(([, f]) => f.category === c.id && (!query || f.label.toLowerCase().includes(query)));
               if (!list.length) return null;

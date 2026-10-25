@@ -8,13 +8,15 @@ import { num } from '../lib/format';
 import { t, tRust } from '../lib/i18n';
 import { useApp } from '../store';
 import { previewUrl } from './canvas';
-import { slotsFor, templateOf } from './engine/document';
+import { FORMATS, formatRatio, slotsFor, templateOf } from './engine/document';
 import { exportCollage } from './engine/render';
 import { coverCrop, loadDocFonts, loadLocalImage, photoIdOf, photoIdOfSticker } from './kit';
+import { docAssets } from './assets';
+import { brandLogo, LOGO_STICKER, useBrand } from './brand';
 import { emptyAssets } from './preview';
 import { useKreasi } from './store';
 
-type Format = 'jpg' | 'png';
+type Format = 'jpg' | 'png' | 'pdf';
 
 /** "Tiga momen — Rina & Dimas" → "tiga-momen-rina-dimas". */
 const slug = (s: string) =>
@@ -44,7 +46,14 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
 
   if (!doc || !template || !source) return null;
   const slides = doc.slides;
-  const width = 1080 * scale;
+  // A print size goes out at 300 dpi (150 for a quick proof); Instagram at 1080 px (or 2×).
+  const inches = FORMATS[doc.format].printInches;
+  const sizes = inches
+    ? ([1, 2] as const).map((k) => ({ k, width: Math.round(inches * (k === 2 ? 300 : 150)), note: k === 2 ? t('300 dpi · siap cetak') : t('150 dpi · untuk dicek dulu') }))
+    : ([1, 2] as const).map((k) => ({ k, width: 1080 * k, note: k === 1 ? t('Ukuran Instagram') : t('Lebih tajam untuk dicetak atau dipotong') }));
+  const width = sizes.find((s) => s.k === scale)!.width;
+  const heightOf = (w: number) => Math.round(w * formatRatio(doc));
+  const ext = format;
 
   const run = async () => {
     setBusy(true);
@@ -58,7 +67,9 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
           if (s && id != null) pictures.set(s.file.fileId, (await loadLocalImage(await previewUrl(source.root, id))) as unknown as HTMLCanvasElement);
         }),
       );
-      const stickerImages = new Map<string, HTMLImageElement>();
+      const stickerImages = await docAssets(doc);
+      const logo = await brandLogo();
+      if (logo) stickerImages.set(LOGO_STICKER, logo);
       await Promise.all(
         doc.stickers.map(async (st) => {
           const id = photoIdOfSticker(st.sticker);
@@ -69,12 +80,11 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
         slideWidth: width,
         doc,
         template: templateOf(doc),
-        assets: { ...(({ images: _, ...rest }) => rest)(emptyAssets()), stickerImages },
+        assets: { ...(({ images: _, ...rest }) => rest)(emptyAssets()), stickerImages, watermark: logo, studioName: useBrand.getState().studio },
         format,
         quality: 0.92,
         pictures,
       });
-      const ext = format === 'png' ? 'png' : 'jpg';
       const paths: string[] = [];
       for (let i = 0; i < blobs.length; i++) {
         const file = blobs.length > 1 ? `${name}-${String(i + 1).padStart(2, '0')}.${ext}` : `${name}.${ext}`;
@@ -131,12 +141,29 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
           </>
         ) : (
           <>
-            <Field label={t('Format')} hint={format === 'jpg' ? t('JPG paling ringan untuk Instagram') : t('PNG menjaga tepi teks tetap tajam')}>
-              <Segmented<Format> value={format} onChange={setFormat} options={[{ value: 'jpg', label: 'JPG' }, { value: 'png', label: 'PNG' }]} />
+            <Field
+              label={t('Format')}
+              hint={
+                format === 'jpg'
+                  ? t('JPG paling ringan untuk Instagram')
+                  : format === 'png'
+                    ? t('PNG menjaga tepi teks tetap tajam')
+                    : t('PDF untuk percetakan: satu halaman per slide')
+              }
+            >
+              <Segmented<Format>
+                value={format}
+                onChange={setFormat}
+                options={[
+                  { value: 'jpg', label: 'JPG' },
+                  { value: 'png', label: 'PNG' },
+                  { value: 'pdf', label: 'PDF' },
+                ]}
+              />
             </Field>
             <Field label={t('Ukuran')}>
               <div className="flex flex-col gap-2">
-                {([1, 2] as const).map((k) => (
+                {sizes.map(({ k, width: w, note }) => (
                   <button
                     key={k}
                     type="button"
@@ -146,10 +173,10 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
                     <span className={cx('size-[18px] shrink-0 rounded-full', scale === k ? 'border-[5px] border-gold' : 'border-[1.5px] border-faint')} />
                     <span className="flex flex-col">
                       <span className="text-[13px] font-medium">
-                        {num(1080 * k)} × {num(Math.round(1080 * k * (doc.format === 'story' ? 16 / 9 : doc.format === 'square' ? 1 : 5 / 4)))}
-                        {k === 2 ? ' · 2×' : ''}
+                        {num(w)} × {num(heightOf(w))}
+                        {!inches && k === 2 ? ' · 2×' : ''}
                       </span>
-                      <span className="text-[11px] text-faint">{k === 1 ? t('Ukuran Instagram') : t('Lebih tajam untuk dicetak atau dipotong')}</span>
+                      <span className="text-[11px] text-faint">{note}</span>
                     </span>
                   </button>
                 ))}
@@ -161,14 +188,16 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
             <Field label={t('Nama file')}>
               <div className="flex h-[38px] items-center rounded-[10px] border border-line bg-bg px-3 focus-within:border-gold">
                 <input value={name} onChange={(e) => setName(e.target.value)} className="min-w-0 flex-1 bg-transparent text-[13px] outline-none" />
-                <span className="text-xs text-faint">{slides > 1 ? `-01…-${String(slides).padStart(2, '0')}` : ''}.{format}</span>
+                <span className="text-xs text-faint">{slides > 1 && format !== 'pdf' ? `-01…-${String(slides).padStart(2, '0')}` : ''}.{format}</span>
               </div>
             </Field>
             <p className="flex gap-2 rounded-[10px] bg-panel-2 p-3 text-[11px] text-faint">
               <Info size={13} className="mt-px shrink-0" />
-              {slides > 1
+              {slides > 1 && format !== 'pdf'
                 ? t('Carousel disimpan per slide: {n} file, urutannya sudah benar. File asli tidak diubah.', { n: slides })
-                : t('Foto diambil dari pratinjau 2048 px tiap foto. File asli tidak diubah.')}
+                : inches && width > 2048
+                  ? t('Foto diambil dari pratinjau 2048 px tiap foto: untuk cetak besar, foto bisa sedikit kurang tajam. File asli tidak diubah.')
+                  : t('Foto diambil dari pratinjau 2048 px tiap foto. File asli tidak diubah.')}
             </p>
             <div className="flex justify-end gap-2.5">
               <Button variant="plain" onClick={onClose} disabled={busy}>

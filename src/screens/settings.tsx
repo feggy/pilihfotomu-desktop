@@ -10,13 +10,18 @@ import {
   Languages,
   RotateCcw,
   ScrollText,
+  Stamp,
   SlidersHorizontal,
   Trash2,
+  X,
   type LucideIcon,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { LegalDocs } from '../components/legal';
+import { MAX_BRAND_COLORS, readLogo, useBrand } from '../kreasi/brand';
+import { FONT_CATEGORIES, FONTS } from '../kreasi/engine/font-catalog';
+import { fontFamilies } from '../kreasi/kit';
 import { TitleBar, isMac } from '../components/title-bar';
 import { Button, Chip, IconButton, Kbd, Segmented, Switch, cx } from '../components/ui';
 import { api, type CacheInfo, type Options, type ShootType, type Strictness } from '../lib/api';
@@ -28,7 +33,7 @@ import type { Screen } from '../store';
 import { useApp } from '../store';
 import { strictnessHint } from './setup';
 
-type Section = 'license' | 'language' | 'analysis' | 'storage' | 'keys' | 'legal' | 'about';
+type Section = 'license' | 'language' | 'analysis' | 'storage' | 'keys' | 'brand' | 'legal' | 'about';
 
 /** `label` is an i18n key. */
 const NAV: { id: Section; icon: LucideIcon; label: string }[] = [
@@ -37,6 +42,7 @@ const NAV: { id: Section; icon: LucideIcon; label: string }[] = [
   { id: 'analysis', icon: SlidersHorizontal, label: 'Analisis bawaan' },
   { id: 'storage', icon: HardDrive, label: 'Penyimpanan & cache' },
   { id: 'keys', icon: Keyboard, label: 'Pintasan keyboard' },
+  { id: 'brand', icon: Stamp, label: 'Brand studio' },
   { id: 'legal', icon: ScrollText, label: 'Dokumen hukum' },
   { id: 'about', icon: Info, label: 'Tentang' },
 ];
@@ -193,6 +199,124 @@ const CHECKS: { key: keyof Options & `check${string}`; label: string }[] = [
   { key: 'checkExposure', label: 'Eksposur' },
   { key: 'checkSmile', label: 'Ekspresi' },
 ];
+
+/** A "+" that adds the colour once it is chosen (the native change, not every drag step). */
+function ColorAdder({ onAdd }: { onAdd: (color: string) => void }) {
+  const ref = useRef<HTMLInputElement>(null);
+  const add = useRef(onAdd);
+  add.current = onAdd;
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const done = () => add.current(el.value);
+    el.addEventListener('change', done);
+    return () => el.removeEventListener('change', done);
+  }, []);
+  return (
+    <label className="relative flex size-8 cursor-pointer items-center justify-center overflow-hidden rounded-full text-sm text-faint ring-1 ring-line" title={t('Tambah warna')}>
+      <input ref={ref} type="color" defaultValue="#c9a96e" className="absolute inset-0 size-full cursor-pointer opacity-0" />+
+    </label>
+  );
+}
+
+/** Pengaturan › Brand studio: used by Buat konten in every design. */
+function BrandSettings() {
+  const brand = useBrand();
+  const [error, setError] = useState<string | null>(null);
+  const fam = fontFamilies();
+  const pickLogo = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      const { url, ratio } = await readLogo(file);
+      brand.set({ logo: url, logoRatio: ratio });
+      setError(null);
+    } catch {
+      setError(t('Gambar ini tidak bisa dibaca. Coba PNG atau JPG.'));
+    }
+  };
+  return (
+    <div className="flex max-w-[560px] flex-col gap-5">
+      <h1 className="text-[22px] font-semibold">{t('Brand studio')}</h1>
+      <p className="-mt-3 text-[13px] text-muted">
+        {t('Diisi sekali, dipakai di semua desain Buat konten: watermark, logo, teks “Nama Studio”, warna dan huruf andalan.')}
+      </p>
+      <div className="flex flex-col gap-5 rounded-2xl border border-line-soft bg-panel p-5">
+        <label className="flex flex-col gap-2">
+          <span className="text-[13px] font-medium">{t('Nama studio')}</span>
+          <input
+            value={brand.studio}
+            onChange={(e) => brand.set({ studio: e.target.value })}
+            placeholder={t('mis. Galvin Photography')}
+            className="h-[34px] rounded-[10px] border border-line bg-bg px-3 text-[13px] outline-none placeholder:text-faint focus:border-gold"
+          />
+        </label>
+        <div className="flex flex-col gap-2">
+          <span className="text-[13px] font-medium">{t('Logo')}</span>
+          <div className="flex items-center gap-3">
+            <span className="flex size-16 items-center justify-center rounded-lg bg-[repeating-conic-gradient(#2a3a33_0_25%,#1a2622_0_50%)] bg-[length:12px_12px] p-1.5">
+              {brand.logo ? <img src={brand.logo} alt="" className="max-h-full max-w-full" /> : <Stamp size={18} className="text-faint" />}
+            </span>
+            <label className="inline-flex h-8 cursor-pointer items-center rounded-lg border border-line bg-raised px-3 text-xs font-medium hover:bg-line">
+              {brand.logo ? t('Ganti logo…') : t('Pilih logo…')}
+              <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(e) => pickLogo(e.target.files?.[0])} />
+            </label>
+            {brand.logo && (
+              <Button variant="plain" icon={Trash2} onClick={() => brand.set({ logo: null })}>
+                {t('Hapus')}
+              </Button>
+            )}
+          </div>
+          <span className="text-xs text-faint">{t('PNG dengan latar transparan paling rapi.')}</span>
+          {error && <span className="text-xs text-reject">{error}</span>}
+        </div>
+        <div className="flex flex-col gap-2">
+          <span className="text-[13px] font-medium">{t('Warna andalan')}</span>
+          <div className="flex flex-wrap items-center gap-2">
+            {brand.colors.map((c, i) => (
+              <button
+                key={`${c}-${i}`}
+                type="button"
+                title={t('Hapus {color}', { color: c })}
+                onClick={() => brand.set({ colors: brand.colors.filter((_, j) => j !== i) })}
+                className="group relative size-8 rounded-full ring-1 ring-line"
+                style={{ background: c }}
+              >
+                <X size={12} className="absolute -top-1 -right-1 hidden rounded-full bg-panel-2 text-fg group-hover:block" />
+              </button>
+            ))}
+            {brand.colors.length < MAX_BRAND_COLORS && (
+              <ColorAdder onAdd={(c) => brand.set({ colors: [...brand.colors, c] })} />
+            )}
+          </div>
+          <span className="text-xs text-faint">{t('Muncul paling depan di setiap pilihan warna.')}</span>
+        </div>
+        <label className="flex flex-col gap-2">
+          <span className="text-[13px] font-medium">{t('Huruf andalan')}</span>
+          <select
+            value={brand.font ?? ''}
+            onChange={(e) => brand.set({ font: e.target.value || null })}
+            className="h-[34px] rounded-[10px] border border-line bg-bg px-3 text-[13px] outline-none focus:border-gold"
+            style={brand.font ? { fontFamily: fam[brand.font] } : undefined}
+          >
+            <option value="">{t('Tidak ada')}</option>
+            {FONT_CATEGORIES.map((c) => (
+              <optgroup key={c.id} label={t(c.label)}>
+                {Object.entries(FONTS)
+                  .filter(([, f]) => f.category === c.id)
+                  .map(([id, f]) => (
+                    <option key={id} value={id}>
+                      {f.label}
+                    </option>
+                  ))}
+              </optgroup>
+            ))}
+          </select>
+          <span className="text-xs text-faint">{t('Muncul paling atas di daftar huruf, dan dipakai untuk nama studio.')}</span>
+        </label>
+      </div>
+    </div>
+  );
+}
 
 function AnalysisDefaults() {
   const options = useDefaults((s) => s.options);
@@ -429,6 +553,7 @@ export function Settings({ back, initial = 'license' }: { back: Screen; initial?
           {section === 'analysis' && <AnalysisDefaults />}
           {section === 'storage' && <Storage />}
           {section === 'keys' && <KeyEditor />}
+          {section === 'brand' && <BrandSettings />}
           {section === 'legal' && (
             <div className="flex max-w-[640px] flex-col gap-5">
               <h1 className="text-[22px] font-semibold">{t('Dokumen hukum')}</h1>

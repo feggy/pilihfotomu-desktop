@@ -73,9 +73,11 @@ export async function listDrafts(): Promise<Draft[]> {
  * one are registered with Rust under the same key as before.
  */
 export async function reopenSource(source: Source | null): Promise<Source | null> {
-  if (!source?.files?.length) return source;
-  const got = await api.openFiles(source.files);
-  return { ...source, root: got.root };
+  if (!source) return source;
+  const root = source.files?.length ? (await api.openFiles(source.files)).root : source.root;
+  // Dragged-in files again, in the same order: the same ids.
+  if (source.added?.length) await api.addFiles(root, source.added).catch(() => []);
+  return { ...source, root };
 }
 
 /** The template a draft started from — bundled, own, or an empty canvas. */

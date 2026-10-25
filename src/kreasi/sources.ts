@@ -10,17 +10,24 @@ import { api, type Photo } from '../lib/api';
 import { num } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useApp } from '../store';
-import { useKreasi, type Source } from './store';
+import { useKreasi, type Source, type SourcePhoto } from './store';
 
-/** The open session as a photo source. */
+/**
+ * The open session as a photo source: its Pilih photos (what "Buat konten
+ * dari foto Dipilih" promises), or everything not skipped while nothing is
+ * Pilih yet.
+ */
 export function sessionSource(): Source | null {
   const s = useApp.getState().session;
   if (!s) return null;
+  const picks = s.photos.filter((p) => p.status === 'pick');
+  const times = s.photos.map((p) => p.takenAt).filter((x): x is number => x != null);
   return {
     root: s.root,
     name: s.name,
     saveDir: s.root,
-    photos: s.photos.map((p) => ({
+    shotAt: times.length ? Math.min(...times) : null,
+    photos: (picks.length ? picks : s.photos.filter((p) => p.status !== 'reject')).map((p) => ({
       id: p.id,
       name: p.name,
       thumb: p.thumb,
@@ -63,6 +70,23 @@ export async function filesSource(): Promise<Source | null> {
     saveDir: got.dir,
     files: paths,
     photos: got.photos.map((p) => ({ id: p.id, name: fileName(p), thumb: null })),
+  };
+}
+
+/**
+ * Files dragged in from Finder: added to the source's photos (new ids after
+ * the last), and remembered so a reopened draft finds them again.
+ */
+export async function addDropped(source: Source, paths: string[]): Promise<{ source: Source; added: SourcePhoto[] }> {
+  const wanted = paths.filter((p) => PHOTO_EXTS.includes(p.split('.').pop()?.toLowerCase() ?? ''));
+  if (!wanted.length) throw new Error(t('File yang diseret bukan foto RAW atau JPEG.'));
+  const got = await api.addFiles(source.root, wanted);
+  const known = new Set(source.photos.map((p) => p.id));
+  const fresh = got.filter((p) => !known.has(p.id)).map((p) => ({ id: p.id, name: fileName(p), thumb: null }));
+  const added = got.map((p) => source.photos.find((x) => x.id === p.id) ?? fresh.find((x) => x.id === p.id)!);
+  return {
+    source: { ...source, photos: [...source.photos, ...fresh], added: [...(source.added ?? []), ...wanted.filter((w) => !source.added?.includes(w))] },
+    added,
   };
 }
 

@@ -73,7 +73,7 @@ export interface Template {
 
 const BLANK_PREFIX = 'kosong-';
 /** The canvases "Mulai dari kosong" offers. */
-export const BLANK_FORMATS: FormatId[] = ['story', 'feed', 'square', 'carousel'];
+export const BLANK_FORMATS: FormatId[] = ['story', 'feed', 'square', 'carousel', 'cetak-4r', 'cetak-5r', 'cetak-10r', 'a4'];
 
 /** An empty canvas of a format (a carousel starts with three slides), as a template. */
 export function blankTemplate(format: FormatId): Template {

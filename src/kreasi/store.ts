@@ -5,9 +5,11 @@
 
 import { create } from 'zustand';
 
+import { useBrand } from './brand';
 import { emptyPhotoFile, formatRatio, newId, slotsFor, templateOf, withSlot, type CollageDoc, type Slot } from './engine/document';
 import { newDraftId } from './drafts';
 import { photoFile, slotShapes, shapeOf, templateDoc, type Shape, type Template } from './kit';
+import { personalize, type ClientInfo } from './personalize';
 
 /** A photo the design can use: from the open session, or a folder scanned for this. */
 export interface SourcePhoto {
@@ -33,6 +35,10 @@ export interface Source {
   saveDir: string;
   /** Picked file by file: their paths, to register them again after a restart. */
   files?: string[];
+  /** When the session was shot (its earliest photo), unix seconds. */
+  shotAt?: number | null;
+  /** Files dragged in from Finder, in the order added (`api.addFiles`). */
+  added?: string[];
 }
 
 type Step = 'galeri' | 'isi' | 'edit';
@@ -54,8 +60,11 @@ interface KreasiState {
   draftId: string | null;
   name: string;
   savedAt: number | null;
+  /** The client's name and the shoot date, put into templates' example texts. */
+  client: ClientInfo;
 
   setStep: (step: Step) => void;
+  setClient: (c: Partial<ClientInfo>) => void;
   choose: (t: Template) => void;
   /** Opens a saved draft where it was left: in the editor. */
   openDraft: (d: { id: string; name: string; doc: CollageDoc; source: Source | null; savedAt: number }, t: Template) => void;
@@ -138,12 +147,15 @@ export const useKreasi = create<KreasiState>((set, get) => ({
   draftId: null,
   name: '',
   savedAt: null,
+  client: { name: '', date: null },
 
   setStep: (step) => set({ step }),
+  setClient: (c) => set(({ client }) => ({ client: { ...client, ...c } })),
   choose: (template) =>
-    set({
+    set(({ client }) => ({
       template,
-      doc: structuredClone(templateDoc(template)),
+      doc: personalize(structuredClone(templateDoc(template)), { ...client, applied: undefined }, useBrand.getState().studio),
+      client: { ...client, applied: client.name.trim() },
       active: 0,
       past: [],
       future: [],
@@ -152,12 +164,17 @@ export const useKreasi = create<KreasiState>((set, get) => ({
       draftId: newDraftId(),
       name: template.name,
       savedAt: null,
-    }),
+    })),
   openDraft: (d, template) =>
     set({ template, doc: d.doc, source: d.source, draftId: d.id, name: d.name, savedAt: d.savedAt, active: 0, past: [], future: [], step: 'edit', resumed: true }),
   setName: (name) => set({ name }),
   setSavedAt: (savedAt) => set({ savedAt }),
-  setSource: (source) => set({ source }),
+  // A new session brings its shoot date; the name is the photographer's to type.
+  setSource: (source) =>
+    set(({ client, source: before }) => ({
+      source,
+      client: source?.root !== before?.root ? { name: client.name, date: source?.shotAt ?? null } : client,
+    })),
   setRatios: (r) =>
     set(({ source }) =>
       source ? { source: { ...source, photos: source.photos.map((p) => (r.has(p.id) ? { ...p, ratio: r.get(p.id) } : p)) } } : {},

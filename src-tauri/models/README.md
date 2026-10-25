@@ -1,6 +1,6 @@
 # Model AI yang dibundel
 
-Keempatnya ditanam ke dalam aplikasi lewat `include_bytes!` di `src/faces.rs`
+Semuanya ditanam ke dalam aplikasi lewat `include_bytes!` di `src/faces.rs`
 dan dijalankan dengan tract (ONNX, Rust murni). Jangan ganti file tanpa
 memperbarui checksum di sini.
 
@@ -9,6 +9,8 @@ memperbarui checksum di sini.
 | `face_detection_yunet_2023mar.onnx` | [opencv/face_detection_yunet](https://huggingface.co/opencv/face_detection_yunet) (OpenCV Zoo, Shiqi Yu) | MIT — `LICENSE-yunet.txt` | `8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4` |
 | `face_blendshapes.onnx` | `face_blendshapes.tflite` dari [face_landmarker.task](https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task) resmi MediaPipe (Google), dikonversi dengan `scripts/blendshapes-to-onnx.py` | Apache-2.0 | `cdfba3868cdac1d7258cada325bc18af5e5676a3ddc098b5fbb3445f2cb4da33` |
 | `face_recognition_sface_2021dec_f16.onnx` | `face_recognition_sface_2021dec.onnx` dari [opencv/face_recognition_sface](https://huggingface.co/opencv/face_recognition_sface) (OpenCV Zoo), bobot disimpan float16 dengan `scripts/onnx-fp16-weights.py` (38,7 → 19,4 MB; cosinus ke fp32 0,999998) | Apache-2.0 | `b20c4dab3369d661e793880349d4d5fcd67e1af0118f87be9287be2767ecea28` |
+| `modnet_f16.onnx` | `onnx/model.onnx` dari [Xenova/modnet](https://huggingface.co/Xenova/modnet) ([MODNet](https://github.com/ZHKKKe/MODNet)), bobot float16 dengan `scripts/onnx-fp16-weights.py` (25,9 → 13,0 MB) | Apache-2.0 | `771f37abf610ed8dacc9358194f48f60426af8855a6d0fcb00bd1a74464b81e1` |
+| `u2netp.onnx` | `onnx/model.onnx` dari [BritishWerewolf/U-2-Netp](https://huggingface.co/BritishWerewolf/U-2-Netp) revisi `7112208d` ([U²-Net](https://github.com/xuebinqin/U-2-Net)) | Apache-2.0 | `309c8469258dda742793dce0ebea8e6dd393174f89934733ecc8b14c76f4ddd8` |
 | `face_landmarks.onnx` | [fernandotonon/QtMeshEditor-facemesh-onnx](https://huggingface.co/fernandotonon/QtMeshEditor-facemesh-onnx) — konversi ONNX dari MediaPipe Face Mesh V2 (Google) | Apache-2.0 | `d16e5a55e6a480284d468ee32469692464049518c311662ab3956681de31e3e9` |
 
 `face_landmarks.onnx` adalah konversi pihak ketiga, bukan rilisan resmi
@@ -27,6 +29,12 @@ ArcFace dari 5 titik YuNet (`faces::aligned_at`); output 128 angka.
 Pengelompokan orang: `faces::assign_people` (cosinus ≥ 0,45 ke rata-rata
 orang itu, satu orang tidak pernah dua kali di satu foto). Cek susunan wajah
 dengan `cargo run --release --example people_debug -- <out> foto...`.
+
+Hapus latar (`src/cutout.rs`): MODNet untuk orang (sisi pendek 512 px,
+kelipatan 32, `(x/255 − 0,5)/0,5`), U²-Netp untuk benda (320 × 320, dibagi
+kanal tertinggi lalu mean/std ImageNet, output pertama dinormalkan min–max).
+Hasil tract sama dengan onnxruntime (selisih rata-rata mask 0,3 / 255).
+Cek: `cargo run --release --example cutout_debug -- <out> potret|objek foto...`.
 
 Cek bentuk input/output dan uji ke foto:
 `cargo run --release --example probe_models -- foto1.jpg foto2.jpg`

@@ -7,6 +7,8 @@ export default {
   'Belum ada sesi yang dibuka.': 'No session is open.',
   'Foto tidak ditemukan.': 'Photo not found.',
   'Folder ini tidak berisi foto RAW atau JPEG.': 'This folder has no RAW or JPEG photos.',
+  'File yang diseret bukan foto RAW atau JPEG.': 'The dragged files aren’t RAW or JPEG photos.',
+  'Folder foto tidak ditemukan.': 'Photo folder not found.',
   'Kualitas penuh belum tersedia di sistem operasi ini.': 'Full quality is not available on this operating system yet.',
   'Windows belum bisa membaca RAW ini. Pasang “Raw Image Extension” (gratis) dari Microsoft Store, lalu coba lagi.':
     'Windows can’t read this RAW yet. Install the free “Raw Image Extension” from the Microsoft Store, then try again.',
