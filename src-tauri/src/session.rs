@@ -101,6 +101,8 @@ pub struct Summary {
     pub rejects: u32,
     /// Up to three Pick thumbnails for the session list.
     pub covers: Vec<PathBuf>,
+    /// The settings the photos were judged with, shown on the session card.
+    pub options: Options,
     /// The session folder is reachable right now (an external drive may be
     /// unplugged — the session itself is still fine).
     pub available: bool,
@@ -121,6 +123,7 @@ impl Session {
             picks: count(Status::Pick),
             maybe: count(Status::Maybe),
             rejects: count(Status::Reject),
+            options: self.options,
             covers: self
                 .photos
                 .iter()
@@ -169,17 +172,27 @@ impl Session {
     /// faces that were read in the first analysis.
     pub fn recull(&mut self, options: Options) {
         let inputs: Vec<Input> = self.photos.iter().filter_map(input_of).collect();
-        let mut verdicts: std::collections::HashMap<u32, Verdict> =
-            cull::cull(&inputs, &options).into_iter().map(|v| (v.id, v)).collect();
+        let mut out = cull::cull(&inputs, &Options { limit: None, ..options });
+        // Picks made by hand fill places among the N first.
+        if let Some(n) = options.limit {
+            let held: std::collections::HashSet<u32> =
+                self.photos.iter().filter(|e| e.is_manual()).map(|e| e.photo.id).collect();
+            let hand_picked = self.photos.iter().filter(|e| e.is_manual() && e.status == Status::Pick).count() as u32;
+            cull::keep_best(&inputs, &mut out, &options, n.saturating_sub(hand_picked), |id| held.contains(&id));
+        }
+        let mut verdicts: std::collections::HashMap<u32, Verdict> = out.into_iter().map(|v| (v.id, v)).collect();
         drop(inputs);
         for e in &mut self.photos {
             // Unreadable files have nothing to decide from.
             let Some(v) = verdicts.remove(&e.photo.id) else { continue };
-            if !e.is_manual() {
+            // Decided before the status changes: a new AI verdict differs
+            // from the old `auto_status`, which isn't a change by hand.
+            let manual = e.is_manual();
+            if !manual {
                 e.status = v.status;
                 e.rating = v.rating;
             }
-            e.manual = e.is_manual();
+            e.manual = manual;
             e.reasons = v.reasons;
             e.group = v.group;
             e.auto_status = v.status;
@@ -607,6 +620,13 @@ mod tests {
         assert_eq!(list(&dir)[0].picks, 1);
 
         let mut s = s;
+        // Settings are the AI's call, not the photographer's: going back
+        // brings the photo back.
+        s.recull(Options { limit: Some(0), ..Options::default() });
+        assert_eq!((s.photos[0].status, s.photos[0].manual), (Status::Maybe, false));
+        s.recull(Options::default());
+        assert_eq!((s.photos[0].status, s.photos[0].manual), (Status::Pick, false));
+
         let first = s.photos[0].photo.id;
         s.set_rating(&[first], 9);
         assert_eq!(s.photos[0].rating, 5);

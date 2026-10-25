@@ -37,6 +37,10 @@ pub enum Reason {
     Similar {
         of: u32,
     },
+    /// A good photo, but not among the `limit` best the photographer asked for.
+    OverLimit {
+        limit: u32,
+    },
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -82,6 +86,9 @@ pub struct Options {
     /// never move a photo to Maybe/Reject.
     #[serde(default = "yes")]
     pub check_smile: bool,
+    /// "Pilih N terbaik": at most this many Picks; the rest go to Maybe.
+    #[serde(default)]
+    pub limit: Option<u32>,
 }
 
 fn yes() -> bool {
@@ -98,6 +105,7 @@ impl Default for Options {
             check_duplicates: true,
             check_eyes: true,
             check_smile: true,
+            limit: None,
         }
     }
 }
@@ -369,7 +377,34 @@ pub fn cull(inputs: &[Input], opts: &Options) -> Vec<Verdict> {
             Status::Reject => 1,
         };
     }
+
+    if let Some(n) = opts.limit {
+        keep_best(inputs, &mut out, opts, n, |_| false);
+    }
     out
+}
+
+/// "Pilih N terbaik": only the `n` best Picks stay Pick, the rest go to Maybe
+/// marked `OverLimit`. Best = burst keepers and smiles (★5) first, then a
+/// pose not already taken, more smiling main subjects, sharpness. `held`
+/// photos (changed by hand) aren't ranked; the caller counts their Picks out
+/// of `n` itself.
+pub fn keep_best(inputs: &[Input], out: &mut [Verdict], opts: &Options, n: u32, held: impl Fn(u32) -> bool) {
+    let prof = profile(opts.shoot_type);
+    let key = |i: usize| {
+        let similar = out[i].reasons.iter().any(|r| matches!(r, Reason::Similar { .. }));
+        let smiles = if opts.check_smile && prof.faces { eyes(inputs[i].faces, prof.main_share).main_smiling } else { 0 };
+        (out[i].rating, !similar, smiles, inputs[i].metrics.sharpness)
+    };
+    let mut picks: Vec<(usize, (u8, bool, u8, f32))> =
+        (0..out.len()).filter(|&i| out[i].status == Status::Pick && !held(out[i].id)).map(|i| (i, key(i))).collect();
+    picks.sort_by(|(_, a), (_, b)| b.0.cmp(&a.0).then(b.1.cmp(&a.1)).then(b.2.cmp(&a.2)).then(b.3.total_cmp(&a.3)));
+    let limit = opts.limit.unwrap_or(n);
+    for &(i, _) in picks.iter().skip(n as usize) {
+        out[i].status = Status::Maybe;
+        out[i].rating = 3;
+        out[i].reasons.push(Reason::OverLimit { limit });
+    }
 }
 
 /// Repeats of the same pose a little later: among photos still in the
@@ -639,6 +674,16 @@ mod tests {
         assert!(v[1].reasons.is_empty() && v[2].reasons.is_empty(), "too far apart");
         let strict = cull(&inputs, &Options { strictness: Strictness::Strict, ..Options::default() });
         assert_eq!(strict[0].status, Status::Maybe);
+    }
+
+    #[test]
+    fn keeps_only_the_best_n() {
+        let inputs = [photo(1, 0.0, 60.0, 0), photo(2, 100.0, 90.0, u64::MAX), photo(3, 200.0, 75.0, 0xF0F0)];
+        let v = cull(&inputs, &Options { limit: Some(2), ..Options::default() });
+        let status: Vec<Status> = v.iter().map(|v| v.status).collect();
+        assert_eq!(status, [Status::Maybe, Status::Pick, Status::Pick]);
+        assert!(v[0].reasons.contains(&Reason::OverLimit { limit: 2 }));
+        assert_eq!(v[0].rating, 3);
     }
 
     #[test]

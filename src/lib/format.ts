@@ -5,6 +5,7 @@ import {
   EyeOff,
   Focus,
   Images,
+  ListOrdered,
   Moon,
   ScanEye,
   UserRound,
@@ -96,6 +97,7 @@ export const REASON: Record<ReasonKind, { readonly label: string; icon: LucideIc
   eyesClosed: reason('Terdeteksi terpejam', EyeOff, 'maybe'),
   bestInGroup: reason('Terbaik di grup', Crown, 'gold'),
   similar: reason('Pose mirip', Images, 'maybe'),
+  overLimit: reason('Melebihi batas jumlah', ListOrdered, 'maybe'),
 };
 
 export const toneColor = (tone: Status | 'gold') =>

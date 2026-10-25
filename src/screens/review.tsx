@@ -28,11 +28,14 @@ import {
   ChevronDown,
   LayoutTemplate,
   SlidersHorizontal as Sliders,
+  Info,
+  Minus,
+  Plus,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { TitleBar, isMac } from '../components/title-bar';
-import { Button, Chip, Dot, IconButton, Kbd, StatusBadge, Stars, STATUS_ICON, cx } from '../components/ui';
+import { Button, Chip, Dot, IconButton, Kbd, StatusBadge, Stars, STATUS_ICON, Switch, cx } from '../components/ui';
 import { isManual, thumbUrl, type PhotoEntry, type ShootType, type Status, type Strictness } from '../lib/api';
 import { clock, duration, eyeSummary,
   smileSummary as smileOf,
@@ -574,15 +577,83 @@ const STRICTNESS: { value: Strictness; label: string }[] = [
 function Retune() {
   const session = useApp((s) => s.session)!;
   const recull = useApp((s) => s.recull);
+  const [help, setHelp] = useState(false);
+  // Counts before the last change, shown against the current ones so a
+  // change that moves nothing still says so.
+  const [before, setBefore] = useState<Record<Status, number> | null>(null);
   const o = session.options;
   const shootType = o.shootType ?? 'auto';
   // Faces are only there when the first analysis read them.
   const facesRead = o.checkEyes || o.checkSmile;
+  const tally = () => {
+    const c = { pick: 0, maybe: 0, reject: 0 };
+    for (const p of session.photos) c[p.status]++;
+    return c;
+  };
+  const now = tally();
   // The checks stay as the analysis ran them; "Lainnya" ignores faces on its own.
-  const change = (patch: { strictness?: Strictness; shootType?: ShootType }) => recull({ ...o, shootType, ...patch });
+  const change = (patch: { strictness?: Strictness; shootType?: ShootType; limit?: number | null }) => {
+    setBefore(now);
+    recull({ ...o, shootType, ...patch });
+  };
+  // "Batasi jumlah": N is kept here too, so quick − / + clicks count from
+  // the last click, not from a session that hasn't come back yet.
+  const [limit, setLimit] = useState(o.limit ?? null);
+  const [draft, setDraft] = useState(o.limit ? String(o.limit) : '');
+  const [lastLimit, setLastLimit] = useState(o.limit ?? null);
+  useEffect(() => {
+    setLimit(o.limit ?? null);
+    setDraft(o.limit ? String(o.limit) : '');
+  }, [o.limit]);
+  const applyLimit = (next: number | null) => {
+    if (next != null) setLastLimit(next);
+    setLimit(next);
+    setDraft(next ? String(next) : '');
+    if (next !== (o.limit ?? null)) change({ limit: next });
+  };
+  // First time on: about four in five of the current Picks, in fives.
+  const startLimit = () => lastLimit ?? Math.max(1, Math.floor((now.pick * 0.8) / 5) * 5 || now.pick - 1);
+  const step = (dir: 1 | -1) => {
+    const n = limit ?? startLimit();
+    applyLimit(Math.max(1, n + dir));
+  };
+  useEffect(() => {
+    if (!help) return;
+    const close = () => setHelp(false);
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close();
+    window.addEventListener('mousedown', close);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', close);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [help]);
   return (
-    <>
-      <SideTitle>{t('Atur penilaian')}</SideTitle>
+    <div className="relative">
+      <div className="flex items-center justify-between pr-1">
+        <SideTitle>{t('Atur penilaian')}</SideTitle>
+        <button
+          type="button"
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={() => setHelp((v) => !v)}
+          aria-expanded={help}
+          title={t('Apa gunanya?')}
+          className={cx('mt-2.5 rounded p-0.5 hover:text-fg', help ? 'text-gold-text' : 'text-faint')}
+        >
+          <Info size={13} />
+        </button>
+      </div>
+      {help && (
+        <div
+          onMouseDown={(e) => e.stopPropagation()}
+          className="absolute top-9 right-0 left-0 z-50 flex flex-col gap-1.5 rounded-xl border border-line bg-panel-2 p-3 text-[11px] leading-snug text-muted shadow-2xl"
+        >
+          <p>{t('AI menilai ulang semua foto dari hasil analisis tadi, tanpa scan ulang.')}</p>
+          <p>{t('Longgar: hanya yang jelas blur dibuang. Seimbang: blur dan duplikat burst disaring. Ketat: standar ketajaman lebih tinggi, pose mirip dan mata terpejam ikut disaring.')}</p>
+          <p>{t('Batasi jumlah: hanya N foto terbaik yang tetap Pilih, sisanya pindah ke Cek. Matikan untuk mengembalikan semuanya.')}</p>
+          <p>{t('Kalau foto sudah tajam semua dan tidak ada burst, hasilnya bisa sama saja.')}</p>
+        </div>
+      )}
       <div className="flex flex-col gap-2 px-1 pb-1">
         <div className="flex gap-0.5 rounded-lg bg-bg p-0.5" role="radiogroup" aria-label={t('Ketat seleksi')}>
           {STRICTNESS.map((st) => (
@@ -607,7 +678,7 @@ function Retune() {
             aria-label={t('Jenis pemotretan')}
             value={shootType}
             onChange={(e) => change({ shootType: e.target.value as ShootType })}
-            className="h-7 min-w-0 flex-1 bg-transparent text-xs text-fg outline-none"
+            className="h-7 min-w-0 flex-1 bg-transparent text-xs text-fg outline-none focus-visible:outline-none"
           >
             <option value="auto">{GENERAL.label}</option>
             {SHOOT_TYPES.map((s) => (
@@ -617,15 +688,56 @@ function Retune() {
             ))}
           </select>
         </label>
+        <div className="flex flex-col gap-1.5 rounded-lg border border-line-soft bg-bg p-2">
+          <div className="flex items-center justify-between gap-2 text-xs text-muted">
+            <span>{t('Batasi jumlah')}</span>
+            <Switch label={t('Batasi jumlah')} checked={limit != null} onChange={(on) => applyLimit(on ? startLimit() : null)} />
+          </div>
+          {limit != null && (
+            <div className="flex h-7 items-stretch overflow-hidden rounded-md border border-line-soft focus-within:border-gold">
+              <button type="button" onClick={() => step(-1)} disabled={limit <= 1} aria-label={t('Kurangi')} className="flex w-7 items-center justify-center text-muted hover:bg-raised hover:text-fg disabled:opacity-40">
+                <Minus size={12} />
+              </button>
+              <label className="flex min-w-0 flex-1 items-center justify-center gap-1 border-x border-line-soft text-xs text-muted">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  aria-label={t('Jumlah foto terbaik')}
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value.replace(/\D/g, ''))}
+                  onBlur={() => applyLimit(Math.max(1, Number(draft) || limit))}
+                  onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+                  style={{ width: `${Math.max(draft.length, 1) + 1}ch` }}
+                  className="bg-transparent text-right font-semibold text-fg tabular-nums outline-none"
+                />
+                {t('foto')}
+              </label>
+              <button type="button" onClick={() => step(1)} aria-label={t('Tambah')} className="flex w-7 items-center justify-center text-muted hover:bg-raised hover:text-fg">
+                <Plus size={12} />
+              </button>
+            </div>
+          )}
+        </div>
         <p className="px-1 text-[11px] leading-snug text-faint">
           {shootRule(shootType)}
           {!facesRead &&
             shootType !== 'lainnya' &&
             ` ${t('Wajah tidak dibaca di analisis ini, jadi mata & senyum tidak dinilai.')}`}
         </p>
+        {before && (
+          <p className="px-1 text-[11px] leading-snug text-muted" role="status">
+            {now.pick === before.pick && now.maybe === before.maybe && now.reject === before.reject
+              ? t('Tidak ada foto yang berubah.')
+              : t('Pilih {pick} · Cek {maybe} · Lewati {reject}', {
+                  pick: `${num(before.pick)} → ${num(now.pick)}`,
+                  maybe: `${num(before.maybe)} → ${num(now.maybe)}`,
+                  reject: `${num(before.reject)} → ${num(now.reject)}`,
+                })}
+          </p>
+        )}
         <p className="px-1 text-[11px] leading-snug text-faint">{t('Foto yang sudah diubah manual tidak ikut berubah.')}</p>
       </div>
-    </>
+    </div>
   );
 }
 
@@ -928,6 +1040,14 @@ function Inspector({
                       r.kind === 'duplicate' && (
                         <span key="dup" className="text-[11px] text-faint">
                           {t('Mirip {name} yang lebih tajam.', { name: session.find((p) => p.id === r.of)?.name ?? t('foto lain') })}
+                        </span>
+                      ),
+                  )}
+                  {photo.reasons.map(
+                    (r) =>
+                      r.kind === 'overLimit' && (
+                        <span key="limit" className="text-[11px] text-faint">
+                          {t('Foto bagus, tapi tidak masuk {n} foto terbaik yang diminta.', { n: num(r.limit) })}
                         </span>
                       ),
                   )}

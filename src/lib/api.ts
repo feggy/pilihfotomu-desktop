@@ -29,7 +29,9 @@ export type Reason =
   | { kind: 'eyesClosed'; closed: number; faces: number }
   | { kind: 'bestInGroup' }
   /** Same pose as `of`, shot again after a pause. */
-  | { kind: 'similar'; of: number };
+  | { kind: 'similar'; of: number }
+  /** Good, but not among the `limit` best asked for. */
+  | { kind: 'overLimit'; limit: number };
 
 export interface Metrics {
   sharpness: number;
@@ -107,6 +109,8 @@ export interface Options {
   checkDuplicates: boolean;
   checkEyes: boolean;
   checkSmile: boolean;
+  /** "Pilih N terbaik": at most this many Picks. */
+  limit?: number | null;
 }
 
 export interface Session {
@@ -134,6 +138,8 @@ export interface SessionSummary {
   maybe: number;
   rejects: number;
   covers: string[];
+  /** The settings the photos were judged with. */
+  options: Options;
   /** Folder reachable right now (an external drive may be unplugged). */
   available: boolean;
 }

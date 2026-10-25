@@ -20,6 +20,7 @@ export default {
   'Terdeteksi terpejam': 'Eyes closed',
   'Terbaik di grup': 'Best in group',
   'Pose mirip': 'Similar pose',
+  'Melebihi batas jumlah': 'Over the limit',
   Tersenyum: 'Smiling',
   Netral: 'Neutral',
   '{n} dari {total} tersenyum': '{n} of {total} smiling',

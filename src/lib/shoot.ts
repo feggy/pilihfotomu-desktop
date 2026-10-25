@@ -9,6 +9,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 import type { Options, ShootType } from './api';
+import { num } from './format';
 import { t } from './i18n';
 
 const RULE = {
@@ -98,3 +99,14 @@ export const useDefaults = create<DefaultsState>()(
     },
   ),
 );
+
+/** Read in the current language when shown. */
+const STRICTNESS_LABEL = { loose: 'Longgar', balanced: 'Seimbang', strict: 'Ketat' } as const;
+
+/** "Wedding · Seimbang · Maks. 50 foto · Mata & senyum": how a session was judged. */
+export function settingsLine(o: Options) {
+  const faces = o.shootType === 'lainnya' ? null : o.checkEyes && o.checkSmile ? t('Mata & senyum') : o.checkEyes ? t('Mata') : o.checkSmile ? t('Senyum') : null;
+  return [shootLabel(o.shootType ?? 'auto'), t(STRICTNESS_LABEL[o.strictness]), o.limit ? t('Maks. {n} foto', { n: num(o.limit) }) : null, faces]
+    .filter(Boolean)
+    .join(' · ');
+}

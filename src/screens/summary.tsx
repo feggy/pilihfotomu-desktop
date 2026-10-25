@@ -5,14 +5,11 @@ import { Button, Dot } from '../components/ui';
 import { isManual } from '../lib/api';
 import { duration, hasSmile, num, REASON, STATUS, toneColor, type ReasonKind } from '../lib/format';
 import { t, tj } from '../lib/i18n';
-import { shootLabel } from '../lib/shoot';
+import { settingsLine } from '../lib/shoot';
 import { useApp } from '../store';
 
 /** Reasons worth counting in a summary, in the order a photographer reads them. */
 const FOUND: ReasonKind[] = ['blur', 'softFocus', 'subjectSoft', 'eyesClosed', 'duplicate', 'similar', 'dark', 'bright'];
-
-/** Read in the current language when shown. */
-const STRICTNESS_LABEL = { loose: 'Longgar', balanced: 'Seimbang', strict: 'Ketat' } as const;
 
 /**
  * What the AI did with a session, in numbers — shown once after an analysis
@@ -52,7 +49,7 @@ export function SummaryDialog({ onClose, onExport }: { onClose: () => void; onEx
 
   const found = FOUND.filter((k) => s.reasons[k]);
   const pct = (n: number) => `${Math.round((n / Math.max(1, s.total)) * 100)}%`;
-  const settings = `${shootLabel(session.options.shootType ?? 'auto')} · ${t(STRICTNESS_LABEL[session.options.strictness])}`;
+  const settings = settingsLine(session.options);
 
   const text = [
     `pilihfotomu · ${session.name}`,
@@ -190,3 +187,4 @@ function Row({ label, value, children }: { label: string; value: string; childre
     </div>
   );
 }
+

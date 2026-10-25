@@ -129,6 +129,10 @@ Beranda ─ pilih/seret folder ─▶ Atur analisis ─ Mulai ─▶ Memproses �
    pemotretan bisa diganti setelah analisis; diputuskan ulang dari angka
    yang tersimpan (< 1 ms untuk 242 foto), foto yang diubah manual
    (`manual`) tidak ikut berubah.
+   **Pilih N terbaik** (`cull::keep_best`, `Options::limit`) — hanya N Pick
+   teratas yang tetap Pick, sisanya ke Cek dengan alasan `Melebihi batas jumlah`.
+   Urutan: ★5 (terbaik di burst / tersenyum), bukan pose mirip, jumlah
+   subjek utama tersenyum, ketajaman. Pick manual ikut dihitung dari N.
 5. **Mata** (`faces.rs`, preview 2048 px) — YuNet mencari wajah, Face Mesh
    memberi 478 titik per wajah; *eye aspect ratio* (celah kelopak ÷ lebar
    mata) < 0,12 di **kedua** mata = terpejam. Wajah utama (≥ 40 % wajah

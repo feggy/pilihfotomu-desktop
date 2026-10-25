@@ -112,6 +112,26 @@ export default {
   'Wajah tidak dibaca di analisis ini, jadi mata & senyum tidak dinilai.':
     'Faces weren’t read in this analysis, so eyes and smiles aren’t judged.',
   'Foto yang sudah diubah manual tidak ikut berubah.': 'Photos changed by hand stay as they are.',
+  'Apa gunanya?': 'What is this for?',
+  'AI menilai ulang semua foto dari hasil analisis tadi, tanpa scan ulang.':
+    'The AI judges every photo again from the analysis it already ran, without rescanning.',
+  'Longgar: hanya yang jelas blur dibuang. Seimbang: blur dan duplikat burst disaring. Ketat: standar ketajaman lebih tinggi, pose mirip dan mata terpejam ikut disaring.':
+    'Loose: only clearly blurry photos are dropped. Balanced: blur and burst duplicates are filtered. Strict: a higher sharpness bar, and similar poses and closed eyes are filtered too.',
+  'Kalau foto sudah tajam semua dan tidak ada burst, hasilnya bisa sama saja.':
+    'If every photo is sharp and there are no bursts, the result may not change.',
+  'Tidak ada foto yang berubah.': 'No photos changed.',
+  'Batasi jumlah: hanya N foto terbaik yang tetap Pilih, sisanya pindah ke Cek. Matikan untuk mengembalikan semuanya.':
+    'Limit count: only the N best photos stay Pick, the rest move to Check. Turn it off to bring them all back.',
+  'Batasi jumlah': 'Limit count',
+  'Jumlah foto terbaik': 'Number of best photos',
+  Kurangi: 'Fewer',
+  Tambah: 'More',
+  foto: 'photos',
+  'Maks. {n} foto': 'Max {n} photos',
+  'Mata & senyum': 'Eyes & smiles',
+  Senyum: 'Smiles',
+  'Foto bagus, tapi tidak masuk {n} foto terbaik yang diminta.': 'A good photo, but not among the {n} best asked for.',
+  'Pilih {pick} · Cek {maybe} · Lewati {reject}': 'Pick {pick} · Check {maybe} · Skip {reject}',
   'Hapus filter {label}': 'Clear filter {label}',
   'Klik lagi untuk menampilkan semua': 'Click again to show all',
   'Tampilkan hanya {label}': 'Show only {label}',

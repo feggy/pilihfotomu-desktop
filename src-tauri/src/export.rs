@@ -78,6 +78,7 @@ fn reason_word(r: &Reason) -> Option<&'static str> {
         Reason::EyesClosed { .. } => "mata terpejam",
         Reason::BestInGroup => "terbaik di grup",
         Reason::Similar { .. } => "pose mirip",
+        Reason::OverLimit { .. } => "melebihi batas jumlah",
     })
 }
 
