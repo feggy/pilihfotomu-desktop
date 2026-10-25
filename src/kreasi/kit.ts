@@ -31,8 +31,11 @@ import './engine/fonts';
 
 export type TemplateCategory =
   | 'pernikahan'
+  | 'prewedding'
   | 'lamaran'
   | 'wisuda'
+  | 'bayi'
+  | 'syukuran'
   | 'ulang-tahun'
   | 'ucapan'
   | 'keluarga'
@@ -43,8 +46,11 @@ export type TemplateCategory =
 /** Category chips in the order a photographer looks for them. */
 export const CATEGORIES: { id: TemplateCategory; label: string }[] = [
   { id: 'pernikahan', label: 'Pernikahan' },
+  { id: 'prewedding', label: 'Prewedding' },
   { id: 'lamaran', label: 'Lamaran' },
   { id: 'wisuda', label: 'Wisuda' },
+  { id: 'bayi', label: 'Bayi & maternity' },
+  { id: 'syukuran', label: 'Aqiqah & khitan' },
   { id: 'ulang-tahun', label: 'Ulang tahun' },
   { id: 'ucapan', label: 'Ucapan' },
   { id: 'keluarga', label: 'Keluarga' },
@@ -53,7 +59,10 @@ export const CATEGORIES: { id: TemplateCategory; label: string }[] = [
   { id: 'lainnya', label: 'Lainnya' },
 ];
 
-/** Bundled from pilihfotomu-api's community templates (public/kreasi/templates.json). */
+/**
+ * Bundled from pilihfotomu-api's community templates (public/kreasi/templates.json),
+ * with the ones scripts/make-templates.py adds (ids `g…`).
+ */
 export interface Template {
   id: string;
   name: string;

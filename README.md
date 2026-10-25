@@ -72,6 +72,15 @@ Review › Lanjutkan ▾ › Buat konten untuk memakai foto sesi yang terbuka).
   muncul di galeri sebagai kategori Template saya, bisa dihapus dari panel kanan.
 - **Draf**: setiap desain tersimpan otomatis ke `<app data>/kreasi/<id>.json`;
   muncul di galeri sebagai Lanjutkan desain.
+- **Buat sekaligus**: galeri › Buat sekaligus, centang beberapa template, lalu
+  semuanya diisi foto sesi (foto Pilih dulu, berbeda di tiap desain, bentuk
+  yang pas) dan data klien, diekspor ke satu folder, dan disimpan sebagai draf
+  (`src/kreasi/batch.tsx`).
+- **Template bawaan**: `public/kreasi/templates.json`. Template komunitas plus
+  yang dibuat `scripts/make-templates.py` (id `g…`: prewedding, lamaran, bayi &
+  maternity, aqiqah & khitan, ulang tahun anak, keluarga). Jalankan ulang
+  script itu setelah mengubah layout atau tema; template komunitas tidak
+  disentuh.
 
 ## Bahasa
 

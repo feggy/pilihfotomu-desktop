@@ -8,24 +8,71 @@ import { num } from '../lib/format';
 import { t, tRust } from '../lib/i18n';
 import { useApp } from '../store';
 import { previewUrl } from './canvas';
-import { FORMATS, formatRatio, slotsFor, templateOf } from './engine/document';
+import { FORMATS, formatRatio, slotsFor, templateOf, type CollageDoc } from './engine/document';
 import { exportCollage } from './engine/render';
 import { coverCrop, loadDocFonts, loadLocalImage, photoIdOf, photoIdOfSticker } from './kit';
 import { docAssets } from './assets';
 import { brandLogo, LOGO_STICKER, useBrand } from './brand';
 import { emptyAssets } from './preview';
-import { useKreasi } from './store';
+import { useKreasi, type Source } from './store';
 
-type Format = 'jpg' | 'png' | 'pdf';
+export type Format = 'jpg' | 'png' | 'pdf';
 
 /** "Tiga momen — Rina & Dimas" → "tiga-momen-rina-dimas". */
-const slug = (s: string) =>
+export const slug = (s: string) =>
   s
     .normalize('NFKD')
     .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '') || 'konten';
+
+/** The design as files of `format`, `width` px a slide, its photos at their 2048 px preview. */
+export async function exportDoc(doc: CollageDoc, source: Source, format: Format, width: number): Promise<Blob[]> {
+  await loadDocFonts(doc);
+  // Every photo at its 2048 px preview (the RAW's camera-sized picture).
+  const pictures = new Map<string, HTMLCanvasElement>();
+  await Promise.all(
+    slotsFor(doc, templateOf(doc).cells.length).map(async (s) => {
+      const id = s ? photoIdOf(s.file) : null;
+      if (s && id != null) pictures.set(s.file.fileId, (await loadLocalImage(await previewUrl(source.root, id))) as unknown as HTMLCanvasElement);
+    }),
+  );
+  const stickerImages = await docAssets(doc);
+  const logo = await brandLogo();
+  if (logo) stickerImages.set(LOGO_STICKER, logo);
+  await Promise.all(
+    doc.stickers.map(async (st) => {
+      const id = photoIdOfSticker(st.sticker);
+      if (id != null) stickerImages.set(st.sticker, coverCrop(await loadLocalImage(await previewUrl(source.root, id)), st.ratio ?? 1) as unknown as HTMLImageElement);
+    }),
+  );
+  return exportCollage({
+    slideWidth: width,
+    doc,
+    template: templateOf(doc),
+    assets: { ...(({ images: _, ...rest }) => rest)(emptyAssets()), stickerImages, watermark: logo, studioName: useBrand.getState().studio },
+    format,
+    quality: 0.92,
+    pictures,
+  });
+}
+
+/** Writes `blobs` as `<name>.<ext>` (a carousel's slides `-01`, `-02`…) into `<saveDir>/<folder>`; their paths. */
+export async function saveBlobs(source: Source, folder: string, name: string, ext: Format, blobs: Blob[]): Promise<string[]> {
+  const paths: string[] = [];
+  for (let i = 0; i < blobs.length; i++) {
+    const file = blobs.length > 1 ? `${name}-${String(i + 1).padStart(2, '0')}.${ext}` : `${name}.${ext}`;
+    paths.push(await api.saveExport(source.saveDir, folder.trim(), file, new Uint8Array(await blobs[i]!.arrayBuffer())));
+  }
+  return paths;
+}
+
+/** Instagram designs at 1080 px a slide (or 2×); print sizes at 300 dpi (or 150 for a proof). */
+export const exportWidth = (doc: CollageDoc, k: 1 | 2) => {
+  const inches = FORMATS[doc.format].printInches;
+  return inches ? Math.round(inches * (k === 2 ? 300 : 150)) : 1080 * k;
+};
 
 /** Layar 15 · Ekspor: the design as JPG/PNG files in the session folder. */
 export function ExportDialog({ onClose }: { onClose: () => void }) {
@@ -46,51 +93,26 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
 
   if (!doc || !template || !source) return null;
   const slides = doc.slides;
-  // A print size goes out at 300 dpi (150 for a quick proof); Instagram at 1080 px (or 2×).
   const inches = FORMATS[doc.format].printInches;
-  const sizes = inches
-    ? ([1, 2] as const).map((k) => ({ k, width: Math.round(inches * (k === 2 ? 300 : 150)), note: k === 2 ? t('300 dpi · siap cetak') : t('150 dpi · untuk dicek dulu') }))
-    : ([1, 2] as const).map((k) => ({ k, width: 1080 * k, note: k === 1 ? t('Ukuran Instagram') : t('Lebih tajam untuk dicetak atau dipotong') }));
+  const sizes = ([1, 2] as const).map((k) => ({
+    k,
+    width: exportWidth(doc, k),
+    note: inches
+      ? k === 2
+        ? t('300 dpi · siap cetak')
+        : t('150 dpi · untuk dicek dulu')
+      : k === 1
+        ? t('Ukuran Instagram')
+        : t('Lebih tajam untuk dicetak atau dipotong'),
+  }));
   const width = sizes.find((s) => s.k === scale)!.width;
   const heightOf = (w: number) => Math.round(w * formatRatio(doc));
-  const ext = format;
 
   const run = async () => {
     setBusy(true);
     try {
-      await loadDocFonts(doc);
-      // Every photo at its 2048 px preview (the RAW's camera-sized picture).
-      const pictures = new Map<string, HTMLCanvasElement>();
-      await Promise.all(
-        slotsFor(doc, templateOf(doc).cells.length).map(async (s) => {
-          const id = s ? photoIdOf(s.file) : null;
-          if (s && id != null) pictures.set(s.file.fileId, (await loadLocalImage(await previewUrl(source.root, id))) as unknown as HTMLCanvasElement);
-        }),
-      );
-      const stickerImages = await docAssets(doc);
-      const logo = await brandLogo();
-      if (logo) stickerImages.set(LOGO_STICKER, logo);
-      await Promise.all(
-        doc.stickers.map(async (st) => {
-          const id = photoIdOfSticker(st.sticker);
-          if (id != null) stickerImages.set(st.sticker, coverCrop(await loadLocalImage(await previewUrl(source.root, id)), st.ratio ?? 1) as unknown as HTMLImageElement);
-        }),
-      );
-      const blobs = await exportCollage({
-        slideWidth: width,
-        doc,
-        template: templateOf(doc),
-        assets: { ...(({ images: _, ...rest }) => rest)(emptyAssets()), stickerImages, watermark: logo, studioName: useBrand.getState().studio },
-        format,
-        quality: 0.92,
-        pictures,
-      });
-      const paths: string[] = [];
-      for (let i = 0; i < blobs.length; i++) {
-        const file = blobs.length > 1 ? `${name}-${String(i + 1).padStart(2, '0')}.${ext}` : `${name}.${ext}`;
-        paths.push(await api.saveExport(source.saveDir, folder.trim(), file, new Uint8Array(await blobs[i]!.arrayBuffer())));
-      }
-      setSaved(paths);
+      const blobs = await exportDoc(doc, source, format, width);
+      setSaved(await saveBlobs(source, folder, name, format, blobs));
     } catch (e) {
       fail(tRust(String(e)));
     } finally {

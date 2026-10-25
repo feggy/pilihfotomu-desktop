@@ -1,5 +1,5 @@
-import { ArrowLeft, ArrowRight, Bookmark, Plus, Search, Trash2, X } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { ArrowLeft, ArrowRight, Bookmark, Check, Layers, Plus, Search, Trash2, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { cx } from '../components/ui';
 import { num } from '../lib/format';
@@ -7,6 +7,7 @@ import { locale, t } from '../lib/i18n';
 import { FORMATS, type FormatId } from './engine/document';
 import { api } from '../lib/api';
 import { useApp } from '../store';
+import { BatchDialog } from './batch';
 import { listDrafts, reopenSource, templateOfDraft, type Draft } from './drafts';
 import {
   BLANK_FORMATS,
@@ -131,6 +132,23 @@ export function Gallery({ onBack }: { onBack: () => void }) {
 
   const preview = shown.find((tp) => tp.id === picked) ?? null;
 
+  // A new filter shows its templates from the first one: back up to the list's
+  // heading when it has been scrolled past.
+  const scroller = useRef<HTMLElement>(null);
+  const list = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const box = scroller.current, head = list.current;
+    if (!box || !head) return;
+    const top = head.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop - 20;
+    if (box.scrollTop > top) box.scrollTo({ top, behavior: 'smooth' });
+  }, [tab, category, photoFilter, query]);
+
+  // Buat sekaligus: templates ticked, in the order ticked.
+  const [batch, setBatch] = useState<string[] | null>(null);
+  const [making, setMaking] = useState(false);
+  const toggle = (id: string) => setBatch((b) => (b ? (b.includes(id) ? b.filter((x) => x !== id) : [...b, id]) : b));
+  const chosen = (batch ?? []).map((id) => all?.find((tp) => tp.id === id)).filter((tp): tp is Template => !!tp);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-4 border-b border-line-soft px-6 py-4 lg:px-8">
@@ -182,7 +200,7 @@ export function Gallery({ onBack }: { onBack: () => void }) {
           </FilterGroup>
         </nav>
 
-        <section className="flex min-w-0 flex-1 flex-col gap-6 overflow-y-auto px-6 pt-5 pb-10 lg:px-8">
+        <section ref={scroller} className="flex min-w-0 flex-1 flex-col gap-6 overflow-y-auto px-6 pt-5 pb-10 lg:px-8">
           {/* First: a design of one's own — the way to a template of one's own too. */}
           <section className="flex shrink-0 flex-col gap-3">
             <div className="flex flex-col gap-0.5">
@@ -239,7 +257,7 @@ export function Gallery({ onBack }: { onBack: () => void }) {
             </section>
           )}
 
-          <section className="flex flex-col gap-3">
+          <section ref={list} className="flex flex-col gap-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-4">
                 <h2 className="text-[17px] font-semibold">{t('Atau pakai template')}</h2>
@@ -265,43 +283,76 @@ export function Gallery({ onBack }: { onBack: () => void }) {
                   ))}
                 </div>
               </div>
-              <label className="flex h-9 w-64 items-center gap-2 rounded-[10px] border border-line bg-panel px-3 focus-within:border-gold">
-                <Search size={14} className="shrink-0 text-faint" />
-                <input
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder={t('Cari template…')}
-                  className="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-faint"
-                />
-                {query && (
-                  <button type="button" onClick={() => setQuery('')} aria-label={t('Hapus')}>
-                    <X size={14} className="text-faint" />
-                  </button>
-                )}
-              </label>
+              <div className="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setBatch((b) => (b ? null : []))}
+                  title={t('Pilih beberapa template, lalu buat semuanya sekaligus dengan foto dan data klien')}
+                  className={cx(
+                    'flex h-9 items-center gap-2 rounded-[10px] border px-3 text-xs font-medium',
+                    batch ? 'border-gold bg-gold/[0.08] text-fg' : 'border-line bg-panel text-muted hover:text-fg',
+                  )}
+                >
+                  <Layers size={14} className="text-gold-text" /> {batch ? t('Batal pilih##sekaligus') : t('Buat sekaligus')}
+                </button>
+                <label className="flex h-9 w-64 items-center gap-2 rounded-[10px] border border-line bg-panel px-3 focus-within:border-gold">
+                  <Search size={14} className="shrink-0 text-faint" />
+                  <input
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder={t('Cari template…')}
+                    className="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-faint"
+                  />
+                  {query && (
+                    <button type="button" onClick={() => setQuery('')} aria-label={t('Hapus')}>
+                      <X size={14} className="text-faint" />
+                    </button>
+                  )}
+                </label>
+              </div>
             </div>
+            {batch && (
+              <p className="-mt-1 text-xs text-muted">{t('Klik template yang mau dibuat. Semuanya diisi foto dan data klien yang sama, lalu diekspor ke satu folder.')}</p>
+            )}
             {error && <p className="text-sm text-reject">{error}</p>}
             <div className="grid grid-cols-[repeat(auto-fill,minmax(176px,1fr))] gap-5">
               {shown.map((tp) => {
                 const n = countOf(tp);
+                const order = batch ? batch.indexOf(tp.id) : -1;
                 return (
                   <div key={tp.id} className="group flex flex-col gap-2">
                     <div className="relative">
                       <button
                         type="button"
-                        onClick={() => setPicked(tp.id)}
-                        className="flex aspect-[200/248] w-full items-center justify-center rounded-xl bg-panel-2 p-3 ring-1 ring-line-soft hover:ring-gold"
+                        onClick={() => (batch ? toggle(tp.id) : setPicked(tp.id))}
+                        aria-pressed={batch ? order >= 0 : undefined}
+                        className={cx(
+                          'flex aspect-[200/248] w-full items-center justify-center rounded-xl bg-panel-2 p-3 hover:ring-gold',
+                          order >= 0 ? 'ring-2 ring-gold' : 'ring-1 ring-line-soft',
+                        )}
                       >
                         <DocPicture id={tp.id} doc={templateDoc(tp)} width={tp.format === 'carousel' ? 120 : 180} className="max-h-full max-w-full" />
                       </button>
+                      {batch && (
+                        <span
+                          className={cx(
+                            'pointer-events-none absolute top-2 right-2 flex size-6 items-center justify-center rounded-full text-[11px] font-semibold',
+                            order >= 0 ? 'bg-gold text-white' : 'border-[1.5px] border-white/70 bg-black/30',
+                          )}
+                        >
+                          {order >= 0 && (order < 9 ? order + 1 : <Check size={13} />)}
+                        </span>
+                      )}
                       {/* Straight to it, without the preview. */}
-                      <button
-                        type="button"
-                        onClick={() => start(tp)}
-                        className="absolute right-2 bottom-2 left-2 hidden h-9 items-center justify-center gap-1.5 rounded-lg bg-gold-gradient text-xs font-semibold text-white shadow-lg group-hover:flex"
-                      >
-                        {t('Pakai')} <ArrowRight size={14} />
-                      </button>
+                      {!batch && (
+                        <button
+                          type="button"
+                          onClick={() => start(tp)}
+                          className="absolute right-2 bottom-2 left-2 hidden h-9 items-center justify-center gap-1.5 rounded-lg bg-gold-gradient text-xs font-semibold text-white shadow-lg group-hover:flex"
+                        >
+                          {t('Pakai')} <ArrowRight size={14} />
+                        </button>
+                      )}
                     </div>
                     <span className="flex flex-col gap-0.5 px-0.5">
                       <span className="truncate text-[13px] font-medium">{tp.name}</span>
@@ -329,6 +380,36 @@ export function Gallery({ onBack }: { onBack: () => void }) {
           </section>
         </section>
       </div>
+
+      {batch && (
+        <div className="flex shrink-0 items-center justify-end gap-3 border-t border-line-soft bg-panel px-6 py-3 lg:px-8">
+          <span className="mr-auto text-[13px] text-muted">
+            {chosen.length ? t('{count} template dipilih', { n: chosen.length, count: num(chosen.length) }) : t('Belum ada template dipilih')}
+          </span>
+          <button type="button" onClick={() => setBatch(null)} className="h-9 rounded-[10px] px-3 text-[13px] font-medium text-muted hover:text-fg">
+            {t('Batal')}
+          </button>
+          <button
+            type="button"
+            onClick={() => setMaking(true)}
+            disabled={!chosen.length}
+            className="flex h-9 items-center gap-2 rounded-[10px] bg-gold-gradient px-4 text-[13px] font-semibold text-white disabled:opacity-40"
+          >
+            <Layers size={15} /> {t('Lanjut')}
+          </button>
+        </div>
+      )}
+
+      {making && (
+        <BatchDialog
+          templates={chosen}
+          onClose={() => setMaking(false)}
+          onDone={() => {
+            setBatch(null);
+            listDrafts().then(setDrafts);
+          }}
+        />
+      )}
 
       {preview && (
         <TemplatePreview

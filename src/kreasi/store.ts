@@ -134,6 +134,38 @@ export function ranked(photos: SourcePhoto[]): SourcePhoto[] {
 
 export const fits = (p: SourcePhoto, shape: Shape) => p.ratio == null || shapeOf(p.ratio) === shape || shape === 'square';
 
+/**
+ * `doc` with its empty places filled by the best photos that fit their shape,
+ * a new burst before one already used. Photos in `avoid` (used by other
+ * designs made with it) come only when nothing else fits.
+ */
+export function fillDoc(doc: CollageDoc, source: Source, avoid: ReadonlySet<number> = new Set()): CollageDoc {
+  const shapes = slotShapes(doc);
+  const now = placed(doc);
+  const used = new Set(now.filter((x): x is number => x != null));
+  const groups = new Set(source.photos.filter((p) => used.has(p.id) && p.group != null).map((p) => p.group));
+  const all = ranked(source.photos.filter((p) => p.status !== 'reject'));
+  const fresh = all.filter((p) => !avoid.has(p.id));
+  let slots = doc.slots;
+  now.forEach((id, i) => {
+    if (id != null) return;
+    const want = shapes[i]?.shape ?? 'square';
+    // Known to fit first (a new burst before a used one), then shape not yet known, then anything.
+    const known = (p: SourcePhoto) => p.ratio != null && fits(p, want);
+    const free = (p: SourcePhoto) => !used.has(p.id);
+    const best = (pool: SourcePhoto[]) =>
+      pool.find((p) => free(p) && known(p) && (p.group == null || !groups.has(p.group))) ??
+      pool.find((p) => free(p) && known(p)) ??
+      pool.find((p) => free(p) && p.ratio == null);
+    const pick = best(fresh) ?? best(all) ?? fresh.find(free) ?? all.find(free);
+    if (!pick) return;
+    used.add(pick.id);
+    if (pick.group != null) groups.add(pick.group);
+    slots = withSlot(slots, i, slotFor(source.root, pick, slots[i] ?? null, shapes[i]?.ratio));
+  });
+  return slots === doc.slots ? doc : { ...doc, slots };
+}
+
 export const useKreasi = create<KreasiState>((set, get) => ({
   step: 'galeri',
   template: null,
@@ -232,31 +264,7 @@ export const useKreasi = create<KreasiState>((set, get) => ({
   autoFill: () => {
     const { doc, source } = get();
     if (!doc || !source) return;
-    const shapes = slotShapes(doc);
-    const now = placed(doc);
-    const used = new Set(now.filter((x): x is number => x != null));
-    const groups = new Set(source.photos.filter((p) => used.has(p.id) && p.group != null).map((p) => p.group));
-    const pool = ranked(source.photos.filter((p) => p.status !== 'reject'));
-    get().edit((d) => {
-      let slots = d.slots;
-      now.forEach((id, i) => {
-        if (id != null) return;
-        const want = shapes[i]?.shape ?? 'square';
-        // Known to fit first (a new burst before a used one), then shape not yet known, then anything.
-        const known = (p: SourcePhoto) => p.ratio != null && fits(p, want);
-        const free = (p: SourcePhoto) => !used.has(p.id);
-        const pick =
-          pool.find((p) => free(p) && known(p) && (p.group == null || !groups.has(p.group))) ??
-          pool.find((p) => free(p) && known(p)) ??
-          pool.find((p) => free(p) && p.ratio == null) ??
-          pool.find(free);
-        if (!pick) return;
-        used.add(pick.id);
-        if (pick.group != null) groups.add(pick.group);
-        slots = withSlot(slots, i, slotFor(source.root, pick, slots[i] ?? null, shapes[i]?.ratio));
-      });
-      return { ...d, slots };
-    });
+    get().edit((d) => fillDoc(d, source));
   },
 
   edit: (fn) =>

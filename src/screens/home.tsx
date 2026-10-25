@@ -271,7 +271,7 @@ export function Home({ dragging }: { dragging: boolean }) {
               !s.available ? (
                 <div
                   key={s.id}
-                  className="flex flex-wrap items-center gap-3 rounded-xl border border-maybe/60 bg-maybe/[0.06] p-3"
+                  className="flex flex-wrap items-center gap-3 rounded-xl border border-line-soft bg-maybe/[0.06] p-3"
                 >
                   <FolderX size={18} className="shrink-0 text-maybe" />
                   <span className="flex min-w-0 flex-1 flex-col gap-0.5">
