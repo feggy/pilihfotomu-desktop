@@ -231,6 +231,38 @@ fn thresholds(s: Strictness) -> Thresholds {
 /// Galvin JPG00932 read 8 against 105–115 for the frames beside it.
 const SUBJECT_SOFT_RATIO: f32 = 0.35;
 
+/// A photo whose sharpest main face is under this share of the session's
+/// typical one missed focus. Faces are measured at one fixed size
+/// (`analyze::face_variance`), so photos compare fairly; the session sets
+/// the level, not a number from someone else's camera, lens and light.
+const SESSION_SOFT_RATIO: f32 = 0.35;
+/// Fewer photos with a readable face than this: no "typical" to compare with.
+const SESSION_MIN_FACES: usize = 6;
+
+/// The session's typical in-focus subject: the median, over photos, of each
+/// photo's sharpest main face.
+fn typical_face(faces: &[&[Face]], share: f32) -> Option<f32> {
+    let mut best: Vec<f32> = faces.iter().filter_map(|pf| sharpest_main(pf, share)).collect();
+    if best.len() < SESSION_MIN_FACES {
+        return None;
+    }
+    best.sort_by(f32::total_cmp);
+    Some(best[best.len() / 2])
+}
+
+fn sharpest_main(faces: &[Face], share: f32) -> Option<f32> {
+    main_faces(faces, share).filter_map(|f| f.sharpness).reduce(f32::max)
+}
+
+/// How sharp the photo's best main face is against what is usual for it:
+/// the same person's usual sharpness when they're seen often enough
+/// (`faces::assign_people`), else the session's usual face.
+fn best_against_usual(faces: &[Face], share: f32, typical: Option<f32>) -> Option<f32> {
+    main_faces(faces, share)
+        .filter_map(|f| Some(f.sharpness? / f.sharp_ref.or(typical)?.max(1e-3)))
+        .reduce(f32::max)
+}
+
 /// Sharpness of the largest face, if it was big enough to read.
 fn subject_sharpness(faces: &[Face]) -> Option<f32> {
     faces.iter().max_by(|a, b| (a.w * a.h).total_cmp(&(b.w * b.h))).and_then(|f| f.sharpness)
@@ -256,6 +288,7 @@ pub fn cull(inputs: &[Input], opts: &Options) -> Vec<Verdict> {
     let prof = profile(opts.shoot_type);
     let share = prof.main_share;
     let faces: Vec<&[Face]> = inputs.iter().map(|p| if prof.faces { p.faces } else { &[][..] }).collect();
+    let typical = typical_face(&faces, share);
     let mut out: Vec<Verdict> = inputs
         .iter()
         .zip(&faces)
@@ -286,9 +319,15 @@ pub fn cull(inputs: &[Input], opts: &Options) -> Vec<Verdict> {
                     }
                 }
             }
-            // Focus on the background, not the person: only main faces big
-            // enough to judge (see `faces::SHARP_MIN_PX`).
-            if opts.check_blur && main_faces(pf, share).any(|f| f.soft()) && !reasons.contains(&Reason::Blur) {
+            // Focus on the background, not the person: every main face far
+            // softer than the session's usual subject, or one big face that
+            // is soft on its own (see `faces::SOFT_ALONE_MIN_PX`).
+            // Strict skips both; a face soft next to the others may be on
+            // purpose (focus on the ring, not the couple), so the other
+            // levels only send it to Check.
+            let missed = best_against_usual(pf, share, typical).is_some_and(|r| r < SESSION_SOFT_RATIO);
+            let alone = main_faces(pf, share).any(|f| f.soft());
+            if opts.check_blur && (missed || alone) && !reasons.contains(&Reason::Blur) {
                 reasons.push(Reason::SubjectSoft);
                 if t.reject_eyes {
                     status = Status::Reject;
@@ -384,11 +423,13 @@ pub fn cull(inputs: &[Input], opts: &Options) -> Vec<Verdict> {
     out
 }
 
-/// "Pilih N terbaik": only the `n` best Picks stay Pick, the rest go to Maybe
-/// marked `OverLimit`. Best = burst keepers and smiles (★5) first, then a
-/// pose not already taken, more smiling main subjects, sharpness. `held`
-/// photos (changed by hand) aren't ranked; the caller counts their Picks out
-/// of `n` itself.
+/// "Pilih N terbaik": only `n` Picks stay Pick, the rest go to Maybe marked
+/// `OverLimit`. The places are shared out over the session's moments (see
+/// `moments`) in proportion to their Picks, at least one each while there
+/// are places enough, so 50 photos aren't all from the reception. Within a
+/// moment, best = burst keepers and smiles (★5) first, then a pose not
+/// already taken, more smiling main subjects, sharpness. `held` photos
+/// (changed by hand) aren't ranked; the caller counts their Picks out of `n`.
 pub fn keep_best(inputs: &[Input], out: &mut [Verdict], opts: &Options, n: u32, held: impl Fn(u32) -> bool) {
     let prof = profile(opts.shoot_type);
     let key = |i: usize| {
@@ -396,15 +437,72 @@ pub fn keep_best(inputs: &[Input], out: &mut [Verdict], opts: &Options, n: u32, 
         let smiles = if opts.check_smile && prof.faces { eyes(inputs[i].faces, prof.main_share).main_smiling } else { 0 };
         (out[i].rating, !similar, smiles, inputs[i].metrics.sharpness)
     };
-    let mut picks: Vec<(usize, (u8, bool, u8, f32))> =
-        (0..out.len()).filter(|&i| out[i].status == Status::Pick && !held(out[i].id)).map(|i| (i, key(i))).collect();
-    picks.sort_by(|(_, a), (_, b)| b.0.cmp(&a.0).then(b.1.cmp(&a.1)).then(b.2.cmp(&a.2)).then(b.3.total_cmp(&a.3)));
+    let picks: Vec<usize> = (0..out.len()).filter(|&i| out[i].status == Status::Pick && !held(out[i].id)).collect();
+    let groups = moments(inputs, &picks);
+    let quota = quotas(&groups.iter().map(Vec::len).collect::<Vec<_>>(), n as usize);
+    let ranked: Vec<Vec<usize>> = groups
+        .into_iter()
+        .map(|g| {
+            let mut keyed: Vec<_> = g.into_iter().map(|i| (i, key(i))).collect();
+            keyed.sort_by(|(_, a), (_, b)| b.0.cmp(&a.0).then(b.1.cmp(&a.1)).then(b.2.cmp(&a.2)).then(b.3.total_cmp(&a.3)));
+            keyed.into_iter().map(|(i, _)| i).collect()
+        })
+        .collect();
     let limit = opts.limit.unwrap_or(n);
-    for &(i, _) in picks.iter().skip(n as usize) {
-        out[i].status = Status::Maybe;
-        out[i].rating = 3;
-        out[i].reasons.push(Reason::OverLimit { limit });
+    for (group, q) in ranked.into_iter().zip(quota) {
+        for &i in group.iter().skip(q) {
+            out[i].status = Status::Maybe;
+            out[i].rating = 3;
+            out[i].reasons.push(Reason::OverLimit { limit });
+        }
     }
+}
+
+/// A pause this long between shots starts a new moment (akad, family
+/// photos, reception…).
+const MOMENT_GAP: f64 = 15.0 * 60.0;
+
+/// `idx` split into moments by capture time; files without one are a moment
+/// of their own.
+fn moments(inputs: &[Input], idx: &[usize]) -> Vec<Vec<usize>> {
+    let mut timed: Vec<usize> = idx.iter().copied().filter(|&i| inputs[i].taken_at.is_some()).collect();
+    timed.sort_by(|&a, &b| inputs[a].taken_at.unwrap().total_cmp(&inputs[b].taken_at.unwrap()));
+    let mut groups: Vec<Vec<usize>> = Vec::new();
+    for i in timed {
+        match groups.last_mut() {
+            Some(g) if inputs[i].taken_at.unwrap() - inputs[*g.last().unwrap()].taken_at.unwrap() <= MOMENT_GAP => g.push(i),
+            _ => groups.push(vec![i]),
+        }
+    }
+    let untimed: Vec<usize> = idx.iter().copied().filter(|&i| inputs[i].taken_at.is_none()).collect();
+    if !untimed.is_empty() {
+        groups.push(untimed);
+    }
+    groups
+}
+
+/// `n` places shared over groups of these sizes: in proportion (largest
+/// remainder), then one for every group while places allow, taken from the
+/// group with the most.
+fn quotas(sizes: &[usize], n: usize) -> Vec<usize> {
+    let total: usize = sizes.iter().sum();
+    if n >= total {
+        return sizes.to_vec();
+    }
+    let mut q: Vec<usize> = sizes.iter().map(|&s| s * n / total).collect();
+    let mut rest: Vec<usize> = (0..sizes.len()).collect();
+    rest.sort_by_key(|&g| std::cmp::Reverse(sizes[g] * n % total));
+    for &g in rest.iter().take(n - q.iter().sum::<usize>()) {
+        q[g] += 1;
+    }
+    if n >= sizes.len() {
+        while let Some(empty) = q.iter().position(|&v| v == 0) {
+            let richest = (0..q.len()).max_by_key(|&g| q[g]).unwrap();
+            q[richest] -= 1;
+            q[empty] = 1;
+        }
+    }
+    q
 }
 
 /// Repeats of the same pose a little later: among photos still in the
@@ -520,6 +618,10 @@ mod tests {
             smile: Some(0.1),
             sharpness: Some(90.0),
             px: 150.0,
+            blink: None,
+            person: None,
+            blink_cut: None,
+            sharp_ref: None,
         }
     }
 
@@ -551,6 +653,28 @@ mod tests {
         assert_eq!((v[0].status, v[0].reasons.clone()), (Status::Maybe, vec![Reason::SubjectSoft]));
         let strict = cull(&inputs, &Options { strictness: Strictness::Strict, ..Options::default() });
         assert_eq!(strict[0].status, Status::Reject);
+    }
+
+    #[test]
+    fn subject_far_softer_than_the_rest_of_the_session_goes_to_check() {
+        // Like B1-blur-asli: leaves behind them crisp, the couple's faces
+        // 47–78 where the session's faces read about 250.
+        let usual = [Face { sharpness: Some(250.0), px: 110.0, ..face(0.2, 0.3) }];
+        let missed = [Face { sharpness: Some(70.0), px: 110.0, ..face(0.2, 0.3) }];
+        let soft_but_fine = [Face { sharpness: Some(100.0), px: 110.0, ..face(0.2, 0.3) }];
+        let mut inputs: Vec<Input> =
+            (0..6).map(|i| Input { faces: &usual, ..photo(i, i as f64 * 600.0, 100.0, i as u64 * 0x1111) }).collect();
+        inputs.push(Input { faces: &missed, ..photo(10, 9000.0, 100.0, u64::MAX) });
+        inputs.push(Input { faces: &soft_but_fine, ..photo(11, 9600.0, 100.0, 0xF0F0_F0F0) });
+        let v = cull(&inputs, &Options::default());
+        assert_eq!((v[6].status, v[6].reasons.clone()), (Status::Maybe, vec![Reason::SubjectSoft]));
+        assert_eq!(v[7].status, Status::Pick, "40 % of the usual: shallow focus, not a miss");
+        assert_eq!(v[0].status, Status::Pick);
+        let strict = cull(&inputs, &Options { strictness: Strictness::Strict, ..Options::default() });
+        assert_eq!(strict[6].status, Status::Reject, "Strict: a higher bar, fewer photos");
+        // Too few photos to know what "usual" is: no comparison.
+        let few = cull(&inputs[4..], &Options::default());
+        assert_eq!(few[2].status, Status::Pick);
     }
 
     #[test]
@@ -684,6 +808,27 @@ mod tests {
         assert_eq!(status, [Status::Maybe, Status::Pick, Status::Pick]);
         assert!(v[0].reasons.contains(&Reason::OverLimit { limit: 2 }));
         assert_eq!(v[0].rating, 3);
+    }
+
+    #[test]
+    fn best_n_is_shared_over_the_moments() {
+        // Five Picks at the akad, three at the reception an hour later,
+        // sharper at the akad: 4 places still reach the reception.
+        let hashes = [0, u64::MAX, 0xFFFF_FFFF_0000_0000, 0x0000_0000_FFFF_FFFF, 0xFFFF_0000_FFFF_0000, 0x0000_FFFF_0000_FFFF, 0xF0F0_F0F0_F0F0_F0F0, 0x0F0F_0F0F_0F0F_0F0F];
+        let inputs: Vec<Input> = (0..8)
+            .map(|i| {
+                let (t, sharp) = if i < 5 { (i as f64 * 100.0, 90.0) } else { (3600.0 + i as f64 * 100.0, 60.0) };
+                photo(i, t, sharp, hashes[i as usize])
+            })
+            .collect();
+        let v = cull(&inputs, &Options { limit: Some(4), ..Options::default() });
+        let picked: Vec<u32> = v.iter().filter(|v| v.status == Status::Pick).map(|v| v.id).collect();
+        assert_eq!(picked.len(), 4);
+        assert!(picked.iter().filter(|&&id| id >= 5).count() >= 1, "{picked:?}");
+        assert_eq!(quotas(&[5, 3], 4), [3, 1]);
+        assert_eq!(quotas(&[10, 1, 1], 3), [1, 1, 1], "every moment while places allow");
+        assert_eq!(quotas(&[10, 1, 1], 2), [2, 0, 0]);
+        assert_eq!(quotas(&[2, 3], 9), [2, 3]);
     }
 
     #[test]

@@ -112,6 +112,8 @@ export async function installMock() {
           return null;
         case 'full_res_supported':
           return true;
+        case 'reread_faces':
+          return { ...session, photos: session.photos.map((p) => ({ ...p })) };
         case 'recull':
           session.options = a.options as Session['options'];
           return { ...session, photos: session.photos.map((p) => ({ ...p })) };

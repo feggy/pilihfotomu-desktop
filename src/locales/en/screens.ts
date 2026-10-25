@@ -112,8 +112,6 @@ export default {
   'Belum ada': 'None yet',
   'Penilaian AI': 'AI assessment',
   'File tidak bisa dibaca: {error}': 'File can’t be read: {error}',
-  'Ketajaman foto': 'Photo sharpness',
-  'Fokus di wajah': 'Focus on face',
   Meleset: 'Missed',
   Kena: 'On target',
   Eksposur: 'Exposure',
@@ -154,4 +152,24 @@ export default {
   '⌥ + seret': '⌥ + drag',
   'Alt + seret': 'Alt + drag',
   'Shift + klik': 'Shift + click',
+  'Dokumen hukum': 'Legal',
+  'Pihak ketiga': 'Third parties',
+  Ketentuan: 'Terms',
+  'Maju otomatis': 'Auto advance',
+  'Setelah menandai Pilih / Cek / Lewati, langsung pindah ke foto berikutnya.': 'After marking Pick / Check / Skip, go straight to the next photo.',
+  Privasi: 'Privacy',
+  'Berlaku sejak {date}': 'Effective {date}',
+  'Sebelum mulai': 'Before you start',
+  'Penilaian AI adalah saran dan bisa keliru. Periksa kembali sebelum foto diserahkan atau dilewati: keputusan akhir ada di tangan Anda.':
+    'AI judgements are suggestions and can be wrong. Check again before photos are delivered or skipped: the final decision is yours.',
+  'Semua foto diproses di perangkat ini. Tidak ada yang di-upload, dan file asli tidak pernah diubah.':
+    'All photos are processed on this device. Nothing is uploaded, and original files are never changed.',
+  'Wajah dikenali hanya untuk menilai mata, fokus dan mengelompokkan orang dalam sesi. Anda bertanggung jawab atas izin klien sesuai UU Pelindungan Data Pribadi.':
+    'Faces are recognised only to judge eyes and focus and to group people within a session. You are responsible for client consent under the Personal Data Protection Law.',
+  'Tetap buat cadangan foto Anda.': 'Keep backups of your photos.',
+  'Kembali ke ringkasan': 'Back to summary',
+  'Baca Ketentuan Penggunaan dan Kebijakan Privasi lengkap': 'Read the full Terms of Use and Privacy Policy',
+  'Saya sudah membaca dan menyetujui Ketentuan Penggunaan dan Kebijakan Privasi.':
+    'I have read and agree to the Terms of Use and Privacy Policy.',
+  'Setuju dan lanjutkan': 'Agree and continue',
 } as Record<string, string | [string, string]>;

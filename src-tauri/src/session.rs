@@ -202,6 +202,69 @@ impl Session {
     }
 }
 
+/// One photo's faces read again: its id, the faces, their identity vectors.
+pub type FacesRead = (u32, Vec<Face>, Vec<faces::Embedding>);
+
+/// Faces read again for every photo of `s` (sessions analyzed before blink
+/// scores and people existed), by photo id; files that can't be read are
+/// left out. Nothing in `s` changes: `Session::set_faces` applies it.
+pub fn read_faces(
+    s: &Session,
+    cancel: &AtomicBool,
+    progress: impl Fn(u32, u32) + Sync,
+) -> Result<Vec<FacesRead>, SessionError> {
+    faces::ready().map_err(SessionError::Faces)?;
+    let total = s.photos.iter().filter(|e| e.metrics.is_some()).count() as u32;
+    let done = AtomicU32::new(0);
+    let read: Vec<_> = s
+        .photos
+        .par_iter()
+        .filter(|e| e.metrics.is_some())
+        .filter_map(|e| {
+            if cancel.load(Ordering::Relaxed) {
+                return None;
+            }
+            let loaded = preview::load(e.photo.source(), FACE_SIDE).ok();
+            progress(done.fetch_add(1, Ordering::Relaxed) + 1, total);
+            let (faces, ids) = faces::analyze(&loaded?.image.to_rgb8()).unwrap_or_default();
+            Some((e.photo.id, faces, ids))
+        })
+        .collect();
+    if cancel.load(Ordering::Relaxed) {
+        return Err(SessionError::Cancelled);
+    }
+    Ok(read)
+}
+
+impl Session {
+    /// Puts faces from `read_faces` in, groups the people again and decides
+    /// again with the current settings (hand-made changes stay).
+    pub fn set_faces(&mut self, read: Vec<FacesRead>) {
+        let mut ids: std::collections::HashMap<u32, Vec<faces::Embedding>> = std::collections::HashMap::new();
+        for (id, faces, embeddings) in read {
+            if let Some(e) = self.photos.iter_mut().find(|e| e.photo.id == id) {
+                e.faces = faces;
+                ids.insert(id, embeddings);
+            }
+        }
+        // Faces and their vectors lined up, photo by photo; photos not read
+        // again have no vectors (they join nobody).
+        let mut all: Vec<&mut Face> = Vec::new();
+        let mut vectors: Vec<faces::Embedding> = Vec::new();
+        let mut photo: Vec<usize> = Vec::new();
+        for (i, e) in self.photos.iter_mut().enumerate() {
+            let mut v = ids.remove(&e.photo.id).unwrap_or_default();
+            v.resize(e.faces.len(), None);
+            vectors.extend(v);
+            photo.extend(std::iter::repeat_n(i, e.faces.len()));
+            all.extend(e.faces.iter_mut());
+        }
+        faces::assign_people(&mut all, &vectors, &photo);
+        let options = self.options;
+        self.recull(options);
+    }
+}
+
 fn input_of(e: &Entry) -> Option<Input<'_>> {
     e.metrics.map(|metrics| Input {
         id: e.photo.id,
@@ -269,6 +332,7 @@ struct Measured {
     info: Option<preview::ShotInfo>,
     metrics: Option<Metrics>,
     faces: Vec<Face>,
+    ids: Vec<faces::Embedding>,
     thumb: Option<PathBuf>,
     error: Option<String>,
 }
@@ -304,7 +368,7 @@ pub fn analyze(
     let measured: Vec<Measured> = photos
         .into_par_iter()
         .map(|photo| {
-            let mut m = Measured { photo, info: None, metrics: None, faces: vec![], thumb: None, error: None };
+            let mut m = Measured { photo, info: None, metrics: None, faces: vec![], ids: vec![], thumb: None, error: None };
             if cancel.load(Ordering::Relaxed) {
                 m.error = Some("cancelled".into());
                 return m;
@@ -319,7 +383,7 @@ pub fn analyze(
                     m.metrics = Some(analyze::measure(&small));
                     if options.check_eyes || options.check_smile {
                         // A face the models can't read counts as no face.
-                        m.faces = faces::analyze(&loaded.image.to_rgb8()).unwrap_or_default();
+                        (m.faces, m.ids) = faces::analyze(&loaded.image.to_rgb8()).unwrap_or_default();
                     }
                     let thumb_path = thumbs.join(format!("{}.jpg", m.photo.cache_key()));
                     m.thumb = save_thumb(&small, &thumb_path).ok().map(|_| thumb_path);
@@ -351,6 +415,13 @@ pub fn analyze(
         return Err(SessionError::Cancelled);
     }
     progress(Progress::Grouping);
+    let mut measured = measured;
+    {
+        let ids: Vec<faces::Embedding> = measured.iter_mut().flat_map(|m| std::mem::take(&mut m.ids)).collect();
+        let photo: Vec<usize> = measured.iter().enumerate().flat_map(|(i, m)| std::iter::repeat_n(i, m.faces.len())).collect();
+        let mut all: Vec<&mut Face> = measured.iter_mut().flat_map(|m| m.faces.iter_mut()).collect();
+        faces::assign_people(&mut all, &ids, &photo);
+    }
 
     let inputs: Vec<Input> = measured
         .iter()

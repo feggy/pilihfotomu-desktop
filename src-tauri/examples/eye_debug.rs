@@ -75,14 +75,15 @@ fn main() {
             let file = out.join(format!("{name}_f{i}.jpg"));
             crop.save(&file).unwrap();
             println!(
-                "{name} f{i} size {:.3}  EAR L {:.3} R {:.3}  gap/iris L {:.2} R {:.2}  closed={}  smile {:?}",
+                "{name} f{i} size {:.3}  EAR L {:.3} R {:.3}  gap/iris L {:.2} R {:.2}  closed={}  smile {:?}  blink {:?}",
                 f.w,
                 f.left_eye,
                 f.right_eye,
                 l,
                 r,
                 f.eyes_closed(),
-                f.smile.map(|s| (s * 100.0).round() / 100.0)
+                f.smile.map(|s| (s * 100.0).round() / 100.0),
+                f.blink.map(|(l, r)| ((l * 100.0).round() / 100.0, (r * 100.0).round() / 100.0))
             );
         }
     }

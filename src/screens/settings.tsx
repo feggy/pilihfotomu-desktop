@@ -9,24 +9,26 @@ import {
   Keyboard,
   Languages,
   RotateCcw,
+  ScrollText,
   SlidersHorizontal,
   Trash2,
   type LucideIcon,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
+import { LegalDocs } from '../components/legal';
 import { TitleBar, isMac } from '../components/title-bar';
 import { Button, Chip, IconButton, Kbd, Segmented, Switch, cx } from '../components/ui';
 import { api, type CacheInfo, type Options, type ShootType, type Strictness } from '../lib/api';
 import { bytes } from '../lib/format';
 import { systemLang, t, useLang, type LangPref } from '../lib/i18n';
-import { ACTIONS, DEFAULT_KEYS, RESERVED, keyLabel, useKeys, type Action } from '../lib/keys';
+import { ACTIONS, DEFAULT_KEYS, RESERVED, keyLabel, useCullPrefs, useKeys, type Action } from '../lib/keys';
 import { FACTORY_OPTIONS, GENERAL, SHOOT_TYPES, shootRule, useDefaults, withShootType } from '../lib/shoot';
 import type { Screen } from '../store';
 import { useApp } from '../store';
 import { strictnessHint } from './setup';
 
-type Section = 'license' | 'language' | 'analysis' | 'storage' | 'keys' | 'about';
+type Section = 'license' | 'language' | 'analysis' | 'storage' | 'keys' | 'legal' | 'about';
 
 /** `label` is an i18n key. */
 const NAV: { id: Section; icon: LucideIcon; label: string }[] = [
@@ -35,6 +37,7 @@ const NAV: { id: Section; icon: LucideIcon; label: string }[] = [
   { id: 'analysis', icon: SlidersHorizontal, label: 'Analisis bawaan' },
   { id: 'storage', icon: HardDrive, label: 'Penyimpanan & cache' },
   { id: 'keys', icon: Keyboard, label: 'Pintasan keyboard' },
+  { id: 'legal', icon: ScrollText, label: 'Dokumen hukum' },
   { id: 'about', icon: Info, label: 'Tentang' },
 ];
 
@@ -76,6 +79,8 @@ const KREASI: [string, string][] = [
 
 function KeyEditor() {
   const keys = useKeys((s) => s.keys);
+  const autoAdvance = useCullPrefs((s) => s.autoAdvance);
+  const setAutoAdvance = useCullPrefs((s) => s.setAutoAdvance);
   const setKey = useKeys((s) => s.set);
   const reset = useKeys((s) => s.reset);
   const [listening, setListening] = useState<Action | null>(null);
@@ -123,6 +128,13 @@ function KeyEditor() {
       <p className="-mt-3 text-[13px] text-muted">
         {t('Klik tombol di kanan, lalu tekan huruf baru. Contoh: Q / W / E untuk Pilih / Cek / Lewati.')}
       </p>
+      <div className="flex items-center justify-between gap-4 rounded-2xl border border-line-soft bg-panel px-5 py-3.5">
+        <span className="flex flex-col gap-0.5">
+          <span className="text-[13px] font-medium">{t('Maju otomatis')}</span>
+          <span className="text-xs text-faint">{t('Setelah menandai Pilih / Cek / Lewati, langsung pindah ke foto berikutnya.')}</span>
+        </span>
+        <Switch label={t('Maju otomatis')} checked={autoAdvance} onChange={setAutoAdvance} />
+      </div>
       <div className="flex flex-col rounded-2xl border border-line-soft bg-panel px-5 py-2">
         {ACTIONS.map((a) => (
           <div key={a.id} className="flex h-11 items-center justify-between gap-3 border-b border-line-soft last:border-0">
@@ -417,6 +429,12 @@ export function Settings({ back, initial = 'license' }: { back: Screen; initial?
           {section === 'analysis' && <AnalysisDefaults />}
           {section === 'storage' && <Storage />}
           {section === 'keys' && <KeyEditor />}
+          {section === 'legal' && (
+            <div className="flex max-w-[640px] flex-col gap-5">
+              <h1 className="text-[22px] font-semibold">{t('Dokumen hukum')}</h1>
+              <LegalDocs />
+            </div>
+          )}
           {section === 'about' && (
             <div className="flex max-w-[560px] flex-col gap-3">
               <h1 className="text-[22px] font-semibold">pilihfotomu</h1>

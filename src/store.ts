@@ -16,7 +16,7 @@ export type Screen =
   | { name: 'kreasi'; back: Screen }
   /** Edit foto: develop photos like Lightroom. */
   | { name: 'edit'; back: Screen }
-  | { name: 'settings'; back: Screen; section?: 'license' | 'language' | 'analysis' | 'storage' | 'keys' | 'about' };
+  | { name: 'settings'; back: Screen; section?: 'license' | 'language' | 'analysis' | 'storage' | 'keys' | 'legal' | 'about' };
 
 export interface RecentPhoto {
   id: number;
@@ -65,6 +65,9 @@ interface AppState {
   setRating: (ids: number[], rating: number) => Promise<void>;
   /** Decides the open session again with other settings (no file is read). */
   recull: (options: Options) => Promise<void>;
+  /** Reading the open session's faces again: how far (null when not running). */
+  rereading: { done: number; total: number } | null;
+  rereadFaces: () => Promise<void>;
   /** Show the session summary (after an analysis, or from the sidebar). */
   summary: boolean;
   showSummary: (on: boolean) => void;
@@ -222,6 +225,19 @@ export const useApp = create<AppState>((set, get) => ({
     } catch (e) {
       set({ session: before });
       get().fail(e);
+    }
+  },
+
+  rereading: null,
+  rereadFaces: async () => {
+    set({ rereading: { done: 0, total: 0 } });
+    try {
+      const session = await api.rereadFaces((rereading) => set({ rereading }));
+      set({ session, undoStack: [], redoStack: [] });
+    } catch (e) {
+      if (message(e) !== 'Dibatalkan.') get().fail(e);
+    } finally {
+      set({ rereading: null });
     }
   },
 

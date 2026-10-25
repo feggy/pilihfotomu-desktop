@@ -12,6 +12,7 @@ import { ProgressScreen } from './screens/progress';
 import { Review } from './screens/review';
 import { Settings } from './screens/settings';
 import { Setup } from './screens/setup';
+import { TermsGate } from './components/legal';
 import { isMac } from './components/title-bar';
 import { lang, syncNativeLang, t, tRust, useLang } from './lib/i18n';
 import { useApp, type Screen } from './store';
@@ -165,6 +166,7 @@ export function App() {
       )}
       {view}
       <ErrorToast />
+      <TermsGate />
     </>
   );
 }

@@ -130,12 +130,23 @@ Beranda ─ pilih/seret folder ─▶ Atur analisis ─ Mulai ─▶ Memproses �
    yang tersimpan (< 1 ms untuk 242 foto), foto yang diubah manual
    (`manual`) tidak ikut berubah.
    **Pilih N terbaik** (`cull::keep_best`, `Options::limit`) — hanya N Pick
-   teratas yang tetap Pick, sisanya ke Cek dengan alasan `Melebihi batas jumlah`.
-   Urutan: ★5 (terbaik di burst / tersenyum), bukan pose mirip, jumlah
+   yang tetap Pick, sisanya ke Cek dengan alasan `Melebihi batas jumlah`.
+   Jatah dibagi per **momen** (jeda jepret > 15 menit = momen baru)
+   sebanding jumlah Pick-nya, minimal 1 per momen selama jatah cukup. Di
+   dalam momen: ★5 (terbaik di burst / tersenyum), bukan pose mirip, jumlah
    subjek utama tersenyum, ketajaman. Pick manual ikut dihitung dari N.
 5. **Mata** (`faces.rs`, preview 2048 px) — YuNet mencari wajah, Face Mesh
-   memberi 478 titik per wajah; *eye aspect ratio* (celah kelopak ÷ lebar
-   mata) < 0,12 di **kedua** mata = terpejam. Wajah utama (≥ 40 % wajah
+   memberi 478 titik per wajah, lalu model **Face Blendshapes** MediaPipe
+   memberi skor kedip 0–1 per mata. Model itu dilatih Google dari banyak
+   orang, jadi mata sipit, tersenyum dan menunduk tidak dianggap berkedip
+   (bukan batas yang disetel dari satu sesi). Kedua mata ≥ 0,55 = terpejam;
+   kelopak yang hampir rapat (*eye aspect ratio* < 0,05 dan < 0,03) juga,
+   dan hanya itu yang dipakai untuk sesi lama tanpa skor kedip.
+   **Orang** (`faces::assign_people`, model SFace): wajah ≥ 50 px dikelompokkan
+   per orang dalam sesi. Orang yang muncul ≥ 4 kali dinilai terhadap dirinya
+   sendiri: terpejam bila skor kedip ≥ skor biasanya + 0,3 (0,45–0,8), dan
+   ketajaman wajahnya dibandingkan dengan wajahnya sendiri di foto lain.
+   Sesi lama: tombol **Baca ulang wajah** di Review (`reread_faces`). Wajah utama (≥ 40 % wajah
    terbesar) berkedip → Reject (Maybe di Longgar); hanya tamu → Maybe. Di
    grup burst, frame yang matanya terbuka diutamakan sebelum ketajaman.
    Model: `src-tauri/models/README.md`.
@@ -149,8 +160,12 @@ Beranda ─ pilih/seret folder ─▶ Atur analisis ─ Mulai ─▶ Memproses �
    tengah wajah utama. Nilai mutlaknya tidak bisa membedakan wajah blur dari
    kulit halus/menunduk (diuji di sesi Galvin), jadi dipakai **relatif**: di
    grup burst foto terbaik dipilih dari wajah tertajam, dan frame yang
-   wajahnya < 35 % wajah tertajam ditandai. Foto tunggal hanya bila wajah
-   ≥ 150 px dan sangat lembut.
+   wajahnya < 35 % wajah tertajam ditandai. Di luar burst, wajah utama
+   tertajam di foto dibandingkan dengan **sesi itu sendiri**: < 35 % dari
+   median sesi (min. 6 foto berwajah) = ditandai, jadi kamera, lensa dan
+   cahaya tiap sesi menentukan tingkatnya. Karena bisa disengaja (fokus ke
+   cincin), Longgar/Seimbang hanya memindahkan ke Cek; Ketat ke Lewati.
+   Wajah ≥ 150 px yang sangat lembut tetap ditandai sendiri.
 8. **Simpan** (`session.rs`) — hasil + koreksi manual di
    `<app data>/sessions/<id>.json`, thumbnail 640 px di
    `<app cache>/thumbs/<id>/`.
@@ -209,9 +224,10 @@ dianggap salah ketik.
 
 ## Yang belum ada — sengaja dicatat
 
-- **Ambang mata terpejam belum dikalibrasi** dengan foto kedip sungguhan
-  (`EAR_CLOSED` = 0,12 di `faces.rs`). Senyum lebar menurunkan rasio ke ±0,14,
-  jadi ambangnya sengaja rendah; foto setengah terpejam belum tertangkap.
+- **Skor kedip (`BLINK_CLOSED` = 0,55), batas subjek lembut (35 %) dan
+  pengelompokan orang (0,45) baru diuji di 20 foto buatan Gemini** (wajah
+  terbuka ≤ 0,52, terpejam 0,56–0,84; orang di foto Gemini tidak konsisten
+  antarfoto). Uji di sesi kamera asli.
 - **Ambang pose mirip (90 dtk, dHash ≤ 6) dan burst tanpa EXIF belum
   dikalibrasi** dengan sesi sungguhan.
 - **Ambang ketajaman belum dikalibrasi** dengan sesi sungguhan

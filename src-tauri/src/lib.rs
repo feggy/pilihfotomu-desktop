@@ -124,6 +124,35 @@ async fn analyze_folder(
     Ok(session)
 }
 
+/// How far `reread_faces` is.
+#[derive(Clone, serde::Serialize)]
+struct RereadProgress {
+    done: u32,
+    total: u32,
+}
+
+/// Reads the faces of the open session again (blink scores, people) and
+/// decides again; hand-made changes stay. Cancelled like an analysis.
+#[tauri::command]
+async fn reread_faces(app: AppHandle, state: State<'_, AppState>, on_progress: Channel<RereadProgress>) -> CmdResult<Session> {
+    state.cancel.store(false, Ordering::Relaxed);
+    let s = state.current.lock().unwrap().clone().ok_or("Belum ada sesi yang dibuka.")?;
+    let app2 = app.clone();
+    let read = tauri::async_runtime::spawn_blocking(move || {
+        let state = app2.state::<AppState>();
+        session::read_faces(&s, &state.cancel, |done, total| {
+            let _ = on_progress.send(RereadProgress { done, total });
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())?;
+    with_current(&app, &state, |s| {
+        s.set_faces(read);
+        s.clone()
+    })
+}
+
 #[tauri::command]
 fn cancel_analysis(state: State<'_, AppState>) {
     state.cancel.store(true, Ordering::Relaxed);
@@ -617,6 +646,7 @@ pub fn run() {
             inspect_folder,
             analyze_folder,
             cancel_analysis,
+            reread_faces,
             list_sessions,
             open_session,
             restore_thumbs,

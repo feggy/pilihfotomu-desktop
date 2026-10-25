@@ -6,7 +6,7 @@ fn main() {
     for p in std::env::args().skip(1) {
         let img = image::open(&p).expect("open").to_rgb8();
         let t = std::time::Instant::now();
-        let found = faces::analyze(&img).expect("analyze");
+        let found = faces::analyze(&img).expect("analyze").0;
         println!("{} ({}×{}) in {:?}", p.rsplit('/').next().unwrap(), img.width(), img.height(), t.elapsed());
         for f in found {
             println!(

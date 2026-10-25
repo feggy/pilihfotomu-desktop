@@ -56,17 +56,27 @@ export interface Face {
   sharpness?: number | null;
   /** Face width in source pixels. */
   px?: number;
+  /** MediaPipe eyeBlinkLeft / eyeBlinkRight, 0 open – 1 shut. */
+  blink?: [number, number] | null;
+  /** Same number = same person within the session (`faces::assign_people`). */
+  person?: number | null;
+  /** This person's own blink cut-off, when seen often enough. */
+  blinkCut?: number | null;
+  /** This person's usual face sharpness in the session. */
+  sharpRef?: number | null;
 }
 
-/** Mirrors `faces::EAR_CLOSED` / `EAR_SEALED` and `Face::eyes_closed`. */
+/** Mirrors `faces::EAR_CLOSED` / `EAR_SEALED` / `BLINK_CLOSED` and `Face::eyes_closed`. */
 export const EAR_CLOSED = 0.05;
 export const EAR_SEALED = 0.03;
+export const BLINK_CLOSED = 0.55;
 /** Mirrors `faces::SMILE`. */
 export const SMILE = 0.45;
 export const smiling = (f: Face) => (f.smile ?? 0) >= SMILE;
 
 export const eyesClosed = (f: Face) =>
-  Math.max(f.leftEye, f.rightEye) < EAR_CLOSED && Math.min(f.leftEye, f.rightEye) < EAR_SEALED;
+  (Math.max(f.leftEye, f.rightEye) < EAR_CLOSED && Math.min(f.leftEye, f.rightEye) < EAR_SEALED) ||
+  (f.blink != null && Math.min(...f.blink) >= (f.blinkCut ?? BLINK_CLOSED));
 
 /** A file pair found in a folder, before any analysis. */
 export interface Photo {
@@ -228,6 +238,12 @@ export const api = {
     return invoke<Session>('analyze_folder', { path, folders, options, onProgress: channel });
   },
   cancelAnalysis: () => invoke<void>('cancel_analysis'),
+  /** Reads the open session's faces again (blink scores, people); cancelled like an analysis. */
+  rereadFaces: (onProgress: (p: { done: number; total: number }) => void) => {
+    const channel = new Channel<{ done: number; total: number }>();
+    channel.onmessage = onProgress;
+    return invoke<Session>('reread_faces', { onProgress: channel });
+  },
   listSessions: () => invoke<SessionSummary[]>('list_sessions'),
   openSession: (id: string) => invoke<Session>('open_session', { id }),
   /** Remakes a session's thumbnails whose cache files are gone; how many. */

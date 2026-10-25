@@ -121,6 +121,8 @@ button:disabled {
 }
 input:focus-visible,
 textarea:focus-visible,
+/* Every select shows focus with its own gold border. */
+select:focus-visible,
 /* Focused only so the keyboard reaches the editor (Buat konten): no ring. */
 [data-keyboard-target]:focus-visible {
   outline: none;

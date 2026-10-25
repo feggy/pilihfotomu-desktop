@@ -33,4 +33,16 @@ fn main() {
     }) {
         println!("  {} {:?} {:?}", p.name, p.status, p.reasons);
     }
+    // Who is where: person numbers per photo (largest face first).
+    for p in &s.photos {
+        let who: Vec<String> = p
+            .faces
+            .iter()
+            .map(|f| match f.person {
+                Some(n) => format!("P{n}{}", if f.blink_cut.is_some() { "*" } else { "" }),
+                None => "-".into(),
+            })
+            .collect();
+        println!("  {:<32} {}", p.name, who.join(" "));
+    }
 }

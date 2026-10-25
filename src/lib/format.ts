@@ -13,7 +13,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
-import { eyesClosed, smiling, type PhotoEntry, type Reason, type Status } from './api';
+import { eyesClosed, smiling, type Face, type PhotoEntry, type Reason, type Status } from './api';
 import { locale, t } from './i18n';
 
 export const num = (n: number) => new Intl.NumberFormat(locale()).format(n);
@@ -119,6 +119,99 @@ export function smileSummary(p: PhotoEntry): { label: string; tone: Status | 'go
 
 /** Photo has someone smiling (for the sidebar filter). */
 export const hasSmile = (p: PhotoEntry) => (p.faces ?? []).some(smiling);
+
+/**
+ * People in a photo, in fixed groups so the filter stays short however
+ * crowded the session is. Labels are translated when shown.
+ */
+export const CROWD = [
+  { id: 'none', label: 'Tanpa orang', min: 0, max: 0 },
+  { id: 'one', label: '1 orang', min: 1, max: 1 },
+  { id: 'two', label: '2 orang', min: 2, max: 2 },
+  { id: 'few', label: '3–5 orang', min: 3, max: 5 },
+  { id: 'group', label: '6–10 orang', min: 6, max: 10 },
+  { id: 'crowd', label: 'Ramai (11+)', min: 11, max: Infinity },
+] as const;
+export type CrowdKind = (typeof CROWD)[number]['id'];
+
+/** Which group a photo's face count falls in. */
+export const crowdOf = (p: PhotoEntry): CrowdKind => {
+  const n = p.faces?.length ?? 0;
+  return CROWD.find((c) => n >= c.min && n <= c.max)!.id;
+};
+
+const typicalCache = new WeakMap<PhotoEntry[], number | null>();
+
+/**
+ * The session's usual in-focus face: median over photos of each photo's
+ * sharpest face (mirrors `cull::typical_face`; null under 6 photos).
+ */
+function typicalFace(photos: PhotoEntry[]): number | null {
+  if (typicalCache.has(photos)) return typicalCache.get(photos)!;
+  const best = photos
+    .map((p) => Math.max(...(p.faces ?? []).map((f) => f.sharpness ?? -1)))
+    .filter((v) => v >= 0)
+    .sort((a, b) => a - b);
+  const v = best.length >= 6 ? best[Math.floor(best.length / 2)] : null;
+  typicalCache.set(photos, v);
+  return v;
+}
+
+/**
+ * The face's sharpness against the session's usual face, 0–100 % — the
+ * frame's own sharpness is its sharpest patch, often the background.
+ */
+export function faceSharpness(p: PhotoEntry, session: PhotoEntry[]): number | null {
+  // Against the same person's usual face when known (`Face::sharp_ref`).
+  const usual = typicalFace(session);
+  const ratios = (p.faces ?? [])
+    .map((f) => (f.sharpness != null && (f.sharpRef ?? usual) ? f.sharpness / (f.sharpRef ?? usual)! : -1))
+    .filter((r) => r >= 0);
+  if (!ratios.length) return null;
+  return Math.min(100, Math.round(Math.max(...ratios) * 100));
+}
+
+/** Photos per person, seen at least this often to be listed. */
+export const PERSON_MIN = 3;
+
+export interface Person {
+  id: number;
+  /** Photos they're in, and how many of those are Pilih. */
+  photos: number;
+  picks: number;
+  /** Where to draw them from: the photo with their largest face. */
+  cover: PhotoEntry;
+  face: Face;
+}
+
+const peopleCache = new WeakMap<PhotoEntry[], Person[]>();
+
+/** The session's recurring people, most photographed first. */
+export function peopleOf(photos: PhotoEntry[]): Person[] {
+  if (peopleCache.has(photos)) return peopleCache.get(photos)!;
+  const map = new Map<number, Person>();
+  for (const p of photos) {
+    const seen = new Set<number>();
+    for (const f of p.faces ?? []) {
+      if (f.person == null || seen.has(f.person)) continue;
+      seen.add(f.person);
+      const cur = map.get(f.person) ?? { id: f.person, photos: 0, picks: 0, cover: p, face: f };
+      cur.photos++;
+      if (p.status === 'pick') cur.picks++;
+      if (f.w * f.h > cur.face.w * cur.face.h) Object.assign(cur, { cover: p, face: f });
+      map.set(f.person, cur);
+    }
+  }
+  const list = [...map.values()].filter((x) => x.photos >= PERSON_MIN).sort((a, b) => b.photos - a.photos);
+  peopleCache.set(photos, list);
+  return list;
+}
+
+/** The session was analyzed before blink scores and people existed. */
+export const oldFaces = (photos: PhotoEntry[]) => {
+  const faces = photos.flatMap((p) => p.faces ?? []);
+  return faces.length > 0 && faces.every((f) => f.blink == null || f.person === undefined);
+};
 
 /** "2 dari 2 terbuka" / "1 dari 3 terpejam" — null when eyes weren't checked or no face was found. */
 export function eyeSummary(p: PhotoEntry): { label: string; tone: Status } | null {

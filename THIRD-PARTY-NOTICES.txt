@@ -12,5 +12,18 @@ MediaPipe Face Mesh V2 (face_landmarks.onnx)
   https://www.apache.org/licenses/LICENSE-2.0
   Konversi ONNX: https://huggingface.co/fernandotonon/QtMeshEditor-facemesh-onnx
 
+MediaPipe Face Blendshapes (face_blendshapes.onnx)
+  Copyright Google LLC
+  Licensed under the Apache License, Version 2.0
+  https://www.apache.org/licenses/LICENSE-2.0
+  Dari face_landmarker.task resmi, dikonversi ke ONNX oleh
+  scripts/blendshapes-to-onnx.py
+
+SFace face recognition (face_recognition_sface_2021dec_f16.onnx)
+  Yaoyao Zhong (model), Chengrui Wang (ONNX), OpenCV Zoo
+  Licensed under the Apache License, Version 2.0
+  https://huggingface.co/opencv/face_recognition_sface
+  Bobot disimpan float16 oleh scripts/onnx-fp16-weights.py
+
 Pustaka Rust dan JavaScript yang dipakai tercantum di Cargo.lock dan
 package-lock.json beserta lisensinya masing-masing (MIT / Apache-2.0).

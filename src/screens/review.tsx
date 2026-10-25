@@ -30,18 +30,22 @@ import {
   SlidersHorizontal as Sliders,
   Info,
   Minus,
+  UserX,
+  Users,
+  ScanFace,
   Plus,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { EyesNote } from '../components/eyes-note';
 import { TitleBar, isMac } from '../components/title-bar';
 import { Button, Chip, Dot, IconButton, Kbd, StatusBadge, Stars, STATUS_ICON, Switch, cx } from '../components/ui';
-import { isManual, thumbUrl, type PhotoEntry, type ShootType, type Status, type Strictness } from '../lib/api';
-import { clock, duration, eyeSummary,
+import { api, isManual, thumbUrl, type Face, type PhotoEntry, type ShootType, type Status, type Strictness } from '../lib/api';
+import { clock, CROWD, crowdOf, duration, eyeSummary, faceSharpness, oldFaces, peopleOf, type CrowdKind,
   smileSummary as smileOf,
   hasSmile, num, REASON, STATUS, toneColor, type ReasonKind } from '../lib/format';
 import { t, tj, tRust, useLang } from '../lib/i18n';
-import { actionFor, useKey, type Action } from '../lib/keys';
+import { actionFor, useCullPrefs, useKey, type Action } from '../lib/keys';
 import { GENERAL, SHOOT_TYPES, shootRule } from '../lib/shoot';
 import { useApp } from '../store';
 import { ExportDialog } from './export-dialog';
@@ -86,6 +90,11 @@ export function Review() {
   const langPref = useLang((s) => s.pref);
   useEffect(() => setCamera(null), [langPref]);
   const [onlySmiles, setOnlySmiles] = useState(false);
+  const [crowd, setCrowd] = useState<CrowdKind | null>(null);
+  const [person, setPerson] = useState<number | null>(null);
+  const [allPeople, setAllPeople] = useState(false);
+  const rereading = useApp((s) => s.rereading);
+  const rereadFaces = useApp((s) => s.rereadFaces);
   const [stars, setStars] = useState<number | null>(null);
   const [onlyManual, setOnlyManual] = useState(false);
   const summary = useApp((s) => s.summary);
@@ -113,6 +122,14 @@ export function Review() {
     for (const p of photos) for (const r of p.reasons) c[r.kind] = (c[r.kind] ?? 0) + 1;
     return c;
   }, [photos]);
+  // Faces are only there when the analysis read them.
+  const facesRead = session.options.checkEyes || session.options.checkSmile;
+  const crowdCounts = useMemo(() => {
+    const c = {} as Record<CrowdKind, number>;
+    for (const p of photos) if (p.metrics) c[crowdOf(p)] = (c[crowdOf(p)] ?? 0) + 1;
+    return c;
+  }, [photos]);
+  const people = useMemo(() => peopleOf(photos), [photos]);
   const cameras = useMemo(() => {
     const c = new Map<string, number>();
     for (const p of photos) c.set(cameraOf(p), (c.get(cameraOf(p)) ?? 0) + 1);
@@ -127,11 +144,13 @@ export function Review() {
         (!reason || p.reasons.some((r) => r.kind === reason)) &&
         (!camera || cameraOf(p) === camera) &&
         (!onlySmiles || hasSmile(p)) &&
+        (!crowd || (p.metrics && crowdOf(p) === crowd)) &&
+        (person == null || p.faces?.some((f) => f.person === person)) &&
         (stars == null || p.rating === stars) &&
         (!onlyManual || isManual(p)) &&
         (!q || p.name.toLowerCase().includes(q)),
     );
-  }, [photos, tab, reason, camera, onlySmiles, stars, onlyManual, query]);
+  }, [photos, tab, reason, camera, onlySmiles, crowd, person, stars, onlyManual, query]);
   const smileCount = useMemo(() => photos.filter(hasSmile).length, [photos]);
   const manualCount = useMemo(() => photos.filter(isManual).length, [photos]);
   const starCounts = useMemo(() => {
@@ -139,9 +158,11 @@ export function Review() {
     for (const p of photos) c[p.rating]++;
     return c;
   }, [photos]);
-  const filtered = !!(reason || camera || onlySmiles || stars != null || onlyManual || query.trim());
+  const filtered = !!(reason || camera || onlySmiles || crowd || person != null || stars != null || onlyManual || query.trim());
   const clearFilters = () => {
     setReason(null);
+    setCrowd(null);
+    setPerson(null);
     setCamera(null);
     setOnlySmiles(false);
     setStars(null);
@@ -204,7 +225,7 @@ export function Review() {
         e.preventDefault();
         setStatus(targets, mark);
         // Lightroom-style auto-advance for one photo, unless it is about to leave the filtered view.
-        if (!selection.length && (tab === 'all' || tab === mark)) moveTo(index + 1);
+        if (useCullPrefs.getState().autoAdvance && !selection.length && (tab === 'all' || tab === mark)) moveTo(index + 1);
         return;
       }
       if (/^[0-5]$/.test(k) && targets.length) {
@@ -315,6 +336,48 @@ export function Review() {
               />
             </>
           )}
+          {facesRead && (
+            <>
+              <SideTitle>{t('Saring: jumlah orang')}</SideTitle>
+              {CROWD.filter((c) => crowdCounts[c.id]).map((c) => (
+                <SideRow
+                  key={c.id}
+                  icon={c.id === 'none' ? UserX : c.id === 'one' ? UserRound : Users}
+                  label={t(c.label)}
+                  count={crowdCounts[c.id]}
+                  active={crowd === c.id}
+                  onClick={() => setCrowd(crowd === c.id ? null : c.id)}
+                />
+              ))}
+            </>
+          )}
+          {people.length > 0 && (
+            <>
+              <SideTitle>{t('Saring: orang')}</SideTitle>
+              {(allPeople ? people : people.slice(0, 6)).map((x, i) => (
+                <SideRow
+                  key={x.id}
+                  lead={<FaceAvatar photo={x.cover} face={x.face} />}
+                  label={t('Orang {n}', { n: i + 1 })}
+                  count={x.photos}
+                  countText={`${num(x.picks)}/${num(x.photos)}`}
+                  warn={x.picks === 0}
+                  active={person === x.id}
+                  onClick={() => setPerson(person === x.id ? null : x.id)}
+                />
+              ))}
+              {people.length > 6 && (
+                <button type="button" onClick={() => setAllPeople((v) => !v)} className="px-2.5 py-1 text-left text-xs font-medium text-gold-text hover:underline">
+                  {allPeople ? t('Lebih sedikit') : t('Semua {n} orang', { n: num(people.length) })}
+                </button>
+              )}
+              {people.some((x) => x.picks === 0) && (
+                <p className="px-2.5 pt-0.5 text-[11px] leading-snug text-maybe">
+                  {t('Ada orang yang belum punya foto Pilih. Klik untuk melihat fotonya.')}
+                </p>
+              )}
+            </>
+          )}
           <SideTitle>{t('Saring: bintang')}</SideTitle>
           {[5, 4, 3, 2, 1, 0]
             .filter((n) => starCounts[n])
@@ -415,6 +478,34 @@ export function Review() {
             </div>
           </div>
 
+          {(rereading || (facesRead && oldFaces(photos))) && (
+            <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-line-soft bg-panel-2 px-5 py-2 text-xs text-muted">
+              <ScanFace size={14} className="shrink-0 text-gold-text" />
+              {rereading ? (
+                <>
+                  <span>
+                    {t('Membaca ulang wajah… {done} dari {total}', { done: num(rereading.done), total: num(rereading.total) })}
+                  </span>
+                  <span className="h-1 w-32 overflow-hidden rounded-full bg-line">
+                    <span
+                      className="block h-full bg-gold"
+                      style={{ width: `${rereading.total ? (rereading.done / rereading.total) * 100 : 0}%` }}
+                    />
+                  </span>
+                  <button type="button" onClick={() => api.cancelAnalysis()} className="ml-auto font-medium text-gold-text hover:underline">
+                    {t('Batal')}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span>{t('Sesi ini dibaca dengan versi lama: mata terpejam dan pengenalan orang belum memakai model terbaru.')}</span>
+                  <button type="button" onClick={rereadFaces} className="ml-auto font-medium text-gold-text hover:underline">
+                    {t('Baca ulang wajah')}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
           {filtered && (
             <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line-soft bg-gold/[0.06] px-5 py-2 text-xs">
               <span className="text-muted">
@@ -426,6 +517,13 @@ export function Review() {
               {camera && <FilterChip label={t('Kamera: {name}', { name: camera })} onClear={() => setCamera(null)} />}
               {reason && <FilterChip label={t('Alasan: {name}', { name: REASON[reason].label })} onClear={() => setReason(null)} />}
               {onlySmiles && <FilterChip label={t('Ada yang tersenyum')} onClear={() => setOnlySmiles(false)} />}
+              {crowd && <FilterChip label={t(CROWD.find((c) => c.id === crowd)!.label)} onClear={() => setCrowd(null)} />}
+              {person != null && (
+                <FilterChip
+                  label={t('Orang {n}', { n: people.findIndex((x) => x.id === person) + 1 })}
+                  onClear={() => setPerson(null)}
+                />
+              )}
               {stars != null && (
                 <FilterChip label={stars ? t('{n} bintang', { n: stars }) : t('Tanpa bintang')} onClear={() => setStars(null)} />
               )}
@@ -672,13 +770,13 @@ function Retune() {
             </button>
           ))}
         </div>
-        <label className="flex items-center gap-2 rounded-lg border border-line-soft bg-bg px-2 focus-within:border-gold">
+        <label className="flex items-center gap-2 rounded-lg border border-line-soft bg-bg px-2">
           <SlidersHorizontal size={13} className="shrink-0 text-faint" />
           <select
             aria-label={t('Jenis pemotretan')}
             value={shootType}
             onChange={(e) => change({ shootType: e.target.value as ShootType })}
-            className="h-7 min-w-0 flex-1 bg-transparent text-xs text-fg outline-none focus-visible:outline-none"
+            className="h-7 min-w-0 flex-1 bg-transparent text-xs text-fg outline-none"
           >
             <option value="auto">{GENERAL.label}</option>
             {SHOOT_TYPES.map((s) => (
@@ -814,17 +912,49 @@ function SideTitle({ children }: { children: string }) {
   return <div className="px-2.5 pt-3.5 pb-1 text-[11px] font-semibold tracking-wide text-faint uppercase">{children}</div>;
 }
 
+/** A person's face cut from the photo they're largest in. */
+function FaceAvatar({ photo, face, size = 20 }: { photo: PhotoEntry; face: Face; size?: number }) {
+  const url = thumbUrl(photo.thumb);
+  // A square around the face, a little loose. Face boxes are about square
+  // in pixels, so their own w : h gives the photo's shape.
+  const w = Math.min(1, face.w * 1.4);
+  const h = Math.min(1, w * (face.h / face.w));
+  const left = Math.min(Math.max(face.x + face.w / 2 - w / 2, 0), 1 - w);
+  const top = Math.min(Math.max(face.y + face.h / 2 - h / 2, 0), 1 - h);
+  return (
+    <span
+      className="shrink-0 rounded-full bg-line"
+      style={{
+        width: size,
+        height: size,
+        backgroundImage: url ? `url("${url}")` : undefined,
+        backgroundSize: `${100 / w}% ${100 / h}%`,
+        backgroundPosition: `${w < 1 ? (left / (1 - w)) * 100 : 0}% ${h < 1 ? (top / (1 - h)) * 100 : 0}%`,
+      }}
+    />
+  );
+}
+
 function SideRow({
   icon: Icon,
+  lead,
   label,
   count,
+  countText,
+  warn,
   color = 'var(--color-muted)',
   active,
   onClick,
 }: {
-  icon: LucideIcon;
+  icon?: LucideIcon;
+  /** Drawn instead of the icon (a face). */
+  lead?: React.ReactNode;
   label: string;
   count: number;
+  /** Shown instead of the count. */
+  countText?: string;
+  /** Count in the Cek colour: something to look at. */
+  warn?: boolean;
   color?: string;
   active: boolean;
   onClick: () => void;
@@ -841,10 +971,14 @@ function SideRow({
       )}
     >
       <span className="flex min-w-0 items-center gap-2.5">
-        <Icon size={15} style={{ color }} className="shrink-0" />
+        {lead ?? (Icon && <Icon size={15} style={{ color }} className="shrink-0" />)}
         <span className={cx('truncate text-[13px]', active ? 'font-medium text-fg' : 'text-muted')}>{label}</span>
       </span>
-      {active ? <X size={13} className="shrink-0 text-gold-text" /> : <span className="text-xs text-faint tabular-nums">{num(count)}</span>}
+      {active ? (
+        <X size={13} className="shrink-0 text-gold-text" />
+      ) : (
+        <span className={cx('text-xs tabular-nums', warn ? 'text-maybe' : 'text-faint')}>{countText ?? num(count)}</span>
+      )}
     </button>
   );
 }
@@ -1014,12 +1148,16 @@ function Inspector({
         ) : (
           m && (
             <>
-              <Metric icon={Sparkles} label={t('Ketajaman foto')} value={`${Math.round(m.sharpness)}%`} tone={sharpTone} />
+              <Metric icon={Sparkles} label={t('Bagian tertajam')} value={`${Math.round(m.sharpness)}%`} tone={sharpTone} />
               {photo.faces?.some((f) => f.sharpness != null) && (
                 <Metric
                   icon={UserRound}
-                  label={t('Fokus di wajah')}
-                  value={photo.reasons.some((r) => r.kind === 'subjectSoft') ? t('Meleset') : t('Kena')}
+                  label={t('Ketajaman wajah')}
+                  value={(() => {
+                    const pct = faceSharpness(photo, session);
+                    const word = photo.reasons.some((r) => r.kind === 'subjectSoft') ? t('Meleset') : t('Kena');
+                    return pct == null ? word : `${pct}% · ${word}`;
+                  })()}
                   tone={photo.reasons.some((r) => r.kind === 'subjectSoft') ? 'maybe' : 'pick'}
                 />
               )}
@@ -1035,6 +1173,7 @@ function Inspector({
                       </Chip>
                     ))}
                   </div>
+                  <EyesNote photo={photo} />
                   {photo.reasons.map(
                     (r) =>
                       r.kind === 'duplicate' && (

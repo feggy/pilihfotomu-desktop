@@ -7,7 +7,7 @@ fn main() {
         let l = preview::load(std::path::Path::new(&p), 2048).unwrap();
         let g = l.image.to_luma8();
         let frame = analyze::measure(&l.image.thumbnail(1024, 1024)).sharpness;
-        let fs = faces::analyze(&l.image.to_rgb8()).unwrap();
+        let fs = faces::analyze(&l.image.to_rgb8()).unwrap().0;
         let name = std::path::Path::new(&p).file_stem().unwrap().to_string_lossy().to_string();
         let parts: Vec<String> = fs
             .iter()

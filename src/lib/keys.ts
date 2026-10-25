@@ -69,6 +69,19 @@ export const useKeys = create<KeyState>()(
   ),
 );
 
+/** Culling habits (Pengaturan › Pintasan keyboard). */
+interface CullPrefs {
+  /** After P / U / X on one photo, go on to the next one (Lightroom's Auto Advance). */
+  autoAdvance: boolean;
+  setAutoAdvance: (on: boolean) => void;
+}
+
+export const useCullPrefs = create<CullPrefs>()(
+  persist((set) => ({ autoAdvance: true, setAutoAdvance: (autoAdvance) => set({ autoAdvance }) }), {
+    name: 'pilihfotomu-cull-v1',
+  }),
+);
+
 /** The action bound to a pressed key (already lower-cased), if any. */
 export function actionFor(key: string): Action | null {
   const keys = useKeys.getState().keys;

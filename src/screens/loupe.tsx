@@ -27,11 +27,12 @@ import {
 } from 'lucide-react';
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 
+import { EyesNote } from '../components/eyes-note';
 import { Button, Chip, Dot, Kbd, StatusBadge, STATUS_ICON, cx } from '../components/ui';
 import { api, eyesClosed, thumbUrl, type PhotoEntry, type Status } from '../lib/api';
-import { clock, eyeSummary,
+import { clock, eyeSummary, faceSharpness,
   smileSummary as smileOf, num, REASON, shotDate, STATUS, toneColor } from '../lib/format';
-import { actionFor, useKey, type Action } from '../lib/keys';
+import { actionFor, useCullPrefs, useKey, type Action } from '../lib/keys';
 import { t, tRust } from '../lib/i18n';
 import { useApp } from '../store';
 
@@ -231,7 +232,7 @@ export function Loupe({
       if (mark) {
         e.preventDefault();
         setStatus([photo.id], mark);
-        go(index + 1);
+        if (useCullPrefs.getState().autoAdvance) go(index + 1);
       } else if (/^[0-5]$/.test(k)) {
         e.preventDefault();
         setRating([photo.id], Number(k));
@@ -651,12 +652,16 @@ function InfoPanel({
         ) : (
           m && (
             <>
-              <Row icon={Sparkles} label={t('Ketajaman foto')} value={`${Math.round(m.sharpness)}%`} tone={sharpTone} />
+              <Row icon={Sparkles} label={t('Bagian tertajam')} value={`${Math.round(m.sharpness)}%`} tone={sharpTone} />
               {photo.faces?.some((f) => f.sharpness != null) && (
                 <Row
                   icon={UserRound}
-                  label={t('Fokus di wajah')}
-                  value={photo.reasons.some((r) => r.kind === 'subjectSoft') ? t('Meleset') : t('Kena')}
+                  label={t('Ketajaman wajah')}
+                  value={(() => {
+                    const pct = faceSharpness(photo, useApp.getState().session?.photos ?? all);
+                    const word = photo.reasons.some((r) => r.kind === 'subjectSoft') ? t('Meleset') : t('Kena');
+                    return pct == null ? word : `${pct}% · ${word}`;
+                  })()}
                   tone={photo.reasons.some((r) => r.kind === 'subjectSoft') ? 'maybe' : 'pick'}
                 />
               )}
@@ -672,6 +677,7 @@ function InfoPanel({
                   ))}
                 </div>
               )}
+              <EyesNote photo={photo} />
             </>
           )
         )}
