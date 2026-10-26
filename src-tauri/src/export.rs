@@ -75,7 +75,7 @@ fn reason_word(r: &Reason) -> Option<&'static str> {
         Reason::Dark => "gelap",
         Reason::Bright => "terang",
         Reason::Duplicate { .. } => "duplikat",
-        Reason::EyesClosed { .. } => "mata terpejam",
+        Reason::EyesClosed { .. } => "mata mungkin terpejam",
         Reason::BestInGroup => "terbaik di grup",
         Reason::Similar { .. } => "pose mirip",
         Reason::OverLimit { .. } => "melebihi batas jumlah",

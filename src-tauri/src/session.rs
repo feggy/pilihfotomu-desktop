@@ -84,7 +84,19 @@ pub struct Session {
     pub folders: Vec<String>,
     pub exported: bool,
     pub photos: Vec<Entry>,
+    /// Names the photographer gave people (`Face::person`). Grouping the
+    /// faces again numbers people anew, so it clears them.
+    #[serde(default)]
+    pub people: std::collections::BTreeMap<u32, String>,
+    /// Which version of the face rules the saved verdicts follow (`RULES`).
+    #[serde(default)]
+    pub rules: u32,
 }
+
+/// The face rules now: 1 = face boxes from 0.7 (`faces::MIN_SCORE`) and
+/// open lids overruling the blink model (`faces::EAR_OPEN`); 2 = focus judged
+/// on whole, sure faces only (`Face::sharp`).
+pub const RULES: u32 = 2;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -260,6 +272,73 @@ impl Session {
             all.extend(e.faces.iter_mut());
         }
         faces::assign_people(&mut all, &vectors, &photo);
+        self.people.clear();
+        let options = self.options;
+        self.recull(options);
+    }
+
+    /// A session saved under older face rules brought up to date: boxes that
+    /// are no longer counted as faces dropped, people's cut-offs and the
+    /// verdicts worked out again (hand-made changes stay). Whether it changed.
+    pub fn upgrade(&mut self) -> bool {
+        if self.rules >= RULES {
+            return false;
+        }
+        for e in &mut self.photos {
+            e.faces.retain(|f| f.score >= faces::MIN_SCORE);
+        }
+        self.rules = RULES;
+        self.people_changed();
+        true
+    }
+
+    /// Names a person; an empty name takes it away.
+    pub fn name_person(&mut self, person: u32, name: &str) {
+        let name = name.trim();
+        if name.is_empty() {
+            self.people.remove(&person);
+        } else {
+            self.people.insert(person, name.to_string());
+        }
+    }
+
+    /// `from` is the same person as `into`: their faces become `into`'s
+    /// (keeping `into`'s name, or taking `from`'s when `into` has none).
+    pub fn merge_people(&mut self, from: u32, into: u32) {
+        if from == into {
+            return;
+        }
+        for f in self.photos.iter_mut().flat_map(|e| e.faces.iter_mut()) {
+            if f.person == Some(from) {
+                f.person = Some(into);
+            }
+        }
+        if let Some(name) = self.people.remove(&from) {
+            self.people.entry(into).or_insert(name);
+        }
+        self.people_changed();
+    }
+
+    /// Faces (photo id, index of the face) that were put with the wrong
+    /// person: moved to `to`, or to a new person of their own; that person.
+    pub fn move_faces(&mut self, faces: &[(u32, usize)], to: Option<u32>) -> u32 {
+        let to = to.unwrap_or_else(|| {
+            self.photos.iter().flat_map(|e| e.faces.iter()).filter_map(|f| f.person).max().map_or(0, |m| m + 1)
+        });
+        for &(id, i) in faces {
+            if let Some(f) = self.photos.iter_mut().find(|e| e.photo.id == id).and_then(|e| e.faces.get_mut(i)) {
+                f.person = Some(to);
+            }
+        }
+        self.people_changed();
+        to
+    }
+
+    /// Who is who changed: each person's own cut-offs are worked out again,
+    /// and the photos decided again with them (hand-made changes stay).
+    fn people_changed(&mut self) {
+        let mut all: Vec<&mut Face> = self.photos.iter_mut().flat_map(|e| e.faces.iter_mut()).collect();
+        faces::person_stats(&mut all);
         let options = self.options;
         self.recull(options);
     }
@@ -481,6 +560,8 @@ pub fn analyze(
         folders: folders.to_vec(),
         exported: false,
         photos: entries,
+        people: Default::default(),
+        rules: RULES,
     })
 }
 
@@ -654,6 +735,51 @@ mod tests {
             .write_image(&rgb, rgb.width(), rgb.height(), image::ExtendedColorType::Rgb8)
             .unwrap();
         fs::write(path, out).unwrap();
+    }
+
+    #[test]
+    fn people_are_named_merged_and_split_by_hand() {
+        let tmp = tempfile::tempdir().unwrap();
+        let shots = tmp.path().join("shoot");
+        fs::create_dir(&shots).unwrap();
+        let img = GrayImage::from_fn(300, 200, |x, y| Luma([if (x / 6 + y / 6) % 2 == 0 { 40 } else { 210 }]));
+        for i in 0..5 {
+            save_jpeg(&shots.join(format!("IMG_000{i}.JPG")), &img);
+        }
+        let cancel = AtomicBool::new(false);
+        let mut s = analyze(&shots, &["".into()], Options::default(), &tmp.path().join("thumbs"), &cancel, |_| {}).unwrap();
+        let face = |person: u32, blink: f32| Face {
+            x: 0.1, y: 0.1, w: 0.2, h: 0.2, score: 0.9, left_eye: 0.3, right_eye: 0.3, smile: None,
+            sharpness: Some(90.0), px: 150.0, blink: Some((blink, blink)), person: Some(person), blink_cut: None, sharp_ref: None,
+        };
+        // Four photos of person 0, the fifth taken for someone else (person 1).
+        for (i, e) in s.photos.iter_mut().enumerate() {
+            e.faces = vec![face(if i < 4 { 0 } else { 1 }, 0.1)];
+        }
+        let person = |s: &Session, i: usize| s.photos[i].faces[0].person;
+
+        s.name_person(1, " Rina ");
+        assert_eq!(s.people.get(&1).map(String::as_str), Some("Rina"));
+        s.merge_people(1, 0);
+        assert!((0..5).all(|i| person(&s, i) == Some(0)));
+        assert_eq!(s.people.get(&0).map(String::as_str), Some("Rina"), "the name goes along");
+        assert!(s.photos[0].faces[0].blink_cut.is_some(), "five faces: their own cut-off");
+
+        let ids = [s.photos[3].photo.id, s.photos[4].photo.id];
+        let new = s.move_faces(&[(ids[0], 0), (ids[1], 0)], None);
+        assert_eq!((new, person(&s, 3), person(&s, 4)), (1, Some(1), Some(1)));
+        assert!(s.photos[4].faces[0].blink_cut.is_none(), "two faces are too few for a cut-off of their own");
+        s.move_faces(&[(ids[1], 0)], Some(0));
+        assert_eq!(person(&s, 4), Some(0));
+        s.name_person(0, "");
+        assert!(s.people.is_empty());
+
+        // Saved under the old rules: a hand at 0.61 was a "face" then.
+        s.photos[0].faces.push(Face { score: 0.61, person: Some(9), ..face(9, 0.9) });
+        s.rules = 0;
+        assert!(s.upgrade());
+        assert_eq!(s.photos[0].faces.len(), 1);
+        assert!(!s.upgrade(), "once");
     }
 
     #[test]

@@ -66,17 +66,25 @@ export interface Face {
   sharpRef?: number | null;
 }
 
-/** Mirrors `faces::EAR_CLOSED` / `EAR_SEALED` / `BLINK_CLOSED` and `Face::eyes_closed`. */
+/** Mirrors `faces::EAR_CLOSED` / `EAR_SEALED` / `BLINK_CLOSED` / `EAR_OPEN` and `Face::eyes_closed`. */
 export const EAR_CLOSED = 0.05;
 export const EAR_SEALED = 0.03;
 export const BLINK_CLOSED = 0.55;
+export const EAR_OPEN = 0.2;
+/** Mirrors `faces::SHARP_MIN_SCORE` and `Face::sharp`: focus is judged on whole, sure faces only. */
+export const SHARP_MIN_SCORE = 0.8;
+const EDGE = 0.01;
+export const faceSharp = (f: Face): number | null =>
+  f.sharpness != null && f.score >= SHARP_MIN_SCORE && f.x >= EDGE && f.y >= EDGE && f.x + f.w <= 1 - EDGE && f.y + f.h <= 1 - EDGE
+    ? f.sharpness
+    : null;
 /** Mirrors `faces::SMILE`. */
 export const SMILE = 0.45;
 export const smiling = (f: Face) => (f.smile ?? 0) >= SMILE;
 
 export const eyesClosed = (f: Face) =>
   (Math.max(f.leftEye, f.rightEye) < EAR_CLOSED && Math.min(f.leftEye, f.rightEye) < EAR_SEALED) ||
-  (f.blink != null && Math.min(...f.blink) >= (f.blinkCut ?? BLINK_CLOSED));
+  (f.blink != null && (f.leftEye + f.rightEye) / 2 < EAR_OPEN && Math.min(...f.blink) >= (f.blinkCut ?? BLINK_CLOSED));
 
 /** A file pair found in a folder, before any analysis. */
 export interface Photo {
@@ -134,6 +142,8 @@ export interface Session {
   folders: string[];
   exported: boolean;
   photos: PhotoEntry[];
+  /** Names given to people (`Face.person`), by person number. */
+  people?: Record<string, string>;
 }
 
 export interface SessionSummary {
@@ -257,6 +267,12 @@ export const api = {
   setMarks: (marks: { id: number; status: Status; rating: number }[]) => invoke<void>('set_marks', { marks }),
   /** Decides the open session again with other settings; hand-made changes stay. */
   recull: (options: Options) => invoke<Session>('recull', { options }),
+  /** Names a person (empty takes the name away). */
+  namePerson: (person: number, name: string) => invoke<Session>('name_person', { person, name }),
+  /** `from` is the same person as `into`. */
+  mergePeople: (from: number, into: number) => invoke<Session>('merge_people', { from, into }),
+  /** Faces (photo id, face index) put with the wrong person: to `to`, or a new person (null). */
+  moveFaces: (faces: [number, number][], to: number | null) => invoke<Session>('move_faces', { faces, to }),
   cacheInfo: () => invoke<CacheInfo>('cache_info'),
   /** Frees previews, full-size pictures and unused thumbnails; returns bytes freed. */
   clearCache: () => invoke<number>('clear_cache'),

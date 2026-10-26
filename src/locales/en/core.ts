@@ -17,7 +17,7 @@ export default {
   'Terlalu gelap': 'Too dark',
   'Terlalu terang': 'Too bright',
   Duplikat: 'Duplicate',
-  'Terdeteksi terpejam': 'Eyes closed',
+  'Mungkin terpejam': 'Eyes may be closed',
   'Terbaik di grup': 'Best in group',
   'Pose mirip': 'Similar pose',
   'Melebihi batas jumlah': 'Over the limit',
@@ -25,7 +25,7 @@ export default {
   Netral: 'Neutral',
   '{n} dari {total} tersenyum': '{n} of {total} smiling',
   'Semua netral': 'All neutral',
-  '{n} dari {total} terpejam': '{n} of {total} closed',
+  '{n} dari {total} mungkin terpejam': '{n} of {total} may be closed',
   Terbuka: 'Open',
   '{n} wajah terbuka': '{n} faces, all open',
   // folders.ts

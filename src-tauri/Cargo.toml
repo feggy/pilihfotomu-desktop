@@ -50,6 +50,12 @@ strip = true
 tempfile = "3.27.0"
 
 # Dependencies optimized even in `tauri dev`: image decoding and the face
-# models are 10–50× slower unoptimized. Our own crate stays debuggable.
+# models are 10–50× slower unoptimized.
 [profile.dev.package."*"]
 opt-level = 3
+
+# Our own crate lightly optimized: its per-pixel loops (sharpness, model
+# inputs) made an analysis ~5× slower at opt-level 0 (20 photos: 14.5 s,
+# 2.9 s here, 1.5 s in release). Still debuggable, compiles a little slower.
+[profile.dev]
+opt-level = 1

@@ -41,8 +41,9 @@ function photo(i: number): PhotoEntry {
     camera: sony ? 'SONY ILCE-7M4' : 'Canon EOS R6',
     metrics: { sharpness: status === 'reject' ? 18 : status === 'maybe' ? 38 : 70 + (i % 25), brightness: roll === 4 ? 28 : 120, shadowsClipped: 0, highlightsClipped: 0, dhash: 0 },
     faces: [
-      { x: 0.3, y: 0.25, w: 0.14, h: 0.2, score: 0.93, leftEye: 0.28, rightEye: 0.27, smile: i % 3 ? 0.7 : 0.1 },
-      { x: 0.52, y: 0.2, w: 0.14, h: 0.2, score: 0.92, leftEye: roll === 7 ? 0.06 : 0.3, rightEye: roll === 7 ? 0.05 : 0.29 },
+      // Two people through the session, a few guests now and then.
+      { x: 0.3, y: 0.25, w: 0.14, h: 0.2, score: 0.93, leftEye: 0.28, rightEye: 0.27, smile: i % 3 ? 0.7 : 0.1, person: i % 11 === 0 ? 2 + (i % 4) : 0 },
+      { x: 0.52, y: 0.2, w: 0.14, h: 0.2, score: 0.92, leftEye: roll === 7 ? 0.06 : 0.3, rightEye: roll === 7 ? 0.05 : 0.29, person: 1 },
     ],
     error: null,
     status,
@@ -114,6 +115,22 @@ export async function installMock() {
           return true;
         case 'reread_faces':
           return { ...session, photos: session.photos.map((p) => ({ ...p })) };
+        // Kelola orang (src-tauri: Session::name_person…), without deciding again.
+        case 'name_person': {
+          const names = (session.people ??= {});
+          const name = String(a.name).trim();
+          if (name) names[String(a.person)] = name;
+          else delete names[String(a.person)];
+          return { ...session, people: { ...names } };
+        }
+        case 'merge_people':
+        case 'move_faces': {
+          const all = session.photos.flatMap((p) => p.faces ?? []);
+          const to = cmd === 'merge_people' ? Number(a.into) : a.to == null ? Math.max(...all.map((f) => f.person ?? 0)) + 1 : Number(a.to);
+          if (cmd === 'merge_people') all.forEach((f) => f.person === a.from && (f.person = to));
+          else for (const [id, k] of a.faces as [number, number][]) session.photos[id].faces![k].person = to;
+          return { ...session, photos: session.photos.map((p) => ({ ...p, faces: p.faces?.map((f) => ({ ...f })) })) };
+        }
         case 'recull':
           session.options = a.options as Session['options'];
           return { ...session, photos: session.photos.map((p) => ({ ...p })) };

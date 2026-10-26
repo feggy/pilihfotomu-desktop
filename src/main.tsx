@@ -4,6 +4,15 @@ import ReactDOM from 'react-dom/client';
 import { App } from './app';
 import './styles.css';
 
+// The webview's own menu (Reload, Inspect Element) isn't part of the app.
+// Text fields keep theirs, for copy and paste. Development keeps it all.
+if (!import.meta.env.DEV) {
+  window.addEventListener('contextmenu', (e) => {
+    const el = e.target as HTMLElement | null;
+    if (!el?.closest('input, textarea, [contenteditable="true"]')) e.preventDefault();
+  });
+}
+
 async function start() {
   // Opened in a plain browser during development: fake the Rust side.
   if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {

@@ -33,7 +33,10 @@ static SFACE_ONNX: &[u8] = include_bytes!("../models/face_recognition_sface_2021
 
 const DET_SIZE: usize = 640;
 const MESH_SIZE: usize = 256;
-const MIN_SCORE: f32 = 0.6;
+/// YuNet's confidence a box is a face. On a real session (807 photos) half
+/// the boxes under 0.7 were hands, cloth, flowers or shadows, and the real
+/// ones there were faces turned away or cut off; above 0.8 all were faces.
+pub const MIN_SCORE: f32 = 0.7;
 const NMS_IOU: f32 = 0.3;
 /// Faces smaller than this (source pixels) are too small to judge eyelids.
 const MIN_FACE_PX: f32 = 40.0;
@@ -48,6 +51,21 @@ pub const EAR_SEALED: f32 = 0.03;
 /// (narrow, smiling, looking down) scored ≤ 0.52 in the test set; shut ones
 /// 0.56–0.84, smiles that close the eyes included.
 pub const BLINK_CLOSED: f32 = 0.55;
+/// Lids at least this far apart (mean eye aspect ratio) are open, whatever
+/// the blink model says. On a real session (807 photos, small faces in
+/// groups) the model called 546 faces shut; of the 105 with lids this open
+/// almost none were: glasses catching light, eyes looking down a little,
+/// faces turned away, and hands or cloth read as faces. Shut and downcast
+/// eyes sat below 0.2.
+pub const EAR_OPEN: f32 = 0.2;
+/// A face's sharpness is only judged when the detector is this sure and the
+/// face is whole: faces cut off by the frame or turned away (scored lower)
+/// are smooth cheek and hair, and read as "missed focus" while the people
+/// the photo is about are sharp — one such face at the edge was the only
+/// reading on a sharp group photo.
+pub const SHARP_MIN_SCORE: f32 = 0.8;
+/// Within this share of the frame's edge a face counts as cut off.
+const EDGE: f32 = 0.01;
 /// Smile score from which a face counts as smiling. Calibrated on the same
 /// session: neutral faces scored ≤ 0.27, faint smiles ≥ 0.5.
 pub const SMILE: f32 = 0.45;
@@ -112,12 +130,20 @@ impl Face {
         let sealed =
             self.left_eye.max(self.right_eye) < EAR_CLOSED && self.left_eye.min(self.right_eye) < EAR_SEALED;
         let cut = self.blink_cut.unwrap_or(BLINK_CLOSED);
-        sealed || self.blink.is_some_and(|(l, r)| l.min(r) >= cut)
+        let open = (self.left_eye + self.right_eye) / 2.0 >= EAR_OPEN;
+        sealed || (!open && self.blink.is_some_and(|(l, r)| l.min(r) >= cut))
+    }
+
+    /// Sharpness to judge focus by: none for faces cut off by the frame or
+    /// unsure detections (`SHARP_MIN_SCORE`).
+    pub fn sharp(&self) -> Option<f32> {
+        let whole = self.x >= EDGE && self.y >= EDGE && self.x + self.w <= 1.0 - EDGE && self.y + self.h <= 1.0 - EDGE;
+        self.sharpness.filter(|_| whole && self.score >= SHARP_MIN_SCORE)
     }
 
     /// The subject itself is out of focus (even if something else is sharp).
     pub fn soft(&self) -> bool {
-        self.px >= SOFT_ALONE_MIN_PX && self.sharpness.is_some_and(|v| v < FACE_SOFT)
+        self.px >= SOFT_ALONE_MIN_PX && self.sharp().is_some_and(|v| v < FACE_SOFT)
     }
 
     pub fn smiling(&self) -> bool {
@@ -291,20 +317,38 @@ pub fn assign_people(faces: &mut [&mut Face], ids: &[Embedding], photo: &[usize]
     }
     // Numbered by how often they appear: person 0 is the most photographed.
     people.sort_by_key(|(_, members)| std::cmp::Reverse(members.len()));
+    for f in faces.iter_mut() {
+        f.person = None;
+    }
+    for (p, (_, members)) in people.iter().enumerate() {
+        for &i in members {
+            faces[i].person = Some(p as u32);
+        }
+    }
+    person_stats(faces);
+}
+
+/// Each person's own blink cut-off and usual sharpness, from the faces that
+/// are theirs now — after grouping, and again when the photographer merges
+/// or splits people.
+pub fn person_stats(faces: &mut [&mut Face]) {
     let median = |mut v: Vec<f32>| {
         v.sort_by(f32::total_cmp);
         v[v.len() / 2]
     };
-    for f in faces.iter_mut() {
-        (f.person, f.blink_cut, f.sharp_ref) = (None, None, None);
+    let mut members: std::collections::HashMap<u32, Vec<usize>> = std::collections::HashMap::new();
+    for (i, f) in faces.iter_mut().enumerate() {
+        (f.blink_cut, f.sharp_ref) = (None, None);
+        if let Some(p) = f.person {
+            members.entry(p).or_default().push(i);
+        }
     }
-    for (p, (_, members)) in people.iter().enumerate() {
-        let blinks: Vec<f32> = members.iter().filter_map(|&i| faces[i].blink.map(|(l, r)| l.min(r))).collect();
-        let sharp: Vec<f32> = members.iter().filter_map(|&i| faces[i].sharpness).collect();
+    for list in members.values() {
+        let blinks: Vec<f32> = list.iter().filter_map(|&i| faces[i].blink.map(|(l, r)| l.min(r))).collect();
+        let sharp: Vec<f32> = list.iter().filter_map(|&i| faces[i].sharp()).collect();
         let cut = (blinks.len() >= PERSON_MIN).then(|| (median(blinks) + BLINK_ABOVE_USUAL).clamp(0.45, 0.8));
         let usual = (sharp.len() >= PERSON_MIN).then(|| median(sharp));
-        for &i in members {
-            faces[i].person = Some(p as u32);
+        for &i in list {
             faces[i].blink_cut = cut;
             faces[i].sharp_ref = usual;
         }
@@ -571,8 +615,8 @@ mod tests {
             w: 0.1,
             h: 0.1,
             score: 0.9,
-            left_eye: 0.3,
-            right_eye: 0.3,
+            left_eye: 0.1,
+            right_eye: 0.1,
             smile: None,
             sharpness: Some(100.0),
             px: 120.0,
@@ -626,5 +670,8 @@ mod tests {
         assert!(b(0.62, 0.68).eyes_closed(), "shut while smiling, lids not sealed");
         assert!(!b(0.44, 0.51).eyes_closed(), "looking down");
         assert!(!b(0.9, 0.2).eyes_closed(), "wink");
+        let wide = |l, r| Face { blink: Some((0.93, 0.9)), ..f(l, r) };
+        assert!(!wide(0.32, 0.31).eyes_closed(), "lids wide apart: open, whatever the model says");
+        assert!(wide(0.12, 0.14).eyes_closed());
     }
 }

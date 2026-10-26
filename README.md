@@ -144,17 +144,23 @@ Beranda ─ pilih/seret folder ─▶ Atur analisis ─ Mulai ─▶ Memproses �
    sebanding jumlah Pick-nya, minimal 1 per momen selama jatah cukup. Di
    dalam momen: ★5 (terbaik di burst / tersenyum), bukan pose mirip, jumlah
    subjek utama tersenyum, ketajaman. Pick manual ikut dihitung dari N.
-5. **Mata** (`faces.rs`, preview 2048 px) — YuNet mencari wajah, Face Mesh
+5. **Mata** (`faces.rs`, preview 2048 px) — YuNet mencari wajah (skor ≥ 0,7; di bawahnya separuh adalah tangan, kain atau bayangan), Face Mesh
    memberi 478 titik per wajah, lalu model **Face Blendshapes** MediaPipe
    memberi skor kedip 0–1 per mata. Model itu dilatih Google dari banyak
    orang, jadi mata sipit, tersenyum dan menunduk tidak dianggap berkedip
-   (bukan batas yang disetel dari satu sesi). Kedua mata ≥ 0,55 = terpejam;
+   (bukan batas yang disetel dari satu sesi). Kedua mata ≥ 0,55 = terpejam,
+   kecuali kelopaknya masih terbuka lebar (EAR rata-rata ≥ 0,2: kacamata
+   memantul, wajah kecil, wajah menyamping tertipu model);
    kelopak yang hampir rapat (*eye aspect ratio* < 0,05 dan < 0,03) juga,
    dan hanya itu yang dipakai untuk sesi lama tanpa skor kedip.
    **Orang** (`faces::assign_people`, model SFace): wajah ≥ 50 px dikelompokkan
    per orang dalam sesi. Orang yang muncul ≥ 4 kali dinilai terhadap dirinya
    sendiri: terpejam bila skor kedip ≥ skor biasanya + 0,3 (0,45–0,8), dan
    ketajaman wajahnya dibandingkan dengan wajahnya sendiri di foto lain.
+   Review › Saring: orang › **Kelola orang** membetulkan pengelompokan: beri
+   nama, gabungkan dua orang yang sama, pisahkan atau pindahkan wajah yang
+   salah (`name_person`, `merge_people`, `move_faces`); ambang tiap orang
+   dihitung ulang dan foto dinilai ulang. Nama hilang bila wajah dibaca ulang.
    Sesi lama: tombol **Baca ulang wajah** di Review (`reread_faces`). Wajah utama (≥ 40 % wajah
    terbesar) berkedip → Reject (Maybe di Longgar); hanya tamu → Maybe. Di
    grup burst, frame yang matanya terbuka diutamakan sebelum ketajaman.

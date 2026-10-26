@@ -4,7 +4,7 @@ import { useKey } from '../lib/keys';
 import { Kbd } from './ui';
 
 /**
- * Under "Terdeteksi terpejam": one line saying the eye call is a guess and
+ * Under "Mungkin terpejam": one line saying the eye call is a guess and
  * how to overrule it (the Pilih button sits right above). Gone once the
  * photo is Pilih.
  */

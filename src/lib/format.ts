@@ -13,7 +13,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
-import { eyesClosed, smiling, type Face, type PhotoEntry, type Reason, type Status } from './api';
+import { eyesClosed, faceSharp, smiling, type Face, type PhotoEntry, type Reason, type Status } from './api';
 import { locale, t } from './i18n';
 
 export const num = (n: number) => new Intl.NumberFormat(locale()).format(n);
@@ -94,7 +94,7 @@ export const REASON: Record<ReasonKind, { readonly label: string; icon: LucideIc
   dark: reason('Terlalu gelap', Moon, 'maybe'),
   bright: reason('Terlalu terang', Sun, 'maybe'),
   duplicate: reason('Duplikat', Copy, 'reject'),
-  eyesClosed: reason('Terdeteksi terpejam', EyeOff, 'maybe'),
+  eyesClosed: reason('Mungkin terpejam', EyeOff, 'maybe'),
   bestInGroup: reason('Terbaik di grup', Crown, 'gold'),
   similar: reason('Pose mirip', Images, 'maybe'),
   overLimit: reason('Melebihi batas jumlah', ListOrdered, 'maybe'),
@@ -149,7 +149,7 @@ const typicalCache = new WeakMap<PhotoEntry[], number | null>();
 function typicalFace(photos: PhotoEntry[]): number | null {
   if (typicalCache.has(photos)) return typicalCache.get(photos)!;
   const best = photos
-    .map((p) => Math.max(...(p.faces ?? []).map((f) => f.sharpness ?? -1)))
+    .map((p) => Math.max(...(p.faces ?? []).map((f) => faceSharp(f) ?? -1)))
     .filter((v) => v >= 0)
     .sort((a, b) => a - b);
   const v = best.length >= 6 ? best[Math.floor(best.length / 2)] : null;
@@ -165,7 +165,10 @@ export function faceSharpness(p: PhotoEntry, session: PhotoEntry[]): number | nu
   // Against the same person's usual face when known (`Face::sharp_ref`).
   const usual = typicalFace(session);
   const ratios = (p.faces ?? [])
-    .map((f) => (f.sharpness != null && (f.sharpRef ?? usual) ? f.sharpness / (f.sharpRef ?? usual)! : -1))
+    .map((f) => {
+      const v = faceSharp(f);
+      return v != null && (f.sharpRef ?? usual) ? v / (f.sharpRef ?? usual)! : -1;
+    })
     .filter((r) => r >= 0);
   if (!ratios.length) return null;
   return Math.min(100, Math.round(Math.max(...ratios) * 100));
@@ -186,8 +189,8 @@ export interface Person {
 
 const peopleCache = new WeakMap<PhotoEntry[], Person[]>();
 
-/** The session's recurring people, most photographed first. */
-export function peopleOf(photos: PhotoEntry[]): Person[] {
+/** Everyone whose face was recognised, most photographed first. */
+export function everyoneOf(photos: PhotoEntry[]): Person[] {
   if (peopleCache.has(photos)) return peopleCache.get(photos)!;
   const map = new Map<number, Person>();
   for (const p of photos) {
@@ -202,9 +205,24 @@ export function peopleOf(photos: PhotoEntry[]): Person[] {
       map.set(f.person, cur);
     }
   }
-  const list = [...map.values()].filter((x) => x.photos >= PERSON_MIN).sort((a, b) => b.photos - a.photos);
+  const list = [...map.values()].sort((a, b) => b.photos - a.photos || a.id - b.id);
   peopleCache.set(photos, list);
   return list;
+}
+
+/** The session's recurring people, most photographed first. */
+export const peopleOf = (photos: PhotoEntry[]) => everyoneOf(photos).filter((x) => x.photos >= PERSON_MIN);
+
+/** What a person is called: the name given, or "Orang 3" by how often they appear. */
+export function personName(photos: PhotoEntry[], names: Record<string, string> | undefined, id: number): string {
+  return names?.[id] ?? t('Orang {n}', { n: everyoneOf(photos).findIndex((x) => x.id === id) + 1 });
+}
+
+/** Every face of one person: the photo, the face and its place among the photo's faces. */
+export function facesOf(photos: PhotoEntry[], id: number): { photo: PhotoEntry; face: Face; index: number }[] {
+  return photos.flatMap((photo) =>
+    (photo.faces ?? []).flatMap((face, index) => (face.person === id ? [{ photo, face, index }] : [])),
+  );
 }
 
 /** The session was analyzed before blink scores and people existed. */
@@ -213,11 +231,11 @@ export const oldFaces = (photos: PhotoEntry[]) => {
   return faces.length > 0 && faces.every((f) => f.blink == null || f.person === undefined);
 };
 
-/** "2 dari 2 terbuka" / "1 dari 3 terpejam" — null when eyes weren't checked or no face was found. */
+/** "2 dari 2 terbuka" / "1 dari 3 mungkin terpejam" — null when eyes weren't checked or no face was found. */
 export function eyeSummary(p: PhotoEntry): { label: string; tone: Status } | null {
   if (!p.faces?.length) return null;
   const closed = p.faces.filter(eyesClosed).length;
   return closed
-    ? { label: t('{n} dari {total} terpejam', { n: closed, total: p.faces.length }), tone: 'maybe' }
+    ? { label: t('{n} dari {total} mungkin terpejam', { n: closed, total: p.faces.length }), tone: 'maybe' }
     : { label: p.faces.length === 1 ? t('Terbuka') : t('{n} wajah terbuka', { n: p.faces.length }), tone: 'pick' };
 }

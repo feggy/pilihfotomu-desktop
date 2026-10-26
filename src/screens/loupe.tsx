@@ -29,7 +29,7 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } f
 
 import { EyesNote } from '../components/eyes-note';
 import { Button, Chip, Dot, Kbd, StatusBadge, STATUS_ICON, cx } from '../components/ui';
-import { api, eyesClosed, thumbUrl, type PhotoEntry, type Status } from '../lib/api';
+import { api, eyesClosed, faceSharp, thumbUrl, type PhotoEntry, type Status } from '../lib/api';
 import { clock, eyeSummary, faceSharpness,
   smileSummary as smileOf, num, REASON, shotDate, STATUS, toneColor } from '../lib/format';
 import { actionFor, useCullPrefs, useKey, type Action } from '../lib/keys';
@@ -451,7 +451,7 @@ export function Loupe({
                       }}
                       className={cx(
                         'absolute rounded-md hover:bg-white/10',
-                        closed ? 'border-reject' : 'border-pick/80',
+                        closed ? 'border-maybe' : 'border-pick/80',
                       )}
                       style={{
                         left: `${f.x * 100}%`,
@@ -464,9 +464,9 @@ export function Loupe({
                     >
                       {closed && (
                         <span
-                          className="absolute bottom-full left-0 mb-1 rounded bg-reject px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap text-bg"
+                          className="absolute bottom-full left-0 mb-1 rounded bg-maybe px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap text-bg"
                         >
-                          {t('Terdeteksi terpejam')}
+                          {t('Mungkin terpejam')}
                         </span>
                       )}
                     </button>
@@ -653,7 +653,7 @@ function InfoPanel({
           m && (
             <>
               <Row icon={Sparkles} label={t('Bagian tertajam')} value={`${Math.round(m.sharpness)}%`} tone={sharpTone} />
-              {photo.faces?.some((f) => f.sharpness != null) && (
+              {photo.faces?.some((f) => faceSharp(f) != null) && (
                 <Row
                   icon={UserRound}
                   label={t('Ketajaman wajah')}

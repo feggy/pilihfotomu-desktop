@@ -172,4 +172,21 @@ export default {
   'Pose sama dengan {name}, diambil lagi beberapa saat kemudian.':
     'Same pose as {name}, shot again a little later.',
   'Tampilkan di {app}': 'Show in {app}',
+  // Kelola orang
+  'Kelola orang': 'Manage people',
+  'AI mengelompokkan wajah yang mirip, dan bisa keliru. Beri nama, gabungkan orang yang sama, atau pisahkan wajah yang bukan orangnya.':
+    'The AI groups faces that look alike, and can get it wrong. Name people, merge two who are the same, or split off faces that aren\'t theirs.',
+  'Sembunyikan yang jarang muncul': 'Hide the rarely seen',
+  'Jarang muncul ({n})': 'Rarely seen ({n})',
+  'Belum ada wajah yang dikenali di sesi ini.': 'No faces recognised in this session yet.',
+  'Nama': 'Name',
+  'Orang yang sama dengan': 'Same person as',
+  'Pilih orang…': 'Choose a person…',
+  'Gabungkan': 'Merge',
+  '{count} wajah': ['{count} face', '{count} faces'],
+  'Klik wajah yang bukan orang ini, lalu pisahkan atau pindahkan.': 'Click the faces that aren\'t this person, then split them off or move them.',
+  '{count} wajah dipilih': ['{count} face selected', '{count} faces selected'],
+  'Pindahkan ke…': 'Move to…',
+  'Pindahkan': 'Move',
+  'Jadikan orang baru': 'Make a new person',
 } as Record<string, string | [string, string]>;

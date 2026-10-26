@@ -17,6 +17,7 @@ import {
   X,
   type LucideIcon,
   Smile,
+  UserPen,
   UserRound,
   Check,
   Columns2,
@@ -38,10 +39,11 @@ import {
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { EyesNote } from '../components/eyes-note';
+import { FaceAvatar, PeopleDialog } from '../components/people';
 import { TitleBar, isMac } from '../components/title-bar';
 import { Button, Chip, Dot, IconButton, Kbd, StatusBadge, Stars, STATUS_ICON, Switch, cx } from '../components/ui';
-import { api, isManual, thumbUrl, type Face, type PhotoEntry, type ShootType, type Status, type Strictness } from '../lib/api';
-import { clock, CROWD, crowdOf, duration, eyeSummary, faceSharpness, oldFaces, peopleOf, type CrowdKind,
+import { api, faceSharp, isManual, thumbUrl, type PhotoEntry, type ShootType, type Status, type Strictness } from '../lib/api';
+import { clock, CROWD, crowdOf, duration, eyeSummary, faceSharpness, oldFaces, peopleOf, personName, type CrowdKind,
   smileSummary as smileOf,
   hasSmile, num, REASON, STATUS, toneColor, type ReasonKind } from '../lib/format';
 import { t, tj, tRust, useLang } from '../lib/i18n';
@@ -93,6 +95,7 @@ export function Review() {
   const [crowd, setCrowd] = useState<CrowdKind | null>(null);
   const [person, setPerson] = useState<number | null>(null);
   const [allPeople, setAllPeople] = useState(false);
+  const [managing, setManaging] = useState(false);
   const rereading = useApp((s) => s.rereading);
   const rereadFaces = useApp((s) => s.rereadFaces);
   const [stars, setStars] = useState<number | null>(null);
@@ -354,11 +357,11 @@ export function Review() {
           {people.length > 0 && (
             <>
               <SideTitle>{t('Saring: orang')}</SideTitle>
-              {(allPeople ? people : people.slice(0, 6)).map((x, i) => (
+              {(allPeople ? people : people.slice(0, 6)).map((x) => (
                 <SideRow
                   key={x.id}
                   lead={<FaceAvatar photo={x.cover} face={x.face} />}
-                  label={t('Orang {n}', { n: i + 1 })}
+                  label={personName(photos, session.people, x.id)}
                   count={x.photos}
                   countText={`${num(x.picks)}/${num(x.photos)}`}
                   warn={x.picks === 0}
@@ -371,6 +374,13 @@ export function Review() {
                   {allPeople ? t('Lebih sedikit') : t('Semua {n} orang', { n: num(people.length) })}
                 </button>
               )}
+              <button
+                type="button"
+                onClick={() => setManaging(true)}
+                className="flex items-center gap-1.5 px-2.5 py-1 text-left text-xs font-medium text-gold-text hover:underline"
+              >
+                <UserPen size={13} /> {t('Kelola orang')}
+              </button>
               {people.some((x) => x.picks === 0) && (
                 <p className="px-2.5 pt-0.5 text-[11px] leading-snug text-maybe">
                   {t('Ada orang yang belum punya foto Pilih. Klik untuk melihat fotonya.')}
@@ -520,7 +530,7 @@ export function Review() {
               {crowd && <FilterChip label={t(CROWD.find((c) => c.id === crowd)!.label)} onClear={() => setCrowd(null)} />}
               {person != null && (
                 <FilterChip
-                  label={t('Orang {n}', { n: people.findIndex((x) => x.id === person) + 1 })}
+                  label={personName(photos, session.people, person)}
                   onClear={() => setPerson(null)}
                 />
               )}
@@ -654,6 +664,7 @@ export function Review() {
           onCompare={(g) => go({ name: 'compare', group: g })}
         />
       )}
+      {managing && <PeopleDialog start={person} onClose={() => setManaging(false)} />}
       {exporting && <ExportDialog onClose={() => setExporting(false)} />}
       {summary && !exporting && <SummaryDialog onClose={() => showSummary(false)} onExport={() => (showSummary(false), setExporting(true))} />}
     </div>
@@ -912,29 +923,6 @@ function SideTitle({ children }: { children: string }) {
   return <div className="px-2.5 pt-3.5 pb-1 text-[11px] font-semibold tracking-wide text-faint uppercase">{children}</div>;
 }
 
-/** A person's face cut from the photo they're largest in. */
-function FaceAvatar({ photo, face, size = 20 }: { photo: PhotoEntry; face: Face; size?: number }) {
-  const url = thumbUrl(photo.thumb);
-  // A square around the face, a little loose. Face boxes are about square
-  // in pixels, so their own w : h gives the photo's shape.
-  const w = Math.min(1, face.w * 1.4);
-  const h = Math.min(1, w * (face.h / face.w));
-  const left = Math.min(Math.max(face.x + face.w / 2 - w / 2, 0), 1 - w);
-  const top = Math.min(Math.max(face.y + face.h / 2 - h / 2, 0), 1 - h);
-  return (
-    <span
-      className="shrink-0 rounded-full bg-line"
-      style={{
-        width: size,
-        height: size,
-        backgroundImage: url ? `url("${url}")` : undefined,
-        backgroundSize: `${100 / w}% ${100 / h}%`,
-        backgroundPosition: `${w < 1 ? (left / (1 - w)) * 100 : 0}% ${h < 1 ? (top / (1 - h)) * 100 : 0}%`,
-      }}
-    />
-  );
-}
-
 function SideRow({
   icon: Icon,
   lead,
@@ -1149,7 +1137,7 @@ function Inspector({
           m && (
             <>
               <Metric icon={Sparkles} label={t('Bagian tertajam')} value={`${Math.round(m.sharpness)}%`} tone={sharpTone} />
-              {photo.faces?.some((f) => f.sharpness != null) && (
+              {photo.faces?.some((f) => faceSharp(f) != null) && (
                 <Metric
                   icon={UserRound}
                   label={t('Ketajaman wajah')}

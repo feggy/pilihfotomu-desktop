@@ -166,7 +166,7 @@ fn list_sessions(app: AppHandle) -> CmdResult<Vec<Summary>> {
 
 #[tauri::command]
 fn open_session(app: AppHandle, state: State<'_, AppState>, id: String) -> CmdResult<Session> {
-    let s = session::load(&sessions_dir(&app)?, &id).ok_or("Sesi tidak ditemukan.")?;
+    let mut s = session::load(&sessions_dir(&app)?, &id).ok_or("Sesi tidak ditemukan.")?;
     // Without the folder nothing can be exported, copied or zoomed — say so
     // instead of opening a session that half works.
     if !s.root.is_dir() {
@@ -174,6 +174,9 @@ fn open_session(app: AppHandle, state: State<'_, AppState>, id: String) -> CmdRe
             "Folder “{}” tidak ditemukan. Kalau ada di drive eksternal, sambungkan dulu drivenya lalu coba lagi.",
             s.root.display()
         ));
+    }
+    if s.upgrade() {
+        session::save(&sessions_dir(&app)?, &s).map_err(|e| e.to_string())?;
     }
     *state.current.lock().unwrap() = Some(s.clone());
     Ok(s)
@@ -236,6 +239,30 @@ fn set_marks(app: AppHandle, state: State<'_, AppState>, marks: Vec<session::Mar
 
 /// Decides the open session again with other settings, from the saved
 /// measurements (instant; no file is read). Hand-made changes stay.
+#[tauri::command]
+fn name_person(app: AppHandle, state: State<'_, AppState>, person: u32, name: String) -> CmdResult<Session> {
+    with_current(&app, &state, |s| {
+        s.name_person(person, &name);
+        s.clone()
+    })
+}
+
+#[tauri::command]
+fn merge_people(app: AppHandle, state: State<'_, AppState>, from: u32, into: u32) -> CmdResult<Session> {
+    with_current(&app, &state, |s| {
+        s.merge_people(from, into);
+        s.clone()
+    })
+}
+
+#[tauri::command]
+fn move_faces(app: AppHandle, state: State<'_, AppState>, faces: Vec<(u32, usize)>, to: Option<u32>) -> CmdResult<Session> {
+    with_current(&app, &state, |s| {
+        s.move_faces(&faces, to);
+        s.clone()
+    })
+}
+
 #[tauri::command]
 fn recull(app: AppHandle, state: State<'_, AppState>, options: Options) -> CmdResult<Session> {
     with_current(&app, &state, |s| {
@@ -738,6 +765,9 @@ pub fn run() {
             set_rating,
             set_marks,
             recull,
+            name_person,
+            merge_people,
+            move_faces,
             set_language,
             save_export,
             save_draft,

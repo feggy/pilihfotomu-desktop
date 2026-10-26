@@ -251,7 +251,7 @@ fn typical_face(faces: &[&[Face]], share: f32) -> Option<f32> {
 }
 
 fn sharpest_main(faces: &[Face], share: f32) -> Option<f32> {
-    main_faces(faces, share).filter_map(|f| f.sharpness).reduce(f32::max)
+    main_faces(faces, share).filter_map(|f| f.sharp()).reduce(f32::max)
 }
 
 /// How sharp the photo's best main face is against what is usual for it:
@@ -259,13 +259,13 @@ fn sharpest_main(faces: &[Face], share: f32) -> Option<f32> {
 /// (`faces::assign_people`), else the session's usual face.
 fn best_against_usual(faces: &[Face], share: f32, typical: Option<f32>) -> Option<f32> {
     main_faces(faces, share)
-        .filter_map(|f| Some(f.sharpness? / f.sharp_ref.or(typical)?.max(1e-3)))
+        .filter_map(|f| Some(f.sharp()? / f.sharp_ref.or(typical)?.max(1e-3)))
         .reduce(f32::max)
 }
 
 /// Sharpness of the largest face, if it was big enough to read.
 fn subject_sharpness(faces: &[Face]) -> Option<f32> {
-    faces.iter().max_by(|a, b| (a.w * a.h).total_cmp(&(b.w * b.h))).and_then(|f| f.sharpness)
+    faces.iter().max_by(|a, b| (a.w * a.h).total_cmp(&(b.w * b.h))).and_then(|f| f.sharp())
 }
 
 /// Within a burst, frames this close to the sharpest still compete on smiles.
@@ -675,6 +675,16 @@ mod tests {
         // Too few photos to know what "usual" is: no comparison.
         let few = cull(&inputs[4..], &Options::default());
         assert_eq!(few[2].status, Status::Pick);
+        // Like sample JPG00006: the only face big enough to read is a guest
+        // cut off by the frame's edge, turned away (detector 0.73).
+        let edge = [Face { sharpness: Some(4.5), px: 102.0, x: 0.94, w: 0.05, score: 0.73, ..face(0.2, 0.3) }];
+        let unsure = [Face { sharpness: Some(4.5), px: 110.0, score: 0.73, ..face(0.2, 0.3) }];
+        let cut_off = [Face { sharpness: Some(4.5), px: 110.0, x: 0.94, w: 0.06, ..face(0.2, 0.3) }];
+        for faces in [&edge[..], &unsure, &cut_off] {
+            let mut all = inputs[..6].to_vec();
+            all.push(Input { faces, ..photo(12, 9000.0, 100.0, u64::MAX) });
+            assert_eq!(cull(&all, &Options::default())[6].status, Status::Pick, "{faces:?}");
+        }
     }
 
     #[test]

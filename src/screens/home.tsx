@@ -144,7 +144,7 @@ export function Home({ dragging }: { dragging: boolean }) {
   const go = useApp((s) => s.go);
 
   const [confirming, setConfirming] = useState<string | null>(null);
-  // Session whose folder still couldn't be found on "Coba lagi".
+  // Session clicked whose folder couldn't be found: its card shows what to do.
   const [missing, setMissing] = useState<string | null>(null);
 
   const reload = () => api.listSessions().then(setSessions, () => setSessions([]));
@@ -268,7 +268,7 @@ export function Home({ dragging }: { dragging: boolean }) {
               </p>
             )}
             {sessions?.map((s) =>
-              !s.available ? (
+              !s.available && missing === s.id ? (
                 <div
                   key={s.id}
                   className="flex flex-wrap items-center gap-3 rounded-xl border border-line-soft bg-maybe/[0.06] p-3"
@@ -279,9 +279,11 @@ export function Home({ dragging }: { dragging: boolean }) {
                     <span className="truncate text-xs text-muted">
                       {t('Mungkin drive eksternalnya belum tersambung, atau foldernya dipindah / diganti nama.')} {s.root}
                     </span>
-                    {missing === s.id && <span className="text-xs text-maybe">{t('Masih belum ditemukan. Pastikan drive-nya sudah tersambung.')}</span>}
                     {relinkError && <span className="text-xs text-reject">{tRust(relinkError)}</span>}
                   </span>
+                  <Button variant="plain" onClick={() => (setMissing(null), setRelinkError(null))}>
+                    {t('Tutup')}
+                  </Button>
                   <Button icon={FolderSearch} onClick={() => relink(s)}>
                     {t('Cari folder…')}
                   </Button>

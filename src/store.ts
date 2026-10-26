@@ -65,6 +65,8 @@ interface AppState {
   setRating: (ids: number[], rating: number) => Promise<void>;
   /** Decides the open session again with other settings (no file is read). */
   recull: (options: Options) => Promise<void>;
+  /** Kelola orang: naming, merging and splitting people; the photos are decided again. */
+  editPeople: (run: () => Promise<Session>) => Promise<void>;
   /** Reading the open session's faces again: how far (null when not running). */
   rereading: { done: number; total: number } | null;
   rereadFaces: () => Promise<void>;
@@ -238,6 +240,16 @@ export const useApp = create<AppState>((set, get) => ({
       if (message(e) !== 'Dibatalkan.') get().fail(e);
     } finally {
       set({ rereading: null });
+    }
+  },
+
+  editPeople: async (run) => {
+    try {
+      const session = await run();
+      // Blink cut-offs follow the people, so verdicts may change (as in recull).
+      set({ session, undoStack: [], redoStack: [] });
+    } catch (e) {
+      get().fail(e);
     }
   },
 
