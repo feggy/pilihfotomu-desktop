@@ -18,7 +18,7 @@ import { developed, setDevelopFullSize } from '../kreasi/engine/develop';
 import { drawAdjustOverlays } from '../kreasi/engine/render';
 import { NO_GEOMETRY, drawGeometry, outputSize, type EditSettings } from './geometry';
 import { cleanedImage, prepared } from './source';
-import { toCrs } from './lightroom';
+import { toCrsFor } from './lightroom';
 
 type Size = 'asli' | '2048' | '1080';
 type Quality = 'tinggi' | 'sedang' | 'hemat';
@@ -87,7 +87,9 @@ export function EditExportDialog({
     try {
       if (xmp) {
         setReport(
-          await api.writeDevelopXmp(photos.map((p) => ({ id: p.id, develop: toCrs(edits[p.id] ?? NO_ADJUST, !!p.raw) }))),
+          await api.writeDevelopXmp(
+            await Promise.all(photos.map(async (p) => ({ id: p.id, develop: await toCrsFor(root, p.id, edits[p.id] ?? NO_ADJUST, !!p.raw) }))),
+          ),
         );
       }
       for (const p of jpg ? photos : []) {

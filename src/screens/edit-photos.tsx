@@ -55,7 +55,7 @@ import { num } from '../lib/format';
 import { t } from '../lib/i18n';
 import { previewUrl } from '../kreasi/canvas';
 import { NO_ADJUST, type EditMask, type PhotoAdjust } from '../kreasi/engine/document';
-import { CropPanel, autoAngle, cropFor, ratioValue } from '../edit/crop-panel';
+import { CropPanel, autoAngle, autoUpright, cropFor, ratioValue } from '../edit/crop-panel';
 import { HealLayer, HealPanel } from '../edit/heal';
 import { Library } from '../edit/library';
 import { MaskLayer, MaskList, MaskPanel, loadSubjects, useMasking, type BrushSettings, type MaskCreate } from '../edit/masking';
@@ -333,6 +333,14 @@ function Editor({ back, ids, start }: { back: Screen; ids?: number[]; start?: nu
     const img = await loadLocalImage(await previewUrl(root, photo.id)).catch(() => null);
     if (!img) return;
     setGeometry({ ...g, angle: autoAngle(img, g) });
+    done();
+  };
+  const autoUprightNow = async () => {
+    if (!photo) return;
+    const img = await loadLocalImage(await previewUrl(root, photo.id)).catch(() => null);
+    if (!img) return;
+    const r = autoUpright(img, g);
+    setGeometry({ ...g, vertical: r.vertical || undefined, horizontal: r.horizontal || undefined });
     done();
   };
   const closeCrop = () => {
@@ -614,7 +622,7 @@ function Editor({ back, ids, start }: { back: Screen; ids?: number[]; start?: nu
 
         <aside className="w-[300px] shrink-0 overflow-y-auto border-l border-line-soft px-4 py-3">
           {healing && photo ? (
-            <HealPanel a={a} faces={photo.faces ?? []} size={healSize} onSize={setHealSize} onLive={live} onDone={done} onClose={() => setHealing(false)} />
+            <HealPanel root={root} photoId={photo.id} a={a} faces={photo.faces ?? []} size={healSize} onSize={setHealSize} onLive={live} onDone={done} onClose={() => setHealing(false)} />
           ) : masking && photo ? (
             <MaskPanel m={maskTools} part={selPart} creating={maskCreate} brush={brush} onCreating={setMaskCreate} onBrush={setBrush} onDone={done} onClose={() => setMasking(false)} />
           ) : cropping ? (
@@ -629,6 +637,7 @@ function Editor({ back, ids, start }: { back: Screen; ids?: number[]; start?: nu
               onDone={done}
               onLevel={() => setLeveling((v) => !v)}
               onAuto={autoStraighten}
+              onUpright={autoUprightNow}
               others={others.length}
               applyAll={applyAll}
               onApplyAll={setApplyAll}

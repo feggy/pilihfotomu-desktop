@@ -12,7 +12,7 @@ import { Button, cx } from '../components/ui';
 import { num } from '../lib/format';
 import { t } from '../lib/i18n';
 import { Slider } from './panels';
-import { NO_GEOMETRY, cropForRatio, drawGeometry, type Geometry } from './geometry';
+import { NO_GEOMETRY, cropForRatio, drawGeometry, squareToQuad, uprightQuad, type Geometry } from './geometry';
 
 /** Lightroom's aspects (the longer side first; X turns them to stand), the photo's own, and free. */
 export const RATIOS: { id: string; label: string; value: number | 'asli' | null }[] = [
@@ -39,6 +39,7 @@ export function CropPanel({
   onDone,
   onLevel,
   onAuto,
+  onUpright,
   others,
   applyAll,
   onApplyAll,
@@ -58,6 +59,8 @@ export function CropPanel({
   onLevel: () => void;
   /** Auto: levelled by the lines found in the photo. */
   onAuto: () => void;
+  /** Upright's Auto: leaning lines put straight. */
+  onUpright: () => void;
   others: number;
   applyAll: boolean;
   onApplyAll: (v: boolean) => void;
@@ -71,7 +74,7 @@ export function CropPanel({
   };
   const locked = ratioId !== 'bebas';
   const icon = 'flex h-8 items-center justify-center rounded-md border border-line text-muted hover:text-fg';
-  const edited = !!(g.crop || g.angle || g.rot || g.flipH || g.flipV);
+  const edited = !!(g.crop || g.angle || g.rot || g.flipH || g.flipV || g.vertical || g.horizontal);
   return (
     <div className="flex h-full flex-col gap-4">
       <h2 className="text-[15px] font-semibold">{t('Crop & luruskan')}</h2>
@@ -135,6 +138,17 @@ export function CropPanel({
             ? t('Tarik garis di sepanjang cakrawala atau dinding yang harusnya lurus.')
             : t('Atau seret di luar kotak crop untuk memutar foto.')}
         </p>
+      </div>
+
+      <div className="flex flex-col gap-2.5 border-t border-line-soft pt-4">
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-muted">{t('Upright')}</span>
+          <Button icon={Wand2} onClick={onUpright} title={t('Luruskan garis bangunan yang menguncup ke atas atau ke samping')}>
+            {t('Auto')}
+          </Button>
+        </div>
+        <Slider label={t('Vertikal')} value={g.vertical ?? 0} onLive={(v) => onChange({ ...g, vertical: v || undefined })} onDone={onDone} />
+        <Slider label={t('Horizontal')} value={g.horizontal ?? 0} onLive={(v) => onChange({ ...g, horizontal: v || undefined })} onDone={onDone} />
       </div>
 
       <div className="flex flex-col gap-2 border-t border-line-soft pt-4">
@@ -284,4 +298,107 @@ export function autoAngle(img: HTMLImageElement | HTMLCanvasElement, g: Geometry
   }
   if (Math.abs(lean) < 0.15) return g.angle;
   return Math.round(-lean * 100) / 100;
+}
+
+/**
+ * Upright's Auto: how much Vertical and Horizontal put the photo's lines
+ * straight. Near-upright edges (walls, poles, door frames) lean more the
+ * further they are from the middle when the camera was tipped; how fast that
+ * lean changes across the photo is matched with what each Vertical value
+ * would undo (and the same, turned, for near-level edges and Horizontal).
+ * The photo's overall lean is the Angle's to fix, not this.
+ */
+export function autoUpright(img: HTMLImageElement | HTMLCanvasElement, g: Geometry): { vertical: number; horizontal: number } {
+  const iw = img instanceof HTMLImageElement ? img.naturalWidth : img.width;
+  const ih = img instanceof HTMLImageElement ? img.naturalHeight : img.height;
+  const k = Math.min(1, 900 / Math.max(iw, ih));
+  const plain = { ...g, crop: undefined, vertical: 0, horizontal: 0 };
+  const turned = g.rot % 2 === 1;
+  const W = Math.max(16, Math.round((turned ? ih : iw) * k));
+  const H = Math.max(16, Math.round((turned ? iw : ih) * k));
+  const c = document.createElement('canvas');
+  c.width = W;
+  c.height = H;
+  const ctx = c.getContext('2d', { willReadFrequently: true })!;
+  drawGeometry(ctx, img, iw, ih, plain, W, H);
+  const px = ctx.getImageData(0, 0, W, H).data;
+  const lum = new Float32Array(W * H);
+  for (let i = 0; i < lum.length; i++) lum[i] = 0.299 * px[i * 4]! + 0.587 * px[i * 4 + 1]! + 0.114 * px[i * 4 + 2]!;
+  // Each strong edge: where it is, and its lean from upright (or tilt from level), degrees.
+  const ups: [number, number, number][] = [];
+  const levels: [number, number, number][] = [];
+  for (let y = 2; y < H - 2; y++) {
+    for (let x = 2; x < W - 2; x++) {
+      const at = (dx: number, dy: number) => lum[(y + dy) * W + x + dx]!;
+      const gx = 3 * (at(1, -1) + at(1, 1) - at(-1, -1) - at(-1, 1)) + 10 * (at(1, 0) - at(-1, 0));
+      const gy = 3 * (at(-1, 1) + at(1, 1) - at(-1, -1) - at(1, -1)) + 10 * (at(0, 1) - at(0, -1));
+      const m = Math.hypot(gx, gy);
+      if (m < 400) continue;
+      // The edge runs across its gradient.
+      let dx = -gy;
+      let dy = gx;
+      if (Math.abs(gx) > Math.abs(gy)) {
+        if (dy > 0) [dx, dy] = [-dx, -dy];
+        const lean = (Math.atan2(dx, -dy) * 180) / Math.PI;
+        if (Math.abs(lean) < 20) ups.push([x / W, lean, m]);
+      } else {
+        if (dx < 0) [dx, dy] = [-dx, -dy];
+        const tilt = (Math.atan2(dy, dx) * 180) / Math.PI;
+        if (Math.abs(tilt) < 20) levels.push([y / H, tilt, m]);
+      }
+    }
+  }
+  /** How fast the lean changes across the photo (degrees per photo width), robustly; null with too little to go on. */
+  const slope = (pts: [number, number, number][]) => {
+    let keep = pts;
+    let fit: [number, number] | null = null;
+    for (let pass = 0; pass < 3; pass++) {
+      let sw = 0;
+      let sx = 0;
+      let sy = 0;
+      let sxx = 0;
+      let sxy = 0;
+      for (const [x, v, w] of keep) {
+        sw += w;
+        sx += w * x;
+        sy += w * v;
+        sxx += w * x * x;
+        sxy += w * x * v;
+      }
+      const den = sw * sxx - sx * sx;
+      if (keep.length < 200 || Math.abs(den) < 1e-9) return null;
+      const s = (sw * sxy - sx * sy) / den;
+      const a = (sy - s * sx) / sw;
+      fit = [a, s];
+      keep = keep.filter(([x, v]) => Math.abs(v - (a + s * x)) < 3);
+    }
+    return fit ? fit[1] : null;
+  };
+  /** The lean change a Vertical (or Horizontal) value would undo: what the photo would show. */
+  const predicted = (vertical: number, horizontal: number) => {
+    const from = squareToQuad(uprightQuad({ vertical, horizontal }));
+    const deg = (a: number) => (a * 180) / Math.PI;
+    const lean = (x: number) => {
+      const [tx, ty] = from(x, 0);
+      const [bx, by] = from(x, 1);
+      return deg(Math.atan2((tx - bx) * W, (by - ty) * H));
+    };
+    const tilt = (y: number) => {
+      const [lx, ly] = from(0, y);
+      const [rx, ry] = from(1, y);
+      return deg(Math.atan2((ry - ly) * H, (rx - lx) * W));
+    };
+    return { v: (lean(0.8) - lean(0.2)) / 0.6, h: (tilt(0.8) - tilt(0.2)) / 0.6 };
+  };
+  const best = (want: number | null, which: 'v' | 'h') => {
+    if (want == null || Math.abs(want) < 0.8) return 0;
+    let pick = 0;
+    let err = Infinity;
+    for (let s = -100; s <= 100; s++) {
+      const p = predicted(which === 'v' ? s : 0, which === 'h' ? s : 0)[which];
+      if (Math.abs(p - want) < err) [err, pick] = [Math.abs(p - want), s];
+    }
+    return pick;
+  };
+  return { vertical: best(slope(ups), 'v'), horizontal: best(slope(levels), 'h') };
 }

@@ -13,6 +13,7 @@ memperbarui checksum di sini.
 | `u2netp.onnx` | `onnx/model.onnx` dari [BritishWerewolf/U-2-Netp](https://huggingface.co/BritishWerewolf/U-2-Netp) revisi `7112208d` ([U²-Net](https://github.com/xuebinqin/U-2-Net)) | Apache-2.0 | `309c8469258dda742793dce0ebea8e6dd393174f89934733ecc8b14c76f4ddd8` |
 | `ffdnet-color.onnx` | FFDNet warna dari [KAIR](https://github.com/cszn/KAIR) (Kai Zhang), diekspor ke ONNX untuk pilihfotomu-web (`public/models`) | MIT | `2ccb444b3aefe183f2fbd7be288bfb77b3a22bed66b39783d10d2d34cccb7a1b` |
 | `selfie_multiclass.onnx` | `selfie_multiclass_256x256.tflite` (float32, latest) dari [MediaPipe Image Segmenter](https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_multiclass_256x256/float32/latest/selfie_multiclass_256x256.tflite) (Google, sha256 tflite `c6748b12…e0e0`), dikonversi `tf2onnx 1.16.1 --tflite --opset 13` | Apache-2.0 | `18bd5c5015490b804f1f1054bb52da2ec17f650abc98b915b232ddadb958b056` |
+| `deeplab_ade20k.onnx` | `frozen_inference_graph.pb` dari [deeplabv3_mnv2_ade20k_train_2018_12_03.tar.gz](http://download.tensorflow.org/models/deeplabv3_mnv2_ade20k_train_2018_12_03.tar.gz) ([TensorFlow Model Garden DeepLab](https://github.com/tensorflow/models/tree/master/research/deeplab), sha256 tar `9565ccd0…776c`), dikonversi `tf2onnx 1.16.1 --inputs sub_7:0[1,513,513,3] --outputs logits/semantic/BiasAdd:0 --opset 13` | Apache-2.0 | `7674963643563a2a5e6e99e2f210bae0b70e53e26ac9e1d9d9e0b05ad0dcada2` |
 | `face_landmarks.onnx` | [fernandotonon/QtMeshEditor-facemesh-onnx](https://huggingface.co/fernandotonon/QtMeshEditor-facemesh-onnx) — konversi ONNX dari MediaPipe Face Mesh V2 (Google) | Apache-2.0 | `d16e5a55e6a480284d468ee32469692464049518c311662ab3956681de31e3e9` |
 
 `face_landmarks.onnx` adalah konversi pihak ketiga, bukan rilisan resmi
@@ -52,3 +53,9 @@ menjadikannya bagian (softmax) per piksel. Dijalankan pada potongan persegi di
 sekitar tiap orang (kepala, lalu badan), bukan seluruh foto. Dipilih karena
 BiSeNet face-parsing dilatih dengan CelebAMask-HQ yang hanya untuk riset
 non-komersial.
+
+`deeplab_ade20k.onnx` (Edit foto › Masking › Langit): grafik dipotong setelah
+pra-proses DeepLab sendiri, jadi input `[1, 513, 513, 3]` RGB −1…1 (kanal
+terakhir) dan output skor `[1, 129, 129, 151]` kelas ADE20K (0 = lainnya, 3 =
+langit). `cutout.rs` mengembalikan bagian langit (softmax) per titik; tepinya
+dirapikan di `smart-masks.ts`.

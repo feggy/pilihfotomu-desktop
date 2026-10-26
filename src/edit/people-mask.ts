@@ -425,7 +425,19 @@ export async function peopleMask(
         const lips = draw((c) => shape(c, pts, LIPS));
         for (let i = 0; i < N; i++) m[i] = mouth[i] ? 0 : lips[i]!;
       } else if (part === 'gigi') {
-        m.set(draw((c) => shape(c, pts, MOUTH)));
+        // Inside the open mouth, only what is bright and not red: the teeth,
+        // not the tongue, gums or the dark between them.
+        const mouth = draw((c) => shape(c, pts, MOUTH));
+        const ys: number[] = [];
+        for (let i = 0; i < N; i++) if (mouth[i]! > 128) ys.push(Y[i]!);
+        ys.sort((p, q) => p - q);
+        const mid = ys.length ? ys[Math.floor(ys.length * 0.5)]! : 255;
+        for (let i = 0; i < N; i++) {
+          if (!mouth[i]) continue;
+          const bright = Math.min(1, Math.max(0, (Y[i]! - mid * 0.85) / Math.max(8, mid * 0.3)));
+          const red = Math.min(1, Math.max(0, (CR[i]! - 150) / 12));
+          m[i] = Math.round(mouth[i]! * bright * (1 - red));
+        }
       } else if (part === 'orang') {
         for (let i = 0; i < N; i++) m[i] = Math.max(mine(i), faceOval[i]!);
       } else if (part === 'rambut' && near) {

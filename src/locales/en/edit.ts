@@ -269,4 +269,11 @@ export default {
   'Latar': 'Background',
   'Memisahkan orang…': 'Separating the person…',
   'Mendeteksi subjek…': 'Detecting subject…',
+  'Cerahkan mata': 'Brighten eyes',
+  'Putihkan gigi': 'Whiten teeth',
+  'Membaca wajah…': 'Reading faces…',
+  'Tidak ada wajah yang terbaca jelas.': 'No face read clearly.',
+  'Upright': 'Upright',
+  'Luruskan garis bangunan yang menguncup ke atas atau ke samping': 'Straighten building lines that converge upward or sideways',
+  'Vertikal': 'Vertical',
 } as Record<string, string | [string, string]>;

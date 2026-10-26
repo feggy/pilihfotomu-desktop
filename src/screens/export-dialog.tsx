@@ -14,7 +14,8 @@ import {
   type CopyResult,
 } from '../components/copy-flow';
 import { Button, Chip, Dot, Segmented, Stars, cx } from '../components/ui';
-import { toCrs } from '../edit/lightroom';
+import { toCrsFor } from '../edit/lightroom';
+import type { EditSettings } from '../edit/geometry';
 import { isEdited } from '../edit/looks';
 import type { PhotoAdjust } from '../kreasi/engine/document';
 import { api, type ExportReport } from '../lib/api';
@@ -86,7 +87,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
         const edited = session.photos.filter((p) => p.raw && isEdited(session.edits?.[p.id] as PhotoAdjust | undefined));
         if (edited.length) {
           await api.writeDevelopXmp(
-            edited.map((p) => ({ id: p.id, develop: toCrs(session.edits![p.id] as PhotoAdjust, true) })),
+            await Promise.all(edited.map(async (p) => ({ id: p.id, develop: await toCrsFor(session.root, p.id, session.edits![p.id] as EditSettings, true) }))),
             withReasons,
           );
         }

@@ -41,6 +41,11 @@ MediaPipe Selfie Multiclass segmentation (selfie_multiclass.onnx) — Masking �
   Licensed under the Apache License, Version 2.0
   Dikonversi dari selfie_multiclass_256x256.tflite dengan tf2onnx
 
+DeepLabV3 MobileNetV2 ADE20K segmentation (deeplab_ade20k.onnx) — Masking › Langit
+  The TensorFlow Authors — https://github.com/tensorflow/models/tree/master/research/deeplab
+  Licensed under the Apache License, Version 2.0
+  Dikonversi dari frozen_inference_graph.pb dengan tf2onnx
+
 FFDNet color denoising (ffdnet-color.onnx) — AI Denoise
   Kai Zhang et al. — https://github.com/cszn/KAIR
   Licensed under the MIT License, Copyright (c) 2019 Kai Zhang

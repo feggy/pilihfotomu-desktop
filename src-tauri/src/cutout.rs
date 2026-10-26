@@ -5,7 +5,9 @@
 //! - **U²-Netp** (Apache-2.0) for objects: one clear subject, firm edges;
 //! - **MediaPipe Selfie Multiclass** (Apache-2.0) for a person's parts —
 //!   hair, body skin, face skin, clothes, accessories — on a crop round
-//!   them (Edit foto › Masking › Orang).
+//!   them (Edit foto › Masking › Orang);
+//! - **DeepLabV3 MobileNetV2, ADE20K** (Apache-2.0, TensorFlow Model
+//!   Garden) for the sky (Masking › Langit): one of its 150 kinds of thing.
 //!
 //! The page sends the picture already at the model's size (RGB, row by row)
 //! and gets one alpha byte per pixel back; it stretches the mask over the
@@ -22,6 +24,14 @@ type Plan = Arc<TypedRunnableModel>;
 static MODNET_ONNX: &[u8] = include_bytes!("../models/modnet_f16.onnx");
 static U2NETP_ONNX: &[u8] = include_bytes!("../models/u2netp.onnx");
 static MULTICLASS_ONNX: &[u8] = include_bytes!("../models/selfie_multiclass.onnx");
+static DEEPLAB_ONNX: &[u8] = include_bytes!("../models/deeplab_ade20k.onnx");
+
+/// DeepLab's fixed input side, and its output's (one in four).
+pub const SKY_SIDE: u32 = 513;
+pub const SKY_OUT: usize = 129;
+/// ADE20K's classes, "other" first; the sky is the third kind.
+const ADE_CLASSES: usize = 151;
+const ADE_SKY: usize = 3;
 
 /// Selfie Multiclass's fixed input side.
 pub const PARTS_SIDE: u32 = 256;
@@ -39,6 +49,8 @@ pub enum Mode {
     Object,
     /// A person's parts (Selfie Multiclass): 256 × 256, six bytes a pixel.
     Parts,
+    /// The sky (DeepLab, ADE20K): 513 × 513 in, its share 129 × 129 out.
+    Sky,
 }
 
 impl Mode {
@@ -47,6 +59,7 @@ impl Mode {
             "potret" => Some(Mode::Portrait),
             "objek" => Some(Mode::Object),
             "bagian" => Some(Mode::Parts),
+            "langit" => Some(Mode::Sky),
             _ => None,
         }
     }
@@ -93,6 +106,20 @@ fn multiclass() -> Result<Plan, String> {
     .clone()
 }
 
+fn deeplab() -> Result<Plan, String> {
+    static PLAN: OnceLock<Result<Plan, String>> = OnceLock::new();
+    PLAN.get_or_init(|| {
+        let s = SKY_SIDE as usize;
+        tract_onnx::onnx()
+            .model_for_read(&mut Cursor::new(DEEPLAB_ONNX))
+            .and_then(|m| m.with_input_fact(0, f32::fact([1, s, s, 3]).into()))
+            .and_then(|m| m.into_optimized())
+            .and_then(|m| m.into_runnable())
+            .map_err(|e| format!("model langit tidak bisa dimuat: {e}"))
+    })
+    .clone()
+}
+
 /// The subject's mask of an RGB picture `w` × `h`: one alpha byte per pixel,
 /// same size — or, for `Parts`, each class's share (0–255) per pixel, six
 /// bytes a pixel in the classes' order.
@@ -134,6 +161,31 @@ pub fn mask(mode: Mode, w: u32, h: u32, rgb: &[u8]) -> Result<Vec<u8>, String> {
             let range = (hi - lo).max(1e-6);
             Ok(pred.iter().map(|v| ((v - lo) / range * 255.0).round() as u8).collect())
         }
+        Mode::Sky => {
+            if w != SKY_SIDE || h != SKY_SIDE {
+                return Err("Data gambar tidak terbaca.".into());
+            }
+            // −1…1, channels last, as DeepLab's own graph prepares it.
+            let s = SKY_SIDE as usize;
+            let input = tract_ndarray::Array4::from_shape_fn((1, s, s, 3), |(_, y, x, c)| px(y * s + x, c) / 127.5 - 1.0);
+            let out = deeplab()?.run(tvec!(Tensor::from(input).into())).map_err(|e| e.to_string())?;
+            let scores = out[0].to_plain_array_view::<f32>().map_err(|e| e.to_string())?;
+            let flat: Vec<f32> = scores.iter().copied().collect();
+            if flat.len() != SKY_OUT * SKY_OUT * ADE_CLASSES {
+                return Err("model langit memberi hasil yang tidak terduga".into());
+            }
+            // The sky's share of each spot (softmax over the 151 kinds).
+            Ok(flat
+                .as_chunks::<ADE_CLASSES>()
+                .0
+                .iter()
+                .map(|px| {
+                    let top = px.iter().fold(f32::MIN, |a, &b| a.max(b));
+                    let sum: f32 = px.iter().map(|v| (v - top).exp()).sum();
+                    ((px[ADE_SKY] - top).exp() / sum * 255.0).round() as u8
+                })
+                .collect())
+        }
         Mode::Parts => {
             if w != PARTS_SIDE || h != PARTS_SIDE {
                 return Err("Data gambar tidak terbaca.".into());
@@ -170,5 +222,11 @@ mod tests {
         assert!(mask(Mode::Portrait, 50, 96, &vec![0u8; 50 * 96 * 3]).is_err(), "not a multiple of 32");
         let s = PARTS_SIDE as usize;
         assert_eq!(mask(Mode::Parts, PARTS_SIDE, PARTS_SIDE, &vec![120u8; s * s * 3]).unwrap().len(), s * s * PARTS);
+        let k = SKY_SIDE as usize;
+        // A pale blue picture above, dark below: sky up top, not at the foot.
+        let rgb: Vec<u8> = (0..k * k).flat_map(|i| if i / k < k / 2 { [150u8, 190, 235] } else { [60u8, 50, 40] }).collect();
+        let sky = mask(Mode::Sky, SKY_SIDE, SKY_SIDE, &rgb).unwrap();
+        assert_eq!(sky.len(), SKY_OUT * SKY_OUT);
+        assert!(sky[SKY_OUT * 10 + 64] > sky[SKY_OUT * 120 + 64], "more sky at the top than the bottom");
     }
 }

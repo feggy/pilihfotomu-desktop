@@ -329,7 +329,14 @@ export function useMasking({
 export type Masking = ReturnType<typeof useMasking>;
 
 /** A mask's name in the list. */
-const maskName = (masks: EditMask[], m: EditMask) => (m.id === 'kulit-wajah' ? t('Kulit wajah') : t('Mask {n}', { n: masks.indexOf(m) + 1 }));
+const maskName = (masks: EditMask[], m: EditMask) =>
+  m.id === 'kulit-wajah'
+    ? t('Kulit wajah')
+    : m.id === 'retouch-mata'
+      ? t('Cerahkan mata')
+      : m.id === 'retouch-gigi'
+        ? t('Putihkan gigi')
+        : t('Mask {n}', { n: masks.indexOf(m) + 1 });
 
 /**
  * Lightroom's Masks panel, floating over the photo once there is a mask:

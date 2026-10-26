@@ -281,7 +281,17 @@ export const api = {
   /** Decides the open session again with other settings; hand-made changes stay. */
   recull: (options: Options) => invoke<Session>('recull', { options }),
   /** Edit foto › XMP untuk Lightroom: sidecars with the marks and the edit (`crs:`); Lightroom's own sidecars are left alone. */
-  writeDevelopXmp: (items: { id: number; develop: { attrs: [string, string][]; seqs: [string, string[]][] } }[], withReasons = false) =>
+  writeDevelopXmp: (
+    items: {
+      id: number;
+      develop: {
+        attrs: [string, string][];
+        seqs: [string, string[]][];
+        masks?: { name: string; amounts: [string, number][]; parts: { what: string; values: [string, number][]; subtract: boolean; invert: boolean }[] }[];
+      };
+    }[],
+    withReasons = false,
+  ) =>
     invoke<ExportReport>('write_develop_xmp', { items, withReasons }),
   /** Edit foto › AI Denoise: the photo cleaned (cached), full size and a 2048 px copy; `sigma` < 4 = it was clean. */
   denoisePhoto: (root: string, id: number, onProgress: (p: { done: number; total: number }) => void) => {
@@ -312,7 +322,7 @@ export const api = {
   /** Photos picked file by file: a key to use as `root`, the folder results go to, and the photos. */
   openFiles: (paths: string[]) => invoke<{ root: string; dir: string; photos: Photo[] }>('open_files', { paths }),
   /** Hapus latar: the subject's mask (one alpha byte per pixel) of an RGB picture already at the model's size. */
-  cutoutMask: (mode: 'potret' | 'objek' | 'bagian', width: number, height: number, rgb: Uint8Array) =>
+  cutoutMask: (mode: 'potret' | 'objek' | 'bagian' | 'langit', width: number, height: number, rgb: Uint8Array) =>
     invoke<ArrayBuffer>('cutout_mask', rgb, { headers: { mode, width: String(width), height: String(height) } }),
   /** A Buat konten picture element (PNG), kept under `<app data>/kreasi/assets/`. */
   saveAsset: (id: string, png: Uint8Array) => invoke<void>('save_asset', png, { headers: { id } }),

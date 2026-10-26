@@ -2,9 +2,10 @@
  * Masking's Sky and Objects, made on this computer and kept as pictures like
  * the subject's mask.
  *
- * - **Langit**: the sky is what joins the top edge and stays smooth and
- *   bright, grown out from the top a pixel at a time (no model): clear and
- *   overcast skies, cut at branches, roofs and the horizon.
+ * - **Langit**: DeepLab (ADE20K, `cutout.rs`) says where the sky is, coarsely
+ *   (129 spots across); its edge is drawn by what joins the top edge and
+ *   stays smooth and bright, grown from the top a pixel at a time — cut at
+ *   branches, roofs and the horizon. A pale wall is the model's to refuse.
  * - **Objek**: a box dragged round a thing; U²-Netp (`cutout.rs`, the
  *   salient-object model) finds it inside the box, nothing outside.
  */
@@ -111,6 +112,17 @@ export async function skyMask(root: string, photoId: number, img: HTMLImageEleme
     if (inBand < band * W * 0.15) for (const k of members) sky[k] = 0;
     pieces++;
   }
+  // The model's sky, spread over this grid; where it is sure, the grown sky's
+  // edge is kept; where it says no, nothing is (without it, the grown sky alone).
+  const P = await skyShare(img, W, H).catch(() => null);
+  if (P) {
+    for (let i = 0; i < N; i++) {
+      const p = P[i]! / 255;
+      // Taken on the model's word alone it mustn't be black: a studio's
+      // black backdrop reads to it as a night sky.
+      sky[i] = sky[i] ? (p > 0.25 ? 1 : 0) : p > 0.7 && L[i]! > 18 ? 1 : 0;
+    }
+  }
   // Holes the size of a bird or a cloud's sharp rim, filled: closed by a few pixels.
   const out = new Uint8Array(N);
   const R = 2;
@@ -134,6 +146,40 @@ export async function skyMask(root: string, photoId: number, img: HTMLImageEleme
   for (let i = 0; i < N; i++) if (out[i]) on++;
   if (on < N * 0.02) return null;
   return keep(id, W, H, out, 1.5);
+}
+
+/** DeepLab's share of sky at each spot of `img`, spread over W × H (0–255). */
+async function skyShare(img: HTMLImageElement, W: number, H: number): Promise<Uint8Array> {
+  const S = 513;
+  const OUT = 129;
+  const c = document.createElement('canvas');
+  c.width = c.height = S;
+  const ctx = c.getContext('2d', { willReadFrequently: true })!;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(img, 0, 0, S, S);
+  const px = ctx.getImageData(0, 0, S, S).data;
+  const rgb = new Uint8Array(S * S * 3);
+  for (let i = 0; i < S * S; i++) {
+    rgb[i * 3] = px[i * 4]!;
+    rgb[i * 3 + 1] = px[i * 4 + 1]!;
+    rgb[i * 3 + 2] = px[i * 4 + 2]!;
+  }
+  const share = new Uint8Array(await api.cutoutMask('langit', S, S, rgb));
+  const small = document.createElement('canvas');
+  small.width = small.height = OUT;
+  const d = new ImageData(OUT, OUT);
+  for (let i = 0; i < OUT * OUT; i++) d.data[i * 4 + 3] = share[i]!;
+  small.getContext('2d')!.putImageData(d, 0, 0);
+  const g = document.createElement('canvas');
+  g.width = W;
+  g.height = H;
+  const gx = g.getContext('2d', { willReadFrequently: true })!;
+  gx.imageSmoothingQuality = 'high';
+  gx.drawImage(small, 0, 0, W, H);
+  const a = gx.getImageData(0, 0, W, H).data;
+  const out = new Uint8Array(W * H);
+  for (let i = 0; i < W * H; i++) out[i] = a[i * 4 + 3]!;
+  return out;
 }
 
 /** A box on the photo, as shares of it. */

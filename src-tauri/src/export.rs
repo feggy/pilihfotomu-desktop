@@ -93,6 +93,79 @@ fn escape(s: &str) -> String {
 pub struct Develop {
     pub attrs: Vec<(String, String)>,
     pub seqs: Vec<(String, Vec<String>)>,
+    /// Masks Lightroom can redraw (gradients), as `crs:MaskGroupBasedCorrections`.
+    #[serde(default)]
+    pub masks: Vec<CrsMask>,
+}
+
+/// One mask: its `Local…` sliders, already in Lightroom's units (−1…1;
+/// exposure in stops ÷ 4), and its parts.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct CrsMask {
+    pub name: String,
+    pub amounts: Vec<(String, f64)>,
+    pub parts: Vec<CrsMaskPart>,
+}
+
+/// A part: `Mask/Gradient` (Full… where it is whole, Zero… where it ends) or
+/// `Mask/CircularGradient` (its box, Angle, Feather), its numbers by name;
+/// taken away from the parts before it (`subtract`), or inverted.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct CrsMaskPart {
+    pub what: String,
+    pub values: Vec<(String, f64)>,
+    #[serde(default)]
+    pub subtract: bool,
+    #[serde(default)]
+    pub invert: bool,
+}
+
+/// `crs:MaskGroupBasedCorrections` as Lightroom Classic writes it (Version 2:
+/// a radial's effect inside when `Flipped="true"`, its inversion
+/// `MaskInverted`; `MaskBlendMode` 0 add, 1 subtract). Only gradients: other
+/// parts can't be redrawn there and are left to the caller to drop.
+fn masks_xml(masks: &[CrsMask]) -> String {
+    let num = |v: f64| if v.is_finite() { format!("{:.6}", v).trim_end_matches('0').trim_end_matches('.').to_string() } else { "0".into() };
+    let mut out = String::new();
+    for m in masks {
+        let parts: Vec<&CrsMaskPart> =
+            m.parts.iter().filter(|p| p.what == "Mask/Gradient" || p.what == "Mask/CircularGradient").collect();
+        if parts.is_empty() {
+            continue;
+        }
+        let amounts: String = m
+            .amounts
+            .iter()
+            .filter(|(n, _)| crs_name(n) && n.starts_with("Local"))
+            .map(|(n, v)| format!("\n       crs:{n}=\"{}\"", num(v.clamp(-1.0, 1.0))))
+            .collect();
+        let items: String = parts
+            .iter()
+            .map(|p| {
+                let values: String = p
+                    .values
+                    .iter()
+                    .filter(|(n, _)| crs_name(n))
+                    .map(|(n, v)| format!("\n          crs:{n}=\"{}\"", num(*v)))
+                    .collect();
+                let radial = if p.what == "Mask/CircularGradient" { "\n          crs:Version=\"2\"\n          crs:Flipped=\"true\"" } else { "" };
+                format!(
+                    "         <rdf:li\n          crs:What=\"{}\"\n          crs:MaskActive=\"true\"\n          crs:MaskBlendMode=\"{}\"\n          crs:MaskInverted=\"{}\"\n          crs:MaskValue=\"1\"{radial}{values}/>\n",
+                    p.what,
+                    if p.subtract { 1 } else { 0 },
+                    p.invert,
+                )
+            })
+            .collect();
+        out.push_str(&format!(
+            "     <rdf:li>\n      <rdf:Description\n       crs:What=\"Correction\"\n       crs:CorrectionAmount=\"1\"\n       crs:CorrectionActive=\"true\"\n       crs:CorrectionName=\"{}\"{amounts}>\n       <crs:CorrectionMasks>\n        <rdf:Seq>\n{items}        </rdf:Seq>\n       </crs:CorrectionMasks>\n      </rdf:Description>\n     </rdf:li>\n",
+            escape(&m.name)
+        ));
+    }
+    if out.is_empty() {
+        return out;
+    }
+    format!("   <crs:MaskGroupBasedCorrections>\n    <rdf:Seq>\n{out}    </rdf:Seq>\n   </crs:MaskGroupBasedCorrections>\n")
 }
 
 /// A `crs:` property name as Adobe writes them; anything else is left out.
@@ -131,7 +204,8 @@ pub fn xmp_with_develop(m: &Mark, with_reasons: bool, develop: Option<&Develop>)
                 .iter()
                 .filter(|(n, _)| crs_name(n))
                 .map(|(n, items)| format!("   <crs:{n}>\n    <rdf:Seq>\n{}    </rdf:Seq>\n   </crs:{n}>\n", bag(items)))
-                .collect::<String>(),
+                .collect::<String>()
+                + &masks_xml(&d.masks),
         ),
         None => ("", String::new(), String::new()),
     };
@@ -501,6 +575,7 @@ mod tests {
         let d = Develop {
             attrs: vec![("Exposure2012".into(), "+0.35".into()), ("Bad Name\"".into(), "x".into())],
             seqs: vec![("ToneCurvePV2012".into(), vec!["0, 0".into(), "255, 255".into()])],
+            masks: vec![],
         };
         let m = Mark { photo: &p, status: Status::Pick, rating: 4, reasons: &[] };
         let doc = xmp_with_develop(&m, false, Some(&d));
@@ -516,6 +591,42 @@ mod tests {
         let r = write_develop_xmp(&[(Mark { photo: &p, status: Status::Pick, rating: 4, reasons: &[] }, d)], false);
         assert_eq!((r.written, r.skipped_existing), (0, 1));
         assert!(fs::read_to_string(&side).unwrap().contains("Adobe XMP Core"));
+    }
+
+    #[test]
+    fn gradient_masks_are_written_as_lightroom_reads_them() {
+        let tmp = tempfile::tempdir().unwrap();
+        let p = photo(tmp.path(), "IMG_0008", false);
+        let part = |what: &str, values: &[(&str, f64)], subtract| CrsMaskPart {
+            what: what.into(),
+            values: values.iter().map(|(n, v)| (n.to_string(), *v)).collect(),
+            subtract,
+            invert: false,
+        };
+        let d = Develop {
+            masks: vec![
+                CrsMask {
+                    name: "Mask <1>".into(),
+                    amounts: vec![("LocalExposure2012".into(), 0.25), ("LocalContrast2012".into(), 3.0), ("Exposure2012".into(), 1.0)],
+                    parts: vec![
+                        part("Mask/Gradient", &[("FullX", 0.5), ("FullY", 0.0), ("ZeroX", 0.5), ("ZeroY", 0.4)], false),
+                        part("Mask/CircularGradient", &[("Top", 0.2), ("Left", 0.3), ("Bottom", 0.6), ("Right", 0.7), ("Feather", 50.0)], true),
+                        part("Mask/Paint", &[], false),
+                    ],
+                },
+                CrsMask { name: "Only a brush".into(), amounts: vec![], parts: vec![part("Mask/Paint", &[], false)] },
+            ],
+            ..Default::default()
+        };
+        let m = Mark { photo: &p, status: Status::Pick, rating: 4, reasons: &[] };
+        let doc = xmp_with_develop(&m, false, Some(&d));
+        assert_eq!(doc.matches("crs:What=\"Correction\"").count(), 1, "a mask with nothing Lightroom can redraw is left out");
+        assert!(doc.contains("crs:CorrectionName=\"Mask &lt;1&gt;\""));
+        assert!(doc.contains("crs:LocalExposure2012=\"0.25\"") && doc.contains("crs:LocalContrast2012=\"1\""), "clamped to −1…1");
+        assert!(!doc.contains("crs:Exposure2012=\"1\""), "only Local… sliders on a mask");
+        assert!(doc.contains("crs:What=\"Mask/Gradient\"") && doc.contains("crs:ZeroY=\"0.4\""));
+        assert!(doc.contains("crs:Flipped=\"true\"") && doc.contains("crs:MaskBlendMode=\"1\""));
+        assert!(!doc.contains("Mask/Paint"));
     }
 
     #[test]
