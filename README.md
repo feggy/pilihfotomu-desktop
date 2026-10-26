@@ -144,7 +144,7 @@ Beranda ─ pilih/seret folder ─▶ Atur analisis ─ Mulai ─▶ Memproses �
    sebanding jumlah Pick-nya, minimal 1 per momen selama jatah cukup. Di
    dalam momen: ★5 (terbaik di burst / tersenyum), bukan pose mirip, jumlah
    subjek utama tersenyum, ketajaman. Pick manual ikut dihitung dari N.
-5. **Mata** (`faces.rs`, preview 2048 px) — YuNet mencari wajah (skor ≥ 0,7; di bawahnya separuh adalah tangan, kain atau bayangan), Face Mesh
+5. **Mata** (`faces.rs`, preview 2048 px) — YuNet mencari wajah (skor ≥ 0,7; di bawahnya separuh adalah tangan, kain atau bayangan; di bawah 0,8 dibuang juga bila Face Mesh menilai bukan wajah), Face Mesh
    memberi 478 titik per wajah, lalu model **Face Blendshapes** MediaPipe
    memberi skor kedip 0–1 per mata. Model itu dilatih Google dari banyak
    orang, jadi mata sipit, tersenyum dan menunduk tidak dianggap berkedip

@@ -39,7 +39,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { EyesNote } from '../components/eyes-note';
-import { FaceAvatar, PeopleDialog } from '../components/people';
+import { FaceAvatar, PeopleDialog, PeoplePicker } from '../components/people';
 import { TitleBar, isMac } from '../components/title-bar';
 import { Button, Chip, Dot, IconButton, Kbd, StatusBadge, Stars, STATUS_ICON, Switch, cx } from '../components/ui';
 import { api, faceSharp, isManual, thumbUrl, type PhotoEntry, type ShootType, type Status, type Strictness } from '../lib/api';
@@ -94,7 +94,8 @@ export function Review() {
   const [onlySmiles, setOnlySmiles] = useState(false);
   const [crowd, setCrowd] = useState<CrowdKind | null>(null);
   const [person, setPerson] = useState<number | null>(null);
-  const [allPeople, setAllPeople] = useState(false);
+  // "Semua n orang": a floating picker beside the button, not a longer list.
+  const [allPeople, setAllPeople] = useState<DOMRect | null>(null);
   const [managing, setManaging] = useState(false);
   const rereading = useApp((s) => s.rereading);
   const rereadFaces = useApp((s) => s.rereadFaces);
@@ -357,21 +358,27 @@ export function Review() {
           {people.length > 0 && (
             <>
               <SideTitle>{t('Saring: orang')}</SideTitle>
-              {(allPeople ? people : people.slice(0, 6)).map((x) => (
+              {/* The most photographed, plus anyone named or filtered by now. */}
+              {people.filter((x, i) => i < 6 || session.people?.[x.id] || person === x.id).map((x) => (
                 <SideRow
                   key={x.id}
                   lead={<FaceAvatar photo={x.cover} face={x.face} />}
                   label={personName(photos, session.people, x.id)}
                   count={x.photos}
                   countText={`${num(x.picks)}/${num(x.photos)}`}
+                  countTitle={t('{picks} foto Pilih dari {count} foto orang ini', { picks: num(x.picks), n: x.photos, count: num(x.photos) })}
                   warn={x.picks === 0}
                   active={person === x.id}
                   onClick={() => setPerson(person === x.id ? null : x.id)}
                 />
               ))}
               {people.length > 6 && (
-                <button type="button" onClick={() => setAllPeople((v) => !v)} className="px-2.5 py-1 text-left text-xs font-medium text-gold-text hover:underline">
-                  {allPeople ? t('Lebih sedikit') : t('Semua {n} orang', { n: num(people.length) })}
+                <button
+                  type="button"
+                  onClick={(e) => setAllPeople(allPeople ? null : e.currentTarget.getBoundingClientRect())}
+                  className="px-2.5 py-1 text-left text-xs font-medium text-gold-text hover:underline"
+                >
+                  {t('Semua {n} orang', { n: num(people.length) })}
                 </button>
               )}
               <button
@@ -665,6 +672,17 @@ export function Review() {
         />
       )}
       {managing && <PeopleDialog start={person} onClose={() => setManaging(false)} />}
+      {allPeople && (
+        <PeoplePicker
+          anchor={allPeople}
+          people={people}
+          photos={photos}
+          names={session.people}
+          active={person}
+          onPick={(id) => (setPerson(person === id ? null : id), setAllPeople(null))}
+          onClose={() => setAllPeople(null)}
+        />
+      )}
       {exporting && <ExportDialog onClose={() => setExporting(false)} />}
       {summary && !exporting && <SummaryDialog onClose={() => showSummary(false)} onExport={() => (showSummary(false), setExporting(true))} />}
     </div>
@@ -929,6 +947,7 @@ function SideRow({
   label,
   count,
   countText,
+  countTitle,
   warn,
   color = 'var(--color-muted)',
   active,
@@ -941,6 +960,8 @@ function SideRow({
   count: number;
   /** Shown instead of the count. */
   countText?: string;
+  /** What the count means, on hover. */
+  countTitle?: string;
   /** Count in the Cek colour: something to look at. */
   warn?: boolean;
   color?: string;
@@ -965,7 +986,7 @@ function SideRow({
       {active ? (
         <X size={13} className="shrink-0 text-gold-text" />
       ) : (
-        <span className={cx('text-xs tabular-nums', warn ? 'text-maybe' : 'text-faint')}>{countText ?? num(count)}</span>
+        <span title={countTitle} className={cx('text-xs tabular-nums', warn ? 'text-maybe' : 'text-faint')}>{countText ?? num(count)}</span>
       )}
     </button>
   );

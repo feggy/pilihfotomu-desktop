@@ -64,6 +64,8 @@ export interface Face {
   blinkCut?: number | null;
   /** This person's usual face sharpness in the session. */
   sharpRef?: number | null;
+  /** Alike its person (cosine to their mean, `assign_people`); lowest first are the likeliest mistakes. */
+  likeness?: number | null;
 }
 
 /** Mirrors `faces::EAR_CLOSED` / `EAR_SEALED` / `BLINK_CLOSED` / `EAR_OPEN` and `Face::eyes_closed`. */
@@ -109,6 +111,8 @@ export interface PhotoEntry extends Photo {
   rating: number;
   reasons: Reason[];
   group: number | null;
+  /** One pose taken one after another (looser than a burst), from `Session::mark_series`. */
+  series?: number | null;
   autoStatus: Status;
   /** The AI's stars; absent in older sessions. */
   autoRating?: number | null;

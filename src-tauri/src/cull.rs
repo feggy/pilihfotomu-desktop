@@ -622,6 +622,8 @@ mod tests {
             person: None,
             blink_cut: None,
             sharp_ref: None,
+            likeness: None,
+            presence: None,
         }
     }
 

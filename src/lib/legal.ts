@@ -11,8 +11,8 @@
 export const DEVELOPER = '[NAMA PENGEMBANG]';
 /** Where support and privacy questions go. */
 export const CONTACT = '[EMAIL KONTAK]';
-export const TERMS_VERSION = 1;
-export const TERMS_DATE = { id: '25 Oktober 2026', en: '25 October 2026' };
+export const TERMS_VERSION = 2;
+export const TERMS_DATE = { id: '26 Oktober 2026', en: '26 October 2026' };
 
 export interface LegalDoc {
   title: string;
@@ -40,6 +40,7 @@ export const TERMS: Record<'id' | 'en', LegalDoc> = {
         heading: '3. Penilaian AI bisa keliru',
         body: [
           'Status, alasan, bintang, deteksi mata terpejam, ketajaman wajah dan pengelompokan orang adalah saran otomatis, bukan keputusan akhir. Hasilnya tidak selalu benar. Contohnya: mata sipit atau tersenyum dibaca terpejam, fokus yang disengaja dianggap meleset, atau dua orang yang mirip dianggap satu orang.',
+          'Seluruh model AI berjalan offline di perangkat Anda: tanpa server, tanpa koneksi internet, dan tanpa biaya per pemakaian. Karena itu model yang dipakai adalah model kecil yang muat dan berjalan di komputer biasa. Kemampuannya terbatas dan tidak setara dengan layanan AI berbasis cloud. Kami mengupayakan hasil sebaik mungkin dalam batas itu, tetapi hasilnya jauh dari sempurna. Aplikasi ini membantu mempercepat pekerjaan, bukan menggantikan penilaian Anda.',
           'Periksa kembali hasilnya sebelum foto diserahkan, dihapus, atau dilewati. Keputusan akhir atas foto yang Anda pilih, serahkan kepada klien, atau lewati sepenuhnya menjadi tanggung jawab Anda.',
         ],
       },
@@ -120,6 +121,7 @@ export const TERMS: Record<'id' | 'en', LegalDoc> = {
         heading: '3. The AI can be wrong',
         body: [
           'Statuses, reasons, stars, closed-eye detection, face sharpness and people grouping are automatic suggestions, not final decisions. They are not always right: narrow or smiling eyes can read as closed, intentional focus can read as missed, and two similar people can be taken for one.',
+          'All AI models run offline on your device: no server, no internet connection and no per-use cost. That means small models that fit and run on an ordinary computer. Their abilities are limited and not on par with cloud AI services. We make the results as good as we can within those limits, but they are far from perfect. The app helps you work faster; it does not replace your judgement.',
           'Check the results before photos are delivered, deleted or skipped. The final decision on the photos you pick, deliver to clients or skip is entirely yours.',
         ],
       },

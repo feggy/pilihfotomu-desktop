@@ -184,9 +184,20 @@ export default {
   'Pilih orang…': 'Choose a person…',
   'Gabungkan': 'Merge',
   '{count} wajah': ['{count} face', '{count} faces'],
-  'Klik wajah yang bukan orang ini, lalu pisahkan atau pindahkan.': 'Click the faces that aren\'t this person, then split them off or move them.',
+  'Klik atau seret melewati wajah yang bukan orang ini (Shift+klik untuk rentang), lalu pisahkan atau pindahkan.':
+    'Click or drag across the faces that aren\'t this person (Shift-click for a run), then split them off or move them.',
   '{count} wajah dipilih': ['{count} face selected', '{count} faces selected'],
   'Pindahkan ke…': 'Move to…',
   'Pindahkan': 'Move',
   'Jadikan orang baru': 'Make a new person',
+  'paling tidak mirip di atas': 'least alike first',
+  'Ringkas foto beruntun': 'Stack bursts',
+  '{name} dan {n} foto beruntun': '{name} and {n} burst frames',
+  'Untuk mengurutkan dari yang paling tidak mirip, baca ulang wajah sesi ini sekali (nama dan koreksi orang ikut diulang).':
+    'To sort least alike first, read this session\'s faces again once (names and corrections to people start over).',
+  'Semua orang': 'Everyone',
+  'Cari nama…': 'Search names…',
+  'Belum ada Pilih': 'No Pick yet',
+  'Tidak ada yang cocok.': 'Nothing matches.',
+  '{picks} foto Pilih dari {count} foto orang ini': ['{picks} picked of {count} photo of this person', '{picks} picked of {count} photos of this person'],
 } as Record<string, string | [string, string]>;

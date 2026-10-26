@@ -37,6 +37,13 @@ const MESH_SIZE: usize = 256;
 /// the boxes under 0.7 were hands, cloth, flowers or shadows, and the real
 /// ones there were faces turned away or cut off; above 0.8 all were faces.
 pub const MIN_SCORE: f32 = 0.7;
+/// A box the detector is less sure of than `SURE_SCORE` is dropped when Face
+/// Mesh doesn't see a face in it either (presence logit under
+/// `MIN_PRESENCE`). On the same session: 219 of 5,965 boxes, a third hands,
+/// phones, cloth and shadows, the rest the backs of heads and faces almost
+/// hidden; faces still worth judging sat above −3.
+const SURE_SCORE: f32 = 0.8;
+const MIN_PRESENCE: f32 = -3.0;
 const NMS_IOU: f32 = 0.3;
 /// Faces smaller than this (source pixels) are too small to judge eyelids.
 const MIN_FACE_PX: f32 = 40.0;
@@ -119,6 +126,17 @@ pub struct Face {
     /// instead of the session's usual face.
     #[serde(default)]
     pub sharp_ref: Option<f32>,
+    /// How alike this face is to its person (cosine similarity to their
+    /// mean identity vector, from `assign_people`): the lowest are the
+    /// likeliest put with the wrong person. None when moved by hand, or for
+    /// sessions grouped before it was kept.
+    #[serde(default)]
+    pub likeness: Option<f32>,
+    /// Face Mesh's own "this is a face" logit for the box (its second
+    /// output): negative for hands and cloth the detector took for a face.
+    /// Older saved sessions don't have it.
+    #[serde(default)]
+    pub presence: Option<f32>,
 }
 
 impl Face {
@@ -210,7 +228,10 @@ pub fn analyze(img: &RgbImage) -> Result<(Vec<Face>, Vec<Embedding>), String> {
         if d.w.max(d.h) < MIN_FACE_PX {
             continue;
         }
-        let Ok((left_eye, right_eye, smile, blink)) = eyes(m, img, &d) else { continue };
+        let Ok((left_eye, right_eye, smile, blink, presence)) = eyes(m, img, &d) else { continue };
+        if d.score < SURE_SCORE && presence < MIN_PRESENCE {
+            continue;
+        }
         let sharpness =
             (d.w >= SHARP_MIN_PX).then(|| crate::analyze::face_variance(&gray, d.x / w, d.y / h, d.w / w, d.h / h));
         out.push(Face {
@@ -228,6 +249,8 @@ pub fn analyze(img: &RgbImage) -> Result<(Vec<Face>, Vec<Embedding>), String> {
             person: None,
             blink_cut: None,
             sharp_ref: None,
+            likeness: None,
+            presence: Some(presence),
         });
         ids.push((d.w >= RECOGNISE_MIN_PX).then(|| embed(&m.sface, img, &d).ok()).flatten());
     }
@@ -318,11 +341,14 @@ pub fn assign_people(faces: &mut [&mut Face], ids: &[Embedding], photo: &[usize]
     // Numbered by how often they appear: person 0 is the most photographed.
     people.sort_by_key(|(_, members)| std::cmp::Reverse(members.len()));
     for f in faces.iter_mut() {
-        f.person = None;
+        (f.person, f.likeness) = (None, None);
     }
-    for (p, (_, members)) in people.iter().enumerate() {
+    for (p, (mean, members)) in people.iter().enumerate() {
+        let mean = unit(mean);
         for &i in members {
+            let v = unit(ids[i].as_ref().unwrap());
             faces[i].person = Some(p as u32);
+            faces[i].likeness = Some(mean.iter().zip(&v).map(|(a, b)| a * b).sum());
         }
     }
     person_stats(faces);
@@ -441,12 +467,12 @@ const LEFT_EYE: [usize; 6] = [362, 263, 385, 380, 387, 373];
 const RIGHT_EYE: [usize; 6] = [33, 133, 160, 144, 158, 153];
 
 /// Eye aspect ratios (left, right), smile, and blink scores (left, right).
-type Reading = (f32, f32, Option<f32>, Option<(f32, f32)>);
+type Reading = (f32, f32, Option<f32>, Option<(f32, f32)>, f32);
 
 /// What one detected face reads as.
 fn eyes(m: &Models, img: &RgbImage, d: &Detection) -> TractResult<Reading> {
-    let pts = mesh(&m.mesh, img, d)?.1;
-    Ok((ear(&pts, LEFT_EYE), ear(&pts, RIGHT_EYE), smile(&pts), blink(&m.blend, &pts).ok()))
+    let (_, pts, presence) = mesh(&m.mesh, img, d)?;
+    Ok((ear(&pts, LEFT_EYE), ear(&pts, RIGHT_EYE), smile(&pts), blink(&m.blend, &pts).ok(), presence))
 }
 
 /// Face Mesh points MediaPipe's blendshape model reads (`kLandmarksSubsetIdxs`
@@ -499,7 +525,10 @@ fn smile(pts: &[(f32, f32)]) -> Option<f32> {
 
 /// Runs Face Mesh on one face: the 256 px crop it saw, and its 478 points
 /// (x, y in crop pixels).
-fn mesh(plan: &Plan, img: &RgbImage, d: &Detection) -> TractResult<(RgbImage, Vec<(f32, f32)>)> {
+/// The crop Face Mesh saw, its points in it, and its face-presence logit.
+type MeshRead = (RgbImage, Vec<(f32, f32)>, f32);
+
+fn mesh(plan: &Plan, img: &RgbImage, d: &Detection) -> TractResult<MeshRead> {
     // MediaPipe's own ROI: a square 1.5× the face box, centred on it and
     // rotated so the eyes are level.
     let (re, le) = (d.kps[0], d.kps[1]);
@@ -520,7 +549,8 @@ fn mesh(plan: &Plan, img: &RgbImage, d: &Detection) -> TractResult<(RgbImage, Ve
     });
     let out = plan.run(tvec!(Tensor::from(input).into()))?;
     let raw: Vec<f32> = out[0].to_plain_array_view::<f32>()?.iter().copied().collect();
-    Ok((crop, raw.chunks(3).map(|c| (c[0], c[1])).collect()))
+    let presence = out.get(1).and_then(|t| t.to_plain_array_view::<f32>().ok()?.iter().next().copied()).unwrap_or(0.0);
+    Ok((crop, raw.chunks(3).map(|c| (c[0], c[1])).collect(), presence))
 }
 
 fn dist(a: (f32, f32), b: (f32, f32)) -> f32 {
@@ -544,7 +574,7 @@ pub fn debug(img: &RgbImage) -> Result<Vec<DebugFace>, String> {
         if d.w.max(d.h) < MIN_FACE_PX {
             continue;
         }
-        let (crop, pts) = mesh(&m.mesh, img, &d).map_err(|e| e.to_string())?;
+        let (crop, pts, presence) = mesh(&m.mesh, img, &d).map_err(|e| e.to_string())?;
         let face = Face {
             x: d.x / w,
             y: d.y / h,
@@ -560,6 +590,8 @@ pub fn debug(img: &RgbImage) -> Result<Vec<DebugFace>, String> {
             person: None,
             blink_cut: None,
             sharp_ref: None,
+            likeness: None,
+            presence: Some(presence),
         };
         out.push((face, crop, pts));
     }
@@ -624,6 +656,8 @@ mod tests {
             person: None,
             blink_cut: None,
             sharp_ref: None,
+            likeness: None,
+            presence: None,
         };
         let a = |k: f32| Some(vec![1.0, k, 0.0]);
         let b = |k: f32| Some(vec![0.0, k, 1.0]);
@@ -638,6 +672,7 @@ mod tests {
         assert!(person[..5].iter().all(|&p| p == person[0]), "{person:?}");
         assert!(person[5..8].iter().all(|&p| p == person[5]) && person[5] != person[0]);
         assert_ne!(person[8], person[0], "never twice in one photo");
+        assert!(faces.iter().all(|f| f.likeness.is_some_and(|l| l > 0.9)), "alike their own person");
         // A's usual blink is 0.46: open at 0.47, shut at 0.8 — for A.
         assert!(!faces[3].eyes_closed() && faces[4].eyes_closed());
         assert_eq!(faces[5].blink_cut, None, "B seen only 3 times: the general cut-off");
@@ -649,6 +684,8 @@ mod tests {
             person: None,
             blink_cut: None,
             sharp_ref: None,
+            likeness: None,
+            presence: None,
             x: 0.0,
             y: 0.0,
             w: 0.1,

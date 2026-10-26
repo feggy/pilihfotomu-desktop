@@ -58,6 +58,10 @@ pub struct Entry {
     /// settings leaves these photos as they are.
     #[serde(default)]
     pub manual: bool,
+    /// Photos of one pose taken one after another (`Session::mark_series`):
+    /// looser than a burst `group`, for showing them as one in Kelola orang.
+    #[serde(default)]
+    pub series: Option<u32>,
 }
 
 impl Entry {
@@ -95,8 +99,13 @@ pub struct Session {
 
 /// The face rules now: 1 = face boxes from 0.7 (`faces::MIN_SCORE`) and
 /// open lids overruling the blink model (`faces::EAR_OPEN`); 2 = focus judged
-/// on whole, sure faces only (`Face::sharp`).
-pub const RULES: u32 = 2;
+/// on whole, sure faces only (`Face::sharp`); 3 = runs of a pose (`series`).
+pub const RULES: u32 = 3;
+
+/// One pose: frames at most this far apart in time…
+const SERIES_SECONDS: f64 = 15.0;
+/// …and this alike (dHash bits, as `cull`'s bursts).
+const SERIES_HAMMING: u32 = 12;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -211,6 +220,33 @@ impl Session {
             e.auto_rating = Some(v.rating);
         }
         self.options = options;
+        self.mark_series();
+    }
+
+    /// Numbers runs of the same pose: photos one after another, at most
+    /// `SERIES_SECONDS` apart and alike. A photographer repeats a pose with a
+    /// few seconds between frames, which a burst (2.5 s) splits apart.
+    pub fn mark_series(&mut self) {
+        let mut order: Vec<usize> =
+            (0..self.photos.len()).filter(|&i| self.photos[i].taken_at.is_some() && self.photos[i].metrics.is_some()).collect();
+        order.sort_by(|&a, &b| self.photos[a].taken_at.unwrap().total_cmp(&self.photos[b].taken_at.unwrap()));
+        for e in &mut self.photos {
+            e.series = None;
+        }
+        let mut next = 0;
+        for w in order.windows(2) {
+            let (a, b) = (&self.photos[w[0]], &self.photos[w[1]]);
+            let alike = b.taken_at.unwrap() - a.taken_at.unwrap() <= SERIES_SECONDS
+                && analyze::hamming(a.metrics.unwrap().dhash, b.metrics.unwrap().dhash) <= SERIES_HAMMING;
+            if alike {
+                let id = a.series.unwrap_or_else(|| {
+                    next += 1;
+                    next - 1
+                });
+                self.photos[w[0]].series = Some(id);
+                self.photos[w[1]].series = Some(id);
+            }
+        }
     }
 }
 
@@ -327,7 +363,8 @@ impl Session {
         });
         for &(id, i) in faces {
             if let Some(f) = self.photos.iter_mut().find(|e| e.photo.id == id).and_then(|e| e.faces.get_mut(i)) {
-                f.person = Some(to);
+                // Put there by the photographer: no likeness to doubt.
+                (f.person, f.likeness) = (Some(to), None);
             }
         }
         self.people_changed();
@@ -546,11 +583,12 @@ pub fn analyze(
                 auto_status: v.status,
                 auto_rating,
                 manual: false,
+                series: None,
             }
         })
         .collect();
 
-    Ok(Session {
+    let mut s = Session {
         id,
         name: root.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| root.display().to_string()),
         root: root.to_path_buf(),
@@ -562,7 +600,9 @@ pub fn analyze(
         photos: entries,
         people: Default::default(),
         rules: RULES,
-    })
+    };
+    s.mark_series();
+    Ok(s)
 }
 
 /// Thumbnail for one file outside an analysis (client picks on a folder
@@ -750,7 +790,7 @@ mod tests {
         let mut s = analyze(&shots, &["".into()], Options::default(), &tmp.path().join("thumbs"), &cancel, |_| {}).unwrap();
         let face = |person: u32, blink: f32| Face {
             x: 0.1, y: 0.1, w: 0.2, h: 0.2, score: 0.9, left_eye: 0.3, right_eye: 0.3, smile: None,
-            sharpness: Some(90.0), px: 150.0, blink: Some((blink, blink)), person: Some(person), blink_cut: None, sharp_ref: None,
+            sharpness: Some(90.0), px: 150.0, blink: Some((blink, blink)), person: Some(person), blink_cut: None, sharp_ref: None, likeness: None, presence: None,
         };
         // Four photos of person 0, the fifth taken for someone else (person 1).
         for (i, e) in s.photos.iter_mut().enumerate() {
@@ -780,6 +820,15 @@ mod tests {
         assert!(s.upgrade());
         assert_eq!(s.photos[0].faces.len(), 1);
         assert!(!s.upgrade(), "once");
+
+        // One pose repeated 4 s apart is one series; a new scene starts another run.
+        for (i, e) in s.photos.iter_mut().enumerate() {
+            e.taken_at = Some([0.0, 4.0, 9.0, 60.0, 64.0][i]);
+            e.metrics.as_mut().unwrap().dhash = [0, 1, 3, u64::MAX, u64::MAX - 1][i];
+        }
+        s.mark_series();
+        let series: Vec<Option<u32>> = s.photos.iter().map(|e| e.series).collect();
+        assert_eq!(series, vec![Some(0), Some(0), Some(0), Some(1), Some(1)]);
     }
 
     #[test]
