@@ -148,6 +148,10 @@ export interface Session {
   photos: PhotoEntry[];
   /** Names given to people (`Face.person`), by person number. */
   people?: Record<string, string>;
+  /** Edit foto: each edited photo's settings (a `PhotoAdjust`), by photo id. */
+  edits?: Record<string, unknown>;
+  /** Culled in Pilih foto, or opened straight in Edit foto. */
+  kind?: 'cull' | 'edit';
 }
 
 export interface SessionSummary {
@@ -166,6 +170,9 @@ export interface SessionSummary {
   options: Options;
   /** Folder reachable right now (an external drive may be unplugged). */
   available: boolean;
+  kind?: 'cull' | 'edit';
+  /** Photos edited in Edit foto. */
+  edited?: number;
 }
 
 export interface FolderSummary {
@@ -260,6 +267,8 @@ export const api = {
   },
   listSessions: () => invoke<SessionSummary[]>('list_sessions'),
   openSession: (id: string) => invoke<Session>('open_session', { id }),
+  /** Edit foto from a folder: its session if it has one, else a new one for editing only. */
+  openForEdit: (root: string) => invoke<Session>('open_for_edit', { root }),
   /** Remakes a session's thumbnails whose cache files are gone; how many. */
   restoreThumbs: (id: string) => invoke<number>('restore_thumbs', { id }),
   /** Forgets the session; the photos and any exported files stay. */
@@ -271,6 +280,21 @@ export const api = {
   setMarks: (marks: { id: number; status: Status; rating: number }[]) => invoke<void>('set_marks', { marks }),
   /** Decides the open session again with other settings; hand-made changes stay. */
   recull: (options: Options) => invoke<Session>('recull', { options }),
+  /** Edit foto › XMP untuk Lightroom: sidecars with the marks and the edit (`crs:`); Lightroom's own sidecars are left alone. */
+  writeDevelopXmp: (items: { id: number; develop: { attrs: [string, string][]; seqs: [string, string[]][] } }[], withReasons = false) =>
+    invoke<ExportReport>('write_develop_xmp', { items, withReasons }),
+  /** Edit foto › AI Denoise: the photo cleaned (cached), full size and a 2048 px copy; `sigma` < 4 = it was clean. */
+  denoisePhoto: (root: string, id: number, onProgress: (p: { done: number; total: number }) => void) => {
+    const channel = new Channel<{ done: number; total: number }>();
+    channel.onmessage = onProgress;
+    return invoke<{ full: string; preview: string; width: number; height: number; sigma: number }>('denoise_photo', { root, id, onProgress: channel });
+  },
+  /** Edit foto › Masking › Orang: each face's 478 Face Mesh points on the photo, as shares of it. */
+  faceLandmarks: (root: string, id: number) => invoke<[number, number][][]>('face_landmarks', { root, id }),
+  /** Lightroom presets: the .xmp files chosen and those in the folders chosen, as [path, text]. */
+  readPresets: (paths: string[]) => invoke<[string, string][]>('read_presets', { paths }),
+  /** Edit foto: settings per photo id; null takes the edit away. Files never change. */
+  setEdits: (edits: [number, unknown | null][]) => invoke<void>('set_edits', { edits }),
   /** Names a person (empty takes the name away). */
   namePerson: (person: number, name: string) => invoke<Session>('name_person', { person, name }),
   /** `from` is the same person as `into`. */
@@ -288,7 +312,7 @@ export const api = {
   /** Photos picked file by file: a key to use as `root`, the folder results go to, and the photos. */
   openFiles: (paths: string[]) => invoke<{ root: string; dir: string; photos: Photo[] }>('open_files', { paths }),
   /** Hapus latar: the subject's mask (one alpha byte per pixel) of an RGB picture already at the model's size. */
-  cutoutMask: (mode: 'potret' | 'objek', width: number, height: number, rgb: Uint8Array) =>
+  cutoutMask: (mode: 'potret' | 'objek' | 'bagian', width: number, height: number, rgb: Uint8Array) =>
     invoke<ArrayBuffer>('cutout_mask', rgb, { headers: { mode, width: String(width), height: String(height) } }),
   /** A Buat konten picture element (PNG), kept under `<app data>/kreasi/assets/`. */
   saveAsset: (id: string, png: Uint8Array) => invoke<void>('save_asset', png, { headers: { id } }),

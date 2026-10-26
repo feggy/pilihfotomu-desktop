@@ -145,7 +145,7 @@ export function App() {
     ) : screen.name === 'kreasi' ? (
       <KreasiScreen back={screen.back} />
     ) : screen.name === 'edit' ? (
-      <EditPhotos back={screen.back} />
+      <EditPhotos key={screen.ids ? 'editor' : 'library'} back={screen.back} ids={screen.ids} start={screen.start} />
     ) : screen.name === 'settings' ? (
       <Settings key={screen.section ?? 'license'} back={screen.back} initial={screen.section} />
     ) : (

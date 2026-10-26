@@ -95,6 +95,22 @@ pub struct Session {
     /// Which version of the face rules the saved verdicts follow (`RULES`).
     #[serde(default)]
     pub rules: u32,
+    /// Edit foto: each edited photo's settings (the page's `PhotoAdjust`),
+    /// by photo id. Kept as they come; the files themselves never change.
+    #[serde(default)]
+    pub edits: std::collections::BTreeMap<u32, serde_json::Value>,
+    /// How the session began: culled (Pilih foto), or opened straight in
+    /// Edit foto without culling.
+    #[serde(default)]
+    pub kind: SessionKind,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SessionKind {
+    #[default]
+    Cull,
+    Edit,
 }
 
 /// The face rules now: 1 = face boxes from 0.7 (`faces::MIN_SCORE`) and
@@ -127,6 +143,9 @@ pub struct Summary {
     /// The session folder is reachable right now (an external drive may be
     /// unplugged — the session itself is still fine).
     pub available: bool,
+    pub kind: SessionKind,
+    /// Photos edited in Edit foto.
+    pub edited: u32,
 }
 
 impl Session {
@@ -140,6 +159,8 @@ impl Session {
             duration_ms: self.duration_ms,
             exported: self.exported,
             available: self.root.is_dir(),
+            kind: self.kind,
+            edited: self.edits.len() as u32,
             total: self.photos.len() as u32,
             picks: count(Status::Pick),
             maybe: count(Status::Maybe),
@@ -328,6 +349,16 @@ impl Session {
         true
     }
 
+    /// Edit foto's settings for these photos; none takes a photo's edit away.
+    pub fn set_edits(&mut self, edits: Vec<(u32, Option<serde_json::Value>)>) {
+        for (id, edit) in edits {
+            match edit {
+                Some(v) => self.edits.insert(id, v),
+                None => self.edits.remove(&id),
+            };
+        }
+    }
+
     /// Names a person; an empty name takes it away.
     pub fn name_person(&mut self, person: u32, name: &str) {
         let name = name.trim();
@@ -436,6 +467,55 @@ pub enum SessionError {
 /// Rust versions, and these ids name files on disk).
 fn root_only() -> Vec<String> {
     vec![String::new()]
+}
+
+/// A folder opened straight in Edit foto: every photo in it, all Pilih, not
+/// analyzed (no faces, focus or verdicts); thumbnails are made as they are
+/// shown.
+pub fn for_edit(root: &Path) -> Result<Session, SessionError> {
+    let photos = scan::scan(root)?;
+    if photos.is_empty() {
+        return Err(SessionError::Empty);
+    }
+    let mut folders: Vec<String> = photos.iter().map(|p| p.folder.clone()).collect();
+    folders.sort();
+    folders.dedup();
+    let entries = photos
+        .into_iter()
+        .map(|photo| Entry {
+            name: photo.display_name(),
+            photo,
+            thumb: None,
+            taken_at: None,
+            camera: None,
+            metrics: None,
+            faces: Vec::new(),
+            error: None,
+            status: Status::Pick,
+            rating: 0,
+            reasons: Vec::new(),
+            group: None,
+            auto_status: Status::Pick,
+            auto_rating: None,
+            manual: false,
+            series: None,
+        })
+        .collect();
+    Ok(Session {
+        id: id_for(root),
+        name: root.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| root.display().to_string()),
+        root: root.to_path_buf(),
+        created_at: SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0),
+        duration_ms: 0,
+        options: Options::default(),
+        folders,
+        exported: false,
+        photos: entries,
+        people: Default::default(),
+        rules: RULES,
+        edits: Default::default(),
+        kind: SessionKind::Edit,
+    })
 }
 
 pub fn id_for(root: &Path) -> String {
@@ -600,6 +680,8 @@ pub fn analyze(
         photos: entries,
         people: Default::default(),
         rules: RULES,
+        edits: Default::default(),
+        kind: SessionKind::Cull,
     };
     s.mark_series();
     Ok(s)
@@ -829,6 +911,19 @@ mod tests {
         s.mark_series();
         let series: Vec<Option<u32>> = s.photos.iter().map(|e| e.series).collect();
         assert_eq!(series, vec![Some(0), Some(0), Some(0), Some(1), Some(1)]);
+    }
+
+    #[test]
+    fn a_folder_opens_for_editing_without_culling() {
+        let tmp = tempfile::tempdir().unwrap();
+        let img = GrayImage::from_pixel(64, 48, Luma([120]));
+        save_jpeg(&tmp.path().join("IMG_0001.JPG"), &img);
+        save_jpeg(&tmp.path().join("IMG_0002.JPG"), &img);
+        let s = for_edit(tmp.path()).unwrap();
+        assert_eq!((s.kind, s.photos.len()), (SessionKind::Edit, 2));
+        assert!(s.photos.iter().all(|e| e.status == Status::Pick && e.metrics.is_none() && !e.is_manual()));
+        assert_eq!(s.id, id_for(tmp.path()), "the same folder is the same session as a culled one");
+        assert!(for_edit(&tmp.path().join("nothing")).is_err());
     }
 
     #[test]

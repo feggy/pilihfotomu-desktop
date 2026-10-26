@@ -82,6 +82,53 @@ Review › Lanjutkan ▾ › Buat konten untuk memakai foto sesi yang terbuka).
   script itu setelah mengubah layout atau tema; template komunitas tidak
   disentuh.
 
+## Edit foto (`src/screens/edit-photos.tsx`, `src/edit/`)
+
+Review › Lanjutkan › Edit foto: foto Pilih sesi diolah ala Lightroom Classic,
+di GPU dengan mesin develop Buat konten (`kreasi/engine/develop.ts`).
+
+- Panel Basic (WB + pipet, Exposure…Blacks, Texture/Clarity/Dehaze,
+  Vibrance/Saturation, Warna/Hitam putih), Tone Curve (RGB, R, G, B),
+  Color Mixer (Hue/Saturation/Luminance 8 warna), Detail (sharpening, noise),
+  Effects (vignette, grain, matte). Tiap panel punya mata (matikan untuk
+  membandingkan) dan reset.
+- Pratinjau 2048 px, Sesudah atau belah Sebelum | Sesudah (`Y`, `\`),
+  histogram, Auto.
+- Preset bawaan dan Preset saya (disimpan di komputer ini); Salin/Tempel
+  (⌘⇧C/⌘⇧V) dan Sinkronkan ke foto yang dipilih di strip (⌘/Shift+klik);
+  undo per foto (⌘Z / ⇧⌘Z).
+- Edit disimpan di sesi (`Session::edits`, perintah `set_edits`); file asli
+  tidak diubah. Ekspor JPG dari foto ukuran penuh (`full_res_image`): ukuran
+  asli, 2048 px, atau 1080 px.
+- Color Grading (roda Shadows/Midtones/Highlights/Global, Blending, Balance).
+- Crop & luruskan (`R`): rasio (tukar tegak/datar `X`), sudut, tarik garis,
+  putar 90°, balik; bisa dipakai untuk foto terpilih (`src/edit/geometry.ts`).
+- Masking (`M`): Subjek / Latar (AI offline, MODNet / U²-Netp), Kuas, Linear,
+  Radial, rentang Warna dan Luminance; tiap mask dari bagian yang ditambah /
+  dikurangi / dibalik, dengan penyesuaian lokal; overlay `O`. Selama masking
+  foto tampil utuh tanpa crop (`src/edit/masking.tsx`).
+- XMP untuk Lightroom: dialog Ekspor menulis `crs:` (Basic, kurva, HSL,
+  Color Grading, Detail, vignette, grain) di samping RAW, tidak menimpa XMP
+  buatan Lightroom. Impor preset Lightroom (.xmp, file atau folder) ke grup;
+  masking/profil/WB Kelvin ditandai "Sebagian" (`src/edit/lightroom.ts`,
+  acuan nama: LightCraft, MIT/Apache).
+- Masking › Orang: titik Face Mesh (`face_landmarks`) jadi mask Seluruh wajah,
+  Kulit wajah, Mata, Alis, Bibir, Gigi per orang (`src/edit/people-mask.ts`).
+- AI Denoise (Detail): FFDNet (MIT, 3,4 MB) di Rust per tile 512 px, paralel;
+  σ ditaksir dari foto; hasil penuh + 2048 px disimpan di cache
+  (`src/denoise.rs`, `denoise_photo`). ±12 dtk per 24 MP di Apple Silicon.
+  Dicampur sebelum hapus objek dan develop (`src/edit/source.ts`).
+- Retouch kulit cepat (panel Hapus objek): oval lembut di tiap wajah sesi,
+  Texture/Clarity turun. Samakan warna antar kamera (strip): Temp/Tint kamera
+  lain digeser ke rata-rata kamera acuan. Salin/Sinkronkan memilih grup
+  (Basic … Effects, Crop, Masking). Zoom 1:1 (`Z`) dari foto ukuran penuh.
+  Ekspor XMP di Review ikut menulis pengaturan Edit foto foto yang diedit.
+- Hapus objek (`Q`): sapuan diisi dari sekitarnya (PatchMatch, `kreasi/engine/
+  inpaint.ts`), disimpan sebagai sapuan sehingga ekspor ukuran penuh mengisi
+  tempat yang sama (`src/edit/heal.tsx`).
+- Belum: crop & mask ke XMP, WB RAW (Kelvin), super resolution, profil lensa,
+  geometry/upright, lens blur, cerahkan mata/putihkan gigi.
+
 ## Bahasa
 
 Indonesia dan Inggris (Pengaturan › Bahasa; bawaan ikut bahasa sistem —

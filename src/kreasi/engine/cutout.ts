@@ -20,7 +20,7 @@ const MAX_SIDE = 2048;
 export type CutoutProgress = { stage: 'unduh'; progress: number } | { stage: 'proses' };
 
 /** A mode's model: the whole photo in, a mask (alpha, any size, stretched over the photo) out. */
-type Masker = (img: HTMLImageElement) => Promise<HTMLCanvasElement>;
+type Masker = (img: HTMLImageElement, short?: number) => Promise<HTMLCanvasElement>;
 
 const maskers = new Map<CutoutMode, Promise<Masker>>();
 /** `img` drawn onto a canvas `w` × `h`, smoothly. */
@@ -52,11 +52,11 @@ function maskCanvas(w: number, h: number, alpha: (i: number) => number): HTMLCan
  */
 async function loadMasker(mode: CutoutMode): Promise<Masker> {
   const { api } = await import('../../lib/api');
-  return async (img) => {
+  return async (img, short = 512) => {
     let w = 320;
     let h = 320;
     if (mode === 'potret') {
-      const k = 512 / Math.min(img.width, img.height);
+      const k = short / Math.min(img.width, img.height);
       w = Math.max(32, Math.round((img.width * k) / 32) * 32);
       h = Math.max(32, Math.round((img.height * k) / 32) * 32);
     }
@@ -186,6 +186,34 @@ export const canvasToPng = (canvas: HTMLCanvasElement) =>
   new Promise<Blob>((resolve, reject) =>
     canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('PNG gagal dibuat'))), 'image/png'),
   );
+
+/**
+ * A person's parts in a square of `img` (image pixels; it may reach past the
+ * edges): Selfie Multiclass's share of each class — background, hair, body
+ * skin, face skin, clothes, others — six bytes per pixel, 256 × 256.
+ */
+export async function personParts(img: HTMLImageElement, square: { x: number; y: number; side: number }): Promise<Uint8Array> {
+  const { api } = await import('../../lib/api');
+  const S = 256;
+  const c = document.createElement('canvas');
+  c.width = c.height = S;
+  const ctx = c.getContext('2d', { willReadFrequently: true })!;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(img, square.x, square.y, square.side, square.side, 0, 0, S, S);
+  const px = ctx.getImageData(0, 0, S, S).data;
+  const rgb = new Uint8Array(S * S * 3);
+  for (let i = 0; i < S * S; i++) {
+    rgb[i * 3] = px[i * 4]!;
+    rgb[i * 3 + 1] = px[i * 4 + 1]!;
+    rgb[i * 3 + 2] = px[i * 4 + 2]!;
+  }
+  return new Uint8Array(await api.cutoutMask('bagian', S, S, rgb));
+}
+
+/** Where people are in `img` (MODNet, people only), as a see-through mask at the model's size. */
+export async function personMatte(img: HTMLImageElement, short = 512): Promise<HTMLCanvasElement> {
+  return (await masker('potret'))(img, short);
+}
 
 /**
  * Masking › Pilih subjek: where the subject is in the whole picture, as a

@@ -86,10 +86,29 @@ fn escape(s: &str) -> String {
     s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
 }
 
+/// Edit foto's settings as Lightroom's Camera Raw settings (`crs:`), worked
+/// out by the page (src/edit/lightroom.ts): plain values, and the ordered
+/// lists (tone curves) as `rdf:Seq`.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct Develop {
+    pub attrs: Vec<(String, String)>,
+    pub seqs: Vec<(String, Vec<String>)>,
+}
+
+/// A `crs:` property name as Adobe writes them; anything else is left out.
+fn crs_name(n: &str) -> bool {
+    !n.is_empty() && n.len() < 64 && n.chars().all(|c| c.is_ascii_alphanumeric())
+}
+
 /// The XMP packet for one photo. Lightroom and Capture One read label, stars
 /// and keywords; Photo Mechanic also its own Tagged flag (= Pick), which the
 /// others ignore.
 pub fn xmp_document(m: &Mark, with_reasons: bool) -> String {
+    xmp_with_develop(m, with_reasons, None)
+}
+
+/// As `xmp_document`, with Edit foto's settings for Lightroom to pick up.
+pub fn xmp_with_develop(m: &Mark, with_reasons: bool, develop: Option<&Develop>) -> String {
     let mut flat = vec!["pilihfotomu".to_string()];
     let mut tree = vec![format!("pilihfotomu|{}", status_word(m.status))];
     if with_reasons {
@@ -100,6 +119,22 @@ pub fn xmp_document(m: &Mark, with_reasons: bool) -> String {
     }
     let bag =
         |items: &[String]| items.iter().map(|i| format!("     <rdf:li>{}</rdf:li>\n", escape(i))).collect::<String>();
+    let (crs_ns, crs_attrs, crs_seqs) = match develop {
+        Some(d) => (
+            "\n    xmlns:crs=\"http://ns.adobe.com/camera-raw-settings/1.0/\"",
+            d.attrs
+                .iter()
+                .filter(|(n, _)| crs_name(n))
+                .map(|(n, v)| format!("\n   crs:{n}=\"{}\"", escape(v)))
+                .collect::<String>(),
+            d.seqs
+                .iter()
+                .filter(|(n, _)| crs_name(n))
+                .map(|(n, items)| format!("   <crs:{n}>\n    <rdf:Seq>\n{}    </rdf:Seq>\n   </crs:{n}>\n", bag(items)))
+                .collect::<String>(),
+        ),
+        None => ("", String::new(), String::new()),
+    };
     format!(
         r#"<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="pilihfotomu">
  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
@@ -107,10 +142,11 @@ pub fn xmp_document(m: &Mark, with_reasons: bool) -> String {
     xmlns:xmp="http://ns.adobe.com/xap/1.0/"
     xmlns:dc="http://purl.org/dc/elements/1.1/"
     xmlns:lr="http://ns.adobe.com/lightroom/1.0/"
-    xmlns:photomechanic="http://ns.camerabits.com/photomechanic/1.0/"
+    xmlns:photomechanic="http://ns.camerabits.com/photomechanic/1.0/"{crs_ns}
    xmp:Rating="{rating}"
    xmp:Label="{label}"
-   photomechanic:Tagged="{tagged}">
+   photomechanic:Tagged="{tagged}"{crs_attrs}>
+{crs_seqs}
    <dc:subject>
     <rdf:Bag>
 {flat}    </rdf:Bag>
@@ -161,6 +197,31 @@ pub fn write_xmp(marks: &[Mark], existing: Existing, with_reasons: bool, jpeg_co
             continue;
         }
         match write_atomic(&path, xmp_document(m, with_reasons).as_bytes()) {
+            Ok(()) => report.written += 1,
+            Err(e) => report.failed.push(format!("{}: {e}", m.photo.display_name())),
+        }
+    }
+    report
+}
+
+/// Edit foto › XMP untuk Lightroom: a sidecar with the marks and the edit
+/// next to each RAW. A sidecar this app didn't write (it may hold the
+/// photographer's own Lightroom edits) is left alone and counted as skipped.
+pub fn write_develop_xmp(items: &[(Mark, Develop)], with_reasons: bool) -> ExportReport {
+    let mut report = ExportReport::default();
+    for (m, d) in items {
+        let Some(raw) = &m.photo.raw else {
+            report.skipped_jpeg += 1;
+            continue;
+        };
+        let path = sidecar_path(raw);
+        if let Ok(old) = fs::read(&path)
+            && !old.windows(OUR_XMP.len()).any(|w| w == OUR_XMP)
+        {
+            report.skipped_existing += 1;
+            continue;
+        }
+        match write_atomic(&path, xmp_with_develop(m, with_reasons, Some(d)).as_bytes()) {
             Ok(()) => report.written += 1,
             Err(e) => report.failed.push(format!("{}: {e}", m.photo.display_name())),
         }
@@ -431,6 +492,30 @@ mod tests {
             raw: Some(raw),
             jpeg: jpg,
         }
+    }
+
+    #[test]
+    fn develop_settings_go_into_the_sidecar_ours_only() {
+        let tmp = tempfile::tempdir().unwrap();
+        let p = photo(tmp.path(), "IMG_0007", false);
+        let d = Develop {
+            attrs: vec![("Exposure2012".into(), "+0.35".into()), ("Bad Name\"".into(), "x".into())],
+            seqs: vec![("ToneCurvePV2012".into(), vec!["0, 0".into(), "255, 255".into()])],
+        };
+        let m = Mark { photo: &p, status: Status::Pick, rating: 4, reasons: &[] };
+        let doc = xmp_with_develop(&m, false, Some(&d));
+        assert!(doc.contains("xmlns:crs=") && doc.contains(r#"crs:Exposure2012="+0.35""#));
+        assert!(doc.contains("<crs:ToneCurvePV2012>") && doc.contains("<rdf:li>255, 255</rdf:li>"));
+        assert!(!doc.contains("Bad Name"), "only names Adobe would write");
+
+        let r = write_develop_xmp(&[(Mark { photo: &p, status: Status::Pick, rating: 4, reasons: &[] }, d.clone())], false);
+        assert_eq!(r.written, 1);
+        // Lightroom's own sidecar (the photographer's edits) is left alone.
+        let side = sidecar_path(p.raw.as_ref().unwrap());
+        fs::write(&side, "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\" x:xmptk=\"Adobe XMP Core\"/>").unwrap();
+        let r = write_develop_xmp(&[(Mark { photo: &p, status: Status::Pick, rating: 4, reasons: &[] }, d)], false);
+        assert_eq!((r.written, r.skipped_existing), (0, 1));
+        assert!(fs::read_to_string(&side).unwrap().contains("Adobe XMP Core"));
     }
 
     #[test]

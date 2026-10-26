@@ -918,7 +918,7 @@ function ContinueMenu({ picks, onExport, onEdit, onCreate }: { picks: number; on
         >
           <span className="px-2.5 pt-1.5 pb-1 text-[11px] font-semibold text-faint uppercase">{t('{count} foto berstatus Pilih', { n: picks, count: num(picks) })}</span>
           {item(Upload, t('Ekspor'), t('XMP untuk Lightroom, salin, atau JPG'), onExport, isMac ? '⌘E' : 'Ctrl+E')}
-          {item(Sliders, t('Edit foto'), t('Buka foto Dipilih di editor'), onEdit, <Chip color="var(--color-faint)">{t('Segera')}</Chip>)}
+          {item(Sliders, t('Edit foto'), t('Buka foto Dipilih di editor'), onEdit)}
           {item(LayoutTemplate, t('Buat konten'), t('Story / feed dari foto Dipilih'), onCreate)}
         </div>
       )}

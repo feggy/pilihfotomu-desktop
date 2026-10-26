@@ -11,6 +11,8 @@ memperbarui checksum di sini.
 | `face_recognition_sface_2021dec_f16.onnx` | `face_recognition_sface_2021dec.onnx` dari [opencv/face_recognition_sface](https://huggingface.co/opencv/face_recognition_sface) (OpenCV Zoo), bobot disimpan float16 dengan `scripts/onnx-fp16-weights.py` (38,7 → 19,4 MB; cosinus ke fp32 0,999998) | Apache-2.0 | `b20c4dab3369d661e793880349d4d5fcd67e1af0118f87be9287be2767ecea28` |
 | `modnet_f16.onnx` | `onnx/model.onnx` dari [Xenova/modnet](https://huggingface.co/Xenova/modnet) ([MODNet](https://github.com/ZHKKKe/MODNet)), bobot float16 dengan `scripts/onnx-fp16-weights.py` (25,9 → 13,0 MB) | Apache-2.0 | `771f37abf610ed8dacc9358194f48f60426af8855a6d0fcb00bd1a74464b81e1` |
 | `u2netp.onnx` | `onnx/model.onnx` dari [BritishWerewolf/U-2-Netp](https://huggingface.co/BritishWerewolf/U-2-Netp) revisi `7112208d` ([U²-Net](https://github.com/xuebinqin/U-2-Net)) | Apache-2.0 | `309c8469258dda742793dce0ebea8e6dd393174f89934733ecc8b14c76f4ddd8` |
+| `ffdnet-color.onnx` | FFDNet warna dari [KAIR](https://github.com/cszn/KAIR) (Kai Zhang), diekspor ke ONNX untuk pilihfotomu-web (`public/models`) | MIT | `2ccb444b3aefe183f2fbd7be288bfb77b3a22bed66b39783d10d2d34cccb7a1b` |
+| `selfie_multiclass.onnx` | `selfie_multiclass_256x256.tflite` (float32, latest) dari [MediaPipe Image Segmenter](https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_multiclass_256x256/float32/latest/selfie_multiclass_256x256.tflite) (Google, sha256 tflite `c6748b12…e0e0`), dikonversi `tf2onnx 1.16.1 --tflite --opset 13` | Apache-2.0 | `18bd5c5015490b804f1f1054bb52da2ec17f650abc98b915b232ddadb958b056` |
 | `face_landmarks.onnx` | [fernandotonon/QtMeshEditor-facemesh-onnx](https://huggingface.co/fernandotonon/QtMeshEditor-facemesh-onnx) — konversi ONNX dari MediaPipe Face Mesh V2 (Google) | Apache-2.0 | `d16e5a55e6a480284d468ee32469692464049518c311662ab3956681de31e3e9` |
 
 `face_landmarks.onnx` adalah konversi pihak ketiga, bukan rilisan resmi
@@ -38,3 +40,15 @@ Cek: `cargo run --release --example cutout_debug -- <out> potret|objek foto...`.
 
 Cek bentuk input/output dan uji ke foto:
 `cargo run --release --example probe_models -- foto1.jpg foto2.jpg`
+
+`ffdnet-color.onnx`: input `image [1, 3, h, w]` RGB 0–1 dan `sigma [1, 1, 1, 1]`
+(σ/255), output gambar bersih 0–1. Dijalankan per tile 512 px dengan margin
+16 px (`src/denoise.rs`); σ ditaksir dari foto (filter Immerkær di blok rata).
+
+`selfie_multiclass.onnx` (Edit foto › Masking › Orang): input `[1, 256, 256, 3]`
+RGB 0–1, kanal terakhir; output `[1, 256, 256, 6]` skor per kelas — latar,
+rambut, kulit badan, kulit wajah, pakaian, lainnya (aksesori). `cutout.rs`
+menjadikannya bagian (softmax) per piksel. Dijalankan pada potongan persegi di
+sekitar tiap orang (kepala, lalu badan), bukan seluruh foto. Dipilih karena
+BiSeNet face-parsing dilatih dengan CelebAMask-HQ yang hanya untuk riset
+non-komersial.

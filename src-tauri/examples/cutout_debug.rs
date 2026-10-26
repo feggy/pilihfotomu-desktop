@@ -1,11 +1,11 @@
 //! Saves the Hapus latar mask of photos, for checking by eye:
-//! `cargo run --release --example cutout_debug -- <out dir> <potret|objek> <photo>...`
-use pilihfotomu_desktop_lib::cutout::{self, Mode, OBJECT_SIDE};
+//! `cargo run --release --example cutout_debug -- <out dir> <potret|objek|bagian> <photo>...`
+use pilihfotomu_desktop_lib::cutout::{self, Mode, OBJECT_SIDE, PARTS_SIDE};
 
 fn main() {
     let mut args = std::env::args().skip(1);
     let out = std::path::PathBuf::from(args.next().expect("out dir"));
-    let mode = Mode::parse(&args.next().expect("mode")).expect("potret or objek");
+    let mode = Mode::parse(&args.next().expect("mode")).expect("potret, objek or bagian");
     std::fs::create_dir_all(&out).unwrap();
     for p in args {
         let img = image::open(&p).expect("open").to_rgb8();
@@ -16,6 +16,8 @@ fn main() {
                 (r(img.width()), r(img.height()))
             }
             Mode::Object => (OBJECT_SIDE, OBJECT_SIDE),
+            // Six bytes a pixel (each class's share), not one.
+            Mode::Parts => (PARTS_SIDE, PARTS_SIDE),
         };
         let small = image::imageops::resize(&img, w, h, image::imageops::FilterType::Triangle);
         let t = std::time::Instant::now();

@@ -15,7 +15,8 @@ export type Screen =
   /** Buat konten: pick a template, fill its photos, edit, export. */
   | { name: 'kreasi'; back: Screen }
   /** Edit foto: develop photos like Lightroom. */
-  | { name: 'edit'; back: Screen }
+  /** Edit foto: the Library (choose photos) or, with `ids`, the editor on them. */
+  | { name: 'edit'; back: Screen; ids?: number[]; start?: number }
   | { name: 'settings'; back: Screen; section?: 'license' | 'language' | 'analysis' | 'storage' | 'keys' | 'brand' | 'legal' | 'about' };
 
 export interface RecentPhoto {

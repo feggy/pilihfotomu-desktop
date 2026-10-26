@@ -36,5 +36,14 @@ SFace face recognition (face_recognition_sface_2021dec_f16.onnx)
   https://huggingface.co/opencv/face_recognition_sface
   Bobot disimpan float16 oleh scripts/onnx-fp16-weights.py
 
+MediaPipe Selfie Multiclass segmentation (selfie_multiclass.onnx) — Masking › Orang
+  Google LLC — https://ai.google.dev/edge/mediapipe/solutions/vision/image_segmenter
+  Licensed under the Apache License, Version 2.0
+  Dikonversi dari selfie_multiclass_256x256.tflite dengan tf2onnx
+
+FFDNet color denoising (ffdnet-color.onnx) — AI Denoise
+  Kai Zhang et al. — https://github.com/cszn/KAIR
+  Licensed under the MIT License, Copyright (c) 2019 Kai Zhang
+
 Pustaka Rust dan JavaScript yang dipakai tercantum di Cargo.lock dan
 package-lock.json beserta lisensinya masing-masing (MIT / Apache-2.0).

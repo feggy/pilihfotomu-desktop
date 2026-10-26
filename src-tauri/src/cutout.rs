@@ -2,7 +2,10 @@
 //! made on this computer. Two small ONNX models, embedded and run with tract
 //! like the face models (see `models/README.md`):
 //! - **MODNet** (Apache-2.0) for people: hair and fine edges;
-//! - **U²-Netp** (Apache-2.0) for objects: one clear subject, firm edges.
+//! - **U²-Netp** (Apache-2.0) for objects: one clear subject, firm edges;
+//! - **MediaPipe Selfie Multiclass** (Apache-2.0) for a person's parts —
+//!   hair, body skin, face skin, clothes, accessories — on a crop round
+//!   them (Edit foto › Masking › Orang).
 //!
 //! The page sends the picture already at the model's size (RGB, row by row)
 //! and gets one alpha byte per pixel back; it stretches the mask over the
@@ -18,6 +21,12 @@ type Plan = Arc<TypedRunnableModel>;
 
 static MODNET_ONNX: &[u8] = include_bytes!("../models/modnet_f16.onnx");
 static U2NETP_ONNX: &[u8] = include_bytes!("../models/u2netp.onnx");
+static MULTICLASS_ONNX: &[u8] = include_bytes!("../models/selfie_multiclass.onnx");
+
+/// Selfie Multiclass's fixed input side.
+pub const PARTS_SIDE: u32 = 256;
+/// Its classes, in order: background, hair, body skin, face skin, clothes, others.
+pub const PARTS: usize = 6;
 
 /// U²-Netp's fixed input side.
 pub const OBJECT_SIDE: u32 = 320;
@@ -28,6 +37,8 @@ pub enum Mode {
     Portrait,
     /// Objects (U²-Netp): 320 × 320.
     Object,
+    /// A person's parts (Selfie Multiclass): 256 × 256, six bytes a pixel.
+    Parts,
 }
 
 impl Mode {
@@ -35,6 +46,7 @@ impl Mode {
         match s {
             "potret" => Some(Mode::Portrait),
             "objek" => Some(Mode::Object),
+            "bagian" => Some(Mode::Parts),
             _ => None,
         }
     }
@@ -67,8 +79,23 @@ fn u2netp() -> Result<Plan, String> {
         .clone()
 }
 
+fn multiclass() -> Result<Plan, String> {
+    static PLAN: OnceLock<Result<Plan, String>> = OnceLock::new();
+    PLAN.get_or_init(|| {
+        let s = PARTS_SIDE as usize;
+        tract_onnx::onnx()
+            .model_for_read(&mut Cursor::new(MULTICLASS_ONNX))
+            .and_then(|m| m.with_input_fact(0, f32::fact([1, s, s, 3]).into()))
+            .and_then(|m| m.into_optimized())
+            .and_then(|m| m.into_runnable())
+            .map_err(|e| format!("model bagian orang tidak bisa dimuat: {e}"))
+    })
+    .clone()
+}
+
 /// The subject's mask of an RGB picture `w` × `h`: one alpha byte per pixel,
-/// same size.
+/// same size — or, for `Parts`, each class's share (0–255) per pixel, six
+/// bytes a pixel in the classes' order.
 pub fn mask(mode: Mode, w: u32, h: u32, rgb: &[u8]) -> Result<Vec<u8>, String> {
     let n = (w * h) as usize;
     if w == 0 || h == 0 || rgb.len() != n * 3 {
@@ -107,6 +134,26 @@ pub fn mask(mode: Mode, w: u32, h: u32, rgb: &[u8]) -> Result<Vec<u8>, String> {
             let range = (hi - lo).max(1e-6);
             Ok(pred.iter().map(|v| ((v - lo) / range * 255.0).round() as u8).collect())
         }
+        Mode::Parts => {
+            if w != PARTS_SIDE || h != PARTS_SIDE {
+                return Err("Data gambar tidak terbaca.".into());
+            }
+            // 0–1, channels last, as MediaPipe feeds it.
+            let s = PARTS_SIDE as usize;
+            let input = tract_ndarray::Array4::from_shape_fn((1, s, s, 3), |(_, y, x, c)| px(y * s + x, c) / 255.0);
+            let out = multiclass()?.run(tvec!(Tensor::from(input).into())).map_err(|e| e.to_string())?;
+            let scores = out[0].to_plain_array_view::<f32>().map_err(|e| e.to_string())?;
+            let flat: Vec<f32> = scores.iter().copied().collect();
+            // Its scores, made shares (softmax) for soft edges.
+            let mut bytes = Vec::with_capacity(n * PARTS);
+            for px in flat.as_chunks::<PARTS>().0 {
+                let top = px.iter().fold(f32::MIN, |a, &b| a.max(b));
+                let e: Vec<f32> = px.iter().map(|v| (v - top).exp()).collect();
+                let sum: f32 = e.iter().sum();
+                bytes.extend(e.iter().map(|v| (v / sum * 255.0).round() as u8));
+            }
+            Ok(bytes)
+        }
     }
 }
 
@@ -121,5 +168,7 @@ mod tests {
         let side = OBJECT_SIDE as usize;
         assert_eq!(mask(Mode::Object, OBJECT_SIDE, OBJECT_SIDE, &vec![90u8; side * side * 3]).unwrap().len(), side * side);
         assert!(mask(Mode::Portrait, 50, 96, &vec![0u8; 50 * 96 * 3]).is_err(), "not a multiple of 32");
+        let s = PARTS_SIDE as usize;
+        assert_eq!(mask(Mode::Parts, PARTS_SIDE, PARTS_SIDE, &vec![120u8; s * s * 3]).unwrap().len(), s * s * PARTS);
     }
 }

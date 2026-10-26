@@ -2,6 +2,7 @@ pub mod analyze;
 mod client_picks;
 pub mod cull;
 pub mod cutout;
+pub mod denoise;
 mod export;
 pub mod faces;
 pub mod full_res;
@@ -16,7 +17,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use rayon::prelude::*;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, State};
 
@@ -240,6 +241,11 @@ fn set_marks(app: AppHandle, state: State<'_, AppState>, marks: Vec<session::Mar
 /// Decides the open session again with other settings, from the saved
 /// measurements (instant; no file is read). Hand-made changes stay.
 #[tauri::command]
+fn set_edits(app: AppHandle, state: State<'_, AppState>, edits: Vec<(u32, Option<serde_json::Value>)>) -> CmdResult<()> {
+    with_current(&app, &state, |s| s.set_edits(edits))
+}
+
+#[tauri::command]
 fn name_person(app: AppHandle, state: State<'_, AppState>, person: u32, name: String) -> CmdResult<Session> {
     with_current(&app, &state, |s| {
         s.name_person(person, &name);
@@ -379,19 +385,129 @@ fn full_res_supported() -> bool {
 /// cached after that.
 #[tauri::command]
 async fn full_res_image(app: AppHandle, state: State<'_, AppState>, root: PathBuf, id: u32) -> CmdResult<FullRes> {
-    let photo = state.photos(&root)?.into_iter().find(|p| p.id == id).ok_or("Foto tidak ditemukan.")?;
-    let dir = app.path().app_cache_dir().map_err(|e| e.to_string())?.join("full").join(session::id_for(&root));
-    tauri::async_runtime::spawn_blocking(move || {
-        // "-m" = brightness matched to the camera preview; older cached files without it were darker.
-        let path = dir.join(format!("{}-m.jpg", photo.cache_key()));
-        if !path.exists() {
-            std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-            // The RAW holds the full sensor; a camera JPEG is already full size.
-            let reference = photo.raw.as_ref().and_then(|_| preview::load(photo.source(), 1024).ok()).map(|l| l.image);
-            full_res::render(photo.raw.as_deref().unwrap_or(photo.source()), &path, reference.as_ref())?;
+    let (photo, dir) = full_res_of(&app, &state, &root, id)?;
+    tauri::async_runtime::spawn_blocking(move || full_res_file(&photo, &dir)).await.map_err(|e| e.to_string())?
+}
+
+/// The photo and the cache folder its full-size picture goes in.
+fn full_res_of(app: &AppHandle, state: &AppState, root: &Path, id: u32) -> CmdResult<(Photo, PathBuf)> {
+    let photo = state.photos(root)?.into_iter().find(|p| p.id == id).ok_or("Foto tidak ditemukan.")?;
+    let dir = app.path().app_cache_dir().map_err(|e| e.to_string())?.join("full").join(session::id_for(root));
+    Ok((photo, dir))
+}
+
+/// The full-size picture of `photo`, made once (blocking: a RAW takes seconds).
+fn full_res_file(photo: &Photo, dir: &Path) -> CmdResult<FullRes> {
+    // "-m" = brightness matched to the camera preview; older cached files without it were darker.
+    let path = dir.join(format!("{}-m.jpg", photo.cache_key()));
+    if !path.exists() {
+        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+        // The RAW holds the full sensor; a camera JPEG is already full size.
+        let reference = photo.raw.as_ref().and_then(|_| preview::load(photo.source(), 1024).ok()).map(|l| l.image);
+        full_res::render(photo.raw.as_deref().unwrap_or(photo.source()), &path, reference.as_ref())?;
+    }
+    let (width, height) = image::image_dimensions(&path).map_err(|e| e.to_string())?;
+    Ok(FullRes { path, width, height })
+}
+
+/// Edit foto from a folder: its session if it has one (culled or edited
+/// before, with everything kept), else a new one for editing only.
+#[tauri::command]
+async fn open_for_edit(app: AppHandle, state: State<'_, AppState>, root: PathBuf) -> CmdResult<Session> {
+    let dir = sessions_dir(&app)?;
+    let id = session::id_for(&root);
+    let s = match session::load(&dir, &id) {
+        Some(mut s) => {
+            if s.upgrade() {
+                session::save(&dir, &s).map_err(|e| e.to_string())?;
+            }
+            s
         }
-        let (width, height) = image::image_dimensions(&path).map_err(|e| e.to_string())?;
-        Ok(FullRes { path, width, height })
+        None => {
+            let root2 = root.clone();
+            let s = tauri::async_runtime::spawn_blocking(move || session::for_edit(&root2))
+                .await
+                .map_err(|e| e.to_string())?
+                .map_err(|e| e.to_string())?;
+            session::save(&dir, &s).map_err(|e| e.to_string())?;
+            s
+        }
+    };
+    *state.current.lock().unwrap() = Some(s.clone());
+    Ok(s)
+}
+
+/// Edit foto › Masking › Orang: each face's Face Mesh points on the photo's
+/// preview (shares of it), for drawing eyes, lips, skin…
+#[tauri::command]
+async fn face_landmarks(state: State<'_, AppState>, root: PathBuf, id: u32) -> CmdResult<Vec<Vec<(f32, f32)>>> {
+    let photo = state.photos(&root)?.into_iter().find(|p| p.id == id).ok_or("Foto tidak ditemukan.")?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let loaded = preview::load(photo.source(), 2048).map_err(|e| e.to_string())?;
+        faces::landmarks(&loaded.image.to_rgb8())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[derive(Clone, Serialize)]
+struct DenoiseProgress {
+    done: u32,
+    total: u32,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Denoised {
+    /// The full-size picture cleaned, and a 2048 px copy for the editor.
+    full: PathBuf,
+    preview: PathBuf,
+    width: u32,
+    height: u32,
+    /// How noisy the photo read (0–255): under 4 it was clean already.
+    sigma: f32,
+}
+
+/// Edit foto › AI Denoise: the photo cleaned (FFDNet, `denoise.rs`), kept in
+/// the cache next to its full-size picture; asked again, it is there.
+#[tauri::command]
+async fn denoise_photo(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    root: PathBuf,
+    id: u32,
+    on_progress: Channel<DenoiseProgress>,
+) -> CmdResult<Denoised> {
+    let (photo, dir) = full_res_of(&app, &state, &root, id)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let full = full_res_file(&photo, &dir)?;
+        let out = dir.join(format!("{}-dn.jpg", photo.cache_key()));
+        let small = dir.join(format!("{}-dn-2048.jpg", photo.cache_key()));
+        let sigma_file = dir.join(format!("{}-dn.sigma", photo.cache_key()));
+        if !(out.exists() && small.exists() && sigma_file.exists()) {
+            let img = image::open(&full.path).map_err(|e| e.to_string())?.to_rgb8();
+            let (w, h) = (img.width() as usize, img.height() as usize);
+            let sigma = denoise::estimate_sigma(img.as_raw(), w, h);
+            let clean = denoise::denoise(img.as_raw(), w, h, sigma, |done, total| {
+                let _ = on_progress.send(DenoiseProgress { done, total });
+            })?;
+            let clean = image::RgbImage::from_raw(w as u32, h as u32, clean).ok_or("Data gambar tidak terbaca.")?;
+            let save = |img: &image::RgbImage, path: &Path, q: u8| -> CmdResult<()> {
+                let mut f = std::io::BufWriter::new(std::fs::File::create(path).map_err(|e| e.to_string())?);
+                image::codecs::jpeg::JpegEncoder::new_with_quality(&mut f, q).encode_image(img).map_err(|e| e.to_string())
+            };
+            save(&clean, &out, 95)?;
+            let k = 2048.0 / w.max(h) as f32;
+            let preview = if k < 1.0 {
+                image::imageops::resize(&clean, (w as f32 * k).round() as u32, (h as f32 * k).round() as u32, image::imageops::FilterType::Triangle)
+            } else {
+                clean
+            };
+            save(&preview, &small, 92)?;
+            std::fs::write(&sigma_file, sigma.to_string()).map_err(|e| e.to_string())?;
+        }
+        let sigma = std::fs::read_to_string(&sigma_file).ok().and_then(|s| s.trim().parse().ok()).unwrap_or(0.0);
+        Ok(Denoised { full: out, preview: small, width: full.width, height: full.height, sigma })
     })
     .await
     .map_err(|e| e.to_string())?
@@ -486,20 +602,37 @@ async fn thumbnails(
 ) -> CmdResult<HashMap<u32, Option<PathBuf>>> {
     let photos = state.photos(&root)?;
     let dir = thumbs_dir(&app)?.join(session::id_for(&root));
-    tauri::async_runtime::spawn_blocking(move || {
+    let made: HashMap<u32, Option<PathBuf>> = tauri::async_runtime::spawn_blocking(move || {
         std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-        Ok(photos
-            .par_iter()
-            .filter(|p| ids.contains(&p.id))
-            .map(|p| {
-                let path = dir.join(format!("{}.jpg", p.cache_key()));
-                let ok = path.exists() || session::make_thumb(p.source(), &path).is_ok();
-                (p.id, ok.then_some(path))
-            })
-            .collect())
+        Ok::<_, String>(
+            photos
+                .par_iter()
+                .filter(|p| ids.contains(&p.id))
+                .map(|p| {
+                    let path = dir.join(format!("{}.jpg", p.cache_key()));
+                    let ok = path.exists() || session::make_thumb(p.source(), &path).is_ok();
+                    (p.id, ok.then_some(path))
+                })
+                .collect(),
+        )
     })
     .await
-    .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())??;
+    // The open session's photos without one (a folder opened in Edit foto) keep them.
+    let mut guard = state.current.lock().unwrap();
+    if let Some(s) = guard.as_mut().filter(|s| s.root == root) {
+        let mut changed = false;
+        for e in s.photos.iter_mut().filter(|e| e.thumb.is_none()) {
+            if let Some(Some(p)) = made.get(&e.photo.id) {
+                e.thumb = Some(p.clone());
+                changed = true;
+            }
+        }
+        if changed {
+            let _ = session::save(&sessions_dir(&app)?, s);
+        }
+    }
+    Ok(made)
 }
 
 #[tauri::command]
@@ -533,6 +666,65 @@ fn export_xmp(
         }
         report
     })
+}
+
+#[derive(Deserialize)]
+struct DevelopXmp {
+    id: u32,
+    develop: export::Develop,
+}
+
+#[tauri::command]
+fn write_develop_xmp(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    items: Vec<DevelopXmp>,
+    with_reasons: Option<bool>,
+) -> CmdResult<export::ExportReport> {
+    with_current(&app, &state, |s| {
+        let marks: Vec<(export::Mark, export::Develop)> = items
+            .into_iter()
+            .filter_map(|it| {
+                let e = s.photos.iter().find(|e| e.photo.id == it.id)?;
+                Some((export::Mark { photo: &e.photo, status: e.status, rating: e.rating, reasons: &e.reasons }, it.develop))
+            })
+            .collect();
+        export::write_develop_xmp(&marks, with_reasons.unwrap_or(false))
+    })
+}
+
+/// Lightroom presets (.xmp) to import: the files chosen, and the .xmp files
+/// in the folders chosen (a few levels down). Path and text of each.
+#[tauri::command]
+fn read_presets(paths: Vec<PathBuf>) -> CmdResult<Vec<(String, String)>> {
+    const MAX_FILES: usize = 500;
+    const MAX_BYTES: u64 = 1 << 20;
+    let mut files = Vec::new();
+    fn walk(dir: &Path, depth: u32, out: &mut Vec<PathBuf>) {
+        let Ok(entries) = std::fs::read_dir(dir) else { return };
+        let mut list: Vec<PathBuf> = entries.filter_map(|e| e.ok().map(|e| e.path())).collect();
+        list.sort();
+        for p in list {
+            if p.is_dir() && depth > 0 {
+                walk(&p, depth - 1, out);
+            } else if p.extension().is_some_and(|x| x.eq_ignore_ascii_case("xmp")) {
+                out.push(p);
+            }
+        }
+    }
+    for p in paths {
+        if p.is_dir() {
+            walk(&p, 3, &mut files);
+        } else {
+            files.push(p);
+        }
+    }
+    Ok(files
+        .into_iter()
+        .take(MAX_FILES)
+        .filter(|p| std::fs::metadata(p).is_ok_and(|m| m.len() <= MAX_BYTES))
+        .filter_map(|p| Some((p.display().to_string(), std::fs::read_to_string(&p).ok()?)))
+        .collect())
 }
 
 #[tauri::command]
@@ -766,6 +958,12 @@ pub fn run() {
             set_marks,
             recull,
             name_person,
+            set_edits,
+            write_develop_xmp,
+            read_presets,
+            denoise_photo,
+            face_landmarks,
+            open_for_edit,
             merge_people,
             move_faces,
             set_language,

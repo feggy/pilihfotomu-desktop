@@ -562,6 +562,38 @@ fn ear(pts: &[(f32, f32)], e: [usize; 6]) -> f32 {
     (dist(pts[e[2]], pts[e[3]]) + dist(pts[e[4]], pts[e[5]])) / (2.0 * width)
 }
 
+/// Every face's 478 Face Mesh points, as shares (0–1) of `img` — for Edit
+/// foto's people masks (eyes, lips, skin…). The same faces `analyze` keeps.
+pub fn landmarks(img: &RgbImage) -> Result<Vec<Vec<(f32, f32)>>, String> {
+    let m = models()?;
+    let (w, h) = (img.width() as f32, img.height() as f32);
+    let mut out = Vec::new();
+    for d in detect(&m.detector, img).map_err(|e| e.to_string())? {
+        if d.w.max(d.h) < MIN_FACE_PX {
+            continue;
+        }
+        let (_, pts, presence) = mesh(&m.mesh, img, &d).map_err(|e| e.to_string())?;
+        if d.score < SURE_SCORE && presence < MIN_PRESENCE {
+            continue;
+        }
+        // Back from the crop Face Mesh saw (see `mesh`) to the picture.
+        let (re, le) = (d.kps[0], d.kps[1]);
+        let angle = (le.1 - re.1).atan2(le.0 - re.0);
+        let (cx, cy) = (d.x + d.w / 2.0, d.y + d.h / 2.0);
+        let side = d.w.max(d.h) * 1.5;
+        let (sin, cos) = angle.sin_cos();
+        out.push(
+            pts.iter()
+                .map(|&(u, v)| {
+                    let (nx, ny) = (u / MESH_SIZE as f32 - 0.5, v / MESH_SIZE as f32 - 0.5);
+                    ((cx + (nx * cos - ny * sin) * side) / w, (cy + (nx * sin + ny * cos) * side) / h)
+                })
+                .collect(),
+        );
+    }
+    Ok(out)
+}
+
 /// A face, the 256 px crop Face Mesh saw, and its points in that crop.
 pub type DebugFace = (Face, RgbImage, Vec<(f32, f32)>);
 

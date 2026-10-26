@@ -14,6 +14,9 @@ import {
   type CopyResult,
 } from '../components/copy-flow';
 import { Button, Chip, Dot, Segmented, Stars, cx } from '../components/ui';
+import { toCrs } from '../edit/lightroom';
+import { isEdited } from '../edit/looks';
+import type { PhotoAdjust } from '../kreasi/engine/document';
 import { api, type ExportReport } from '../lib/api';
 import { num, STATUS } from '../lib/format';
 import { t } from '../lib/i18n';
@@ -78,6 +81,15 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
     try {
       if (target === 'xmp') {
         const xmp = await api.exportXmp(overwrite ? 'overwrite' : 'skip', withReasons, jpegOnly > 0 && jpegCopies);
+        // Photos edited in Edit foto: their settings go into the same sidecars
+        // (only ones this app wrote; Lightroom's own stay as they are).
+        const edited = session.photos.filter((p) => p.raw && isEdited(session.edits?.[p.id] as PhotoAdjust | undefined));
+        if (edited.length) {
+          await api.writeDevelopXmp(
+            edited.map((p) => ({ id: p.id, develop: toCrs(session.edits![p.id] as PhotoAdjust, true) })),
+            withReasons,
+          );
+        }
         if (xmp.written || xmp.markedJpeg) markExported();
         setXmpDone(xmp);
       } else {

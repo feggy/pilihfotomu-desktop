@@ -131,6 +131,18 @@ export async function installMock() {
           else for (const [id, k] of a.faces as [number, number][]) session.photos[id].faces![k].person = to;
           return { ...session, photos: session.photos.map((p) => ({ ...p, faces: p.faces?.map((f) => ({ ...f })) })) };
         }
+        case 'face_landmarks':
+          return [];
+        case 'denoise_photo':
+          return { full: `https://picsum.photos/seed/pfm${a.id}/3000/2000?blur=1`, preview: `https://picsum.photos/seed/pfm${a.id}/1600/1067?blur=1`, width: 3000, height: 2000, sigma: 12 };
+        case 'set_edits': {
+          const all = (session.edits ??= {});
+          for (const [id, v] of a.edits as [number, unknown][]) {
+            if (v) all[String(id)] = v;
+            else delete all[String(id)];
+          }
+          return null;
+        }
         case 'recull':
           session.options = a.options as Session['options'];
           return { ...session, photos: session.photos.map((p) => ({ ...p })) };

@@ -157,6 +157,16 @@ export function Home({ dragging }: { dragging: boolean }) {
       return;
     }
     setMissing(null);
+    if (s.kind === 'edit') {
+      // A folder opened only to edit: back to Edit foto's Library with it.
+      try {
+        useApp.setState({ session: await api.openSession(s.id) });
+        go({ name: 'edit', back: { name: 'home' } });
+      } catch (e) {
+        useApp.getState().fail(e);
+      }
+      return;
+    }
     openSession(s.id);
   };
 
@@ -242,7 +252,6 @@ export function Home({ dragging }: { dragging: boolean }) {
               onClick={() => chooseFolder()}
             />
             <ModeCard
-              soon
               preview="/home/edit.jpg"
               icon={SlidersHorizontal}
               title={t('Edit foto')}
@@ -329,15 +338,25 @@ export function Home({ dragging }: { dragging: boolean }) {
                     <span className="flex min-w-0 flex-1 flex-col gap-1">
                       <span className="flex min-w-0 items-center gap-2">
                         <span className="truncate text-sm font-semibold">{s.name}</span>
-                        {/* Only Pilih foto makes sessions; the tag says which mode this came from. */}
+                        {/* The tag says which mode the session came from. */}
                         <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-gold/10 px-1.5 py-0.5 text-[11px] font-medium text-gold-text">
-                          <Sparkles size={11} /> {t('Pilih foto##mode')}
+                          {s.kind === 'edit' ? (
+                            <>
+                              <SlidersHorizontal size={11} /> {t('Edit foto')}
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles size={11} /> {t('Pilih foto##mode')}
+                            </>
+                          )}
                         </span>
                       </span>
                       <span className="truncate text-xs text-faint">
                         {t('{date} · {count} foto · diproses {time}', { date: date(s.createdAt), n: s.total, count: num(s.total), time: duration(s.durationMs) })}
                       </span>
-                      <span className="truncate text-xs text-faint">{settingsLine(s.options)}</span>
+                      <span className="truncate text-xs text-faint">
+                        {s.kind === 'edit' ? t('Dibuka untuk diedit · {count} diedit', { n: s.edited ?? 0, count: num(s.edited ?? 0) }) : settingsLine(s.options)}
+                      </span>
                     </span>
                     <span className="hidden items-center gap-3.5 text-xs text-muted md:flex">
                       <span className="flex items-center gap-1.5">

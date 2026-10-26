@@ -127,3 +127,29 @@ select:focus-visible,
 [data-keyboard-target]:focus-visible {
   outline: none;
 }
+
+/* Edit foto's sliders: the track is the input's own background (a gradient
+   for white balance and the color mixer), the thumb a small white disc. */
+.edit-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 13px;
+  height: 13px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.5);
+}
+.edit-range:focus-visible {
+  outline: none;
+}
+.edit-range:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px var(--color-gold);
+}
+
+/* Scrolls (two fingers, or dragged) without showing a bar — Edit foto's zoomed photo, as Lightroom. */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
