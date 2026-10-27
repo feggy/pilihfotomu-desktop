@@ -14,6 +14,8 @@ memperbarui checksum di sini.
 | `ffdnet-color.onnx` | FFDNet warna dari [KAIR](https://github.com/cszn/KAIR) (Kai Zhang), diekspor ke ONNX untuk pilihfotomu-web (`public/models`) | MIT | `2ccb444b3aefe183f2fbd7be288bfb77b3a22bed66b39783d10d2d34cccb7a1b` |
 | `selfie_multiclass.onnx` | `selfie_multiclass_256x256.tflite` (float32, latest) dari [MediaPipe Image Segmenter](https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_multiclass_256x256/float32/latest/selfie_multiclass_256x256.tflite) (Google, sha256 tflite `c6748b12…e0e0`), dikonversi `tf2onnx 1.16.1 --tflite --opset 13` | Apache-2.0 | `18bd5c5015490b804f1f1054bb52da2ec17f650abc98b915b232ddadb958b056` |
 | `deeplab_ade20k.onnx` | `frozen_inference_graph.pb` dari [deeplabv3_mnv2_ade20k_train_2018_12_03.tar.gz](http://download.tensorflow.org/models/deeplabv3_mnv2_ade20k_train_2018_12_03.tar.gz) ([TensorFlow Model Garden DeepLab](https://github.com/tensorflow/models/tree/master/research/deeplab), sha256 tar `9565ccd0…776c`), dikonversi `tf2onnx 1.16.1 --inputs sub_7:0[1,513,513,3] --outputs logits/semantic/BiasAdd:0 --opset 13` | Apache-2.0 | `7674963643563a2a5e6e99e2f210bae0b70e53e26ac9e1d9d9e0b05ad0dcada2` |
+| `esrgan_x4v3.onnx` | `realesr-general-x4v3.pth` dari [Real-ESRGAN v0.2.5.0](https://github.com/xinntao/Real-ESRGAN/releases/tag/v0.2.5.0) (Xintao Wang dkk., sha256 pth `8dc7edb9…6292`), SRVGGNetCompact diekspor `torch.onnx` opset 13 (selisih dengan PyTorch < 1e-5) | BSD-3-Clause | `19780c61e2679c3259abbcf55ef279aff4f9d037d00509bc3b4328a709528820` |
+| `depth_anything_v2_small_f16.onnx` | lihat di bawah | Apache-2.0 | `285c12d0e9188bf3d1758a14260a69ace314cdb454de4c1fc9363906d7f76cab` |
 | `face_landmarks.onnx` | [fernandotonon/QtMeshEditor-facemesh-onnx](https://huggingface.co/fernandotonon/QtMeshEditor-facemesh-onnx) — konversi ONNX dari MediaPipe Face Mesh V2 (Google) | Apache-2.0 | `d16e5a55e6a480284d468ee32469692464049518c311662ab3956681de31e3e9` |
 
 `face_landmarks.onnx` adalah konversi pihak ketiga, bukan rilisan resmi
@@ -59,3 +61,16 @@ pra-proses DeepLab sendiri, jadi input `[1, 513, 513, 3]` RGB −1…1 (kanal
 terakhir) dan output skor `[1, 129, 129, 151]` kelas ADE20K (0 = lainnya, 3 =
 langit). `cutout.rs` mengembalikan bagian langit (softmax) per titik; tepinya
 dirapikan di `smart-masks.ts`.
+
+`esrgan_x4v3.onnx` (Edit foto › Ekspor › Super Resolution): input `image
+[1, 3, h, w]` RGB 0–1, output `[1, 3, 4h, 4w]`. `superres.rs` menjalankannya
+per tile 128 px lalu merata-rata tiap 2 × 2, jadi hasilnya 2× lebar dan tinggi.
+
+`depth_anything_v2_small_f16.onnx` (Edit foto › Lens Blur): `onnx/model.onnx`
+dari [onnx-community/depth-anything-v2-small](https://huggingface.co/onnx-community/depth-anything-v2-small)
+revisi `4472b736` (Depth Anything V2 Small, Lihe Yang dkk., Apache-2.0; sha256
+asli `afb6a5c2…c10c`). `value_info` dihapus dan batch ditetapkan 1 (tract tak
+bisa menyatukan `batch_size` simbolik), lalu bobot disimpan float16 dengan
+`scripts/onnx-fp16-weights.py`. Input `[1, 3, h, w]` (sisi kelipatan 14, sisi
+panjang 518) dinormalisasi ImageNet; output kedalaman relatif `[1, h, w]`.
+Versi Base/Large tidak dipakai: lisensinya CC-BY-NC.

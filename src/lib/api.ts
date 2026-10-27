@@ -299,6 +299,17 @@ export const api = {
     channel.onmessage = onProgress;
     return invoke<{ full: string; preview: string; width: number; height: number; sigma: number }>('denoise_photo', { root, id, onProgress: channel });
   },
+  /** Edit foto › Lens Corrections: camera, lens, focal length and aperture from the photo's EXIF. */
+  lensInfo: (root: string, id: number) =>
+    invoke<{ make: string | null; model: string | null; lens: string | null; focal: number | null; aperture: number | null; focal35: number | null }>('lens_info', { root, id }),
+  /** Edit foto › Lens Blur: the photo's depth — width, height (u32 LE), then a nearness byte per pixel. */
+  depthMap: (root: string, id: number) => invoke<ArrayBuffer>('depth_map', { root, id }),
+  /** Edit foto › Super Resolution: a JPG this app just exported, rewritten at twice the width and height. */
+  superResolve: (path: string, onProgress: (p: { done: number; total: number }) => void) => {
+    const channel = new Channel<{ done: number; total: number }>();
+    channel.onmessage = onProgress;
+    return invoke<{ width: number; height: number }>('super_resolve', { path, onProgress: channel });
+  },
   /** Edit foto › Masking › Orang: each face's 478 Face Mesh points on the photo, as shares of it. */
   faceLandmarks: (root: string, id: number) => invoke<[number, number][][]>('face_landmarks', { root, id }),
   /** Lightroom presets: the .xmp files chosen and those in the folders chosen, as [path, text]. */

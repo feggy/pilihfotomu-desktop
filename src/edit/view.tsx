@@ -19,6 +19,7 @@ import { developed } from '../kreasi/engine/develop';
 import { drawAdjustOverlays } from '../kreasi/engine/render';
 import { loadLocalImage } from '../kreasi/kit';
 import { EYEDROPPER } from './cursors';
+import { depthOf, type DepthMap } from './lens-blur';
 import { cleanedImage, prepared } from './source';
 import { NO_GEOMETRY, coverScale, cropFromView, cropToView, drawGeometry, frameSize, outputSize, type EditSettings, type Geometry } from './geometry';
 
@@ -81,6 +82,7 @@ export function EditView({
   masking = false,
   layer,
   zoomToggle = 0,
+  placeholder,
   onViewport,
   panRef,
   ratio,
@@ -106,6 +108,8 @@ export function EditView({
   /** Masking: the photo whole and upright, `layer` over it. */
   masking?: boolean;
   layer?: React.ReactNode;
+  /** The photo's thumbnail, shown while it loads. */
+  placeholder?: string;
   /** Changes when Z is pressed: to 1:1 (the full-size photo, a pixel of it to a pixel of the screen), or back to fit. */
   zoomToggle?: number;
   /** The part of the photo in view while zoomed (shares of it), and its shape; null when all of it shows. */
@@ -134,6 +138,8 @@ export function EditView({
   const canvas = useRef<HTMLCanvasElement>(null);
   const [img, setImg] = useState<HTMLImageElement | null>(null);
   const [failed, setFailed] = useState(false);
+  /** The first frame of this photo is on screen (until then, the thumbnail and a spinner). */
+  const [drawn, setDrawn] = useState(false);
   const [split, setSplit] = useState(0.5);
   const g = masking ? NO_GEOMETRY : (settings?.geometry ?? NO_GEOMETRY);
 
@@ -141,6 +147,7 @@ export function EditView({
     let alive = true;
     setImg(null);
     setFailed(false);
+    setDrawn(false);
     previewUrl(root, id)
       .then(loadLocalImage)
       .then(
@@ -206,6 +213,19 @@ export function EditView({
     };
   }, [denoising, bigClean, root, id]);
 
+  // Lens Blur's depth, read once it is used.
+  const [depth, setDepth] = useState<DepthMap | null>(null);
+  const blurring = (settings?.lensBlur?.amount ?? 0) > 0;
+  useEffect(() => {
+    if (!blurring) return;
+    let alive = true;
+    depthOf(root, id).then((d) => alive && setDepth(d), () => {});
+    return () => {
+      alive = false;
+    };
+  }, [blurring, root, id]);
+  useEffect(() => setDepth(null), [root, id]);
+
   const iw = pic?.naturalWidth ?? 1;
   const ih = pic?.naturalHeight ?? 1;
   const shown = cropping ? frameSize(iw, ih, g) : outputSize(iw, ih, g);
@@ -235,12 +255,13 @@ export function EditView({
     if (mode === 'before') draw(img);
     else {
       // What was removed is filled in first, then the whole is developed.
-      const base = prepared(img, iw, ih, settings, denoising ? clean : null);
+      const base = prepared(img, iw, ih, settings, denoising ? clean : null, blurring ? depth : null);
       const dev = developed(base, a, moving ? MOVING_SIDE : undefined);
       draw(dev ?? base);
       drawAdjustOverlays(ctx, { x: 0, y: 0, w, h }, a, !!dev);
     }
     if (!moving && !cropping && !zoomed) onHistogram(histogramOf(c));
+    setDrawn(true);
     if (mode === 'split' && !cropping) {
       // The photo as it came, on the left of the line.
       ctx.save();
@@ -250,7 +271,7 @@ export function EditView({
       draw(img);
       ctx.restore();
     }
-  }, [pic, clean, settings, mode, split, moving, cropping, masking, fit?.w, fit?.h, backing]);
+  }, [pic, clean, depth, settings, mode, split, moving, cropping, masking, fit?.w, fit?.h, backing]);
 
   // Zooming keeps the point under the pointer (or fingers) where it is.
   const scroller = useRef<HTMLDivElement>(null);
@@ -502,7 +523,16 @@ export function EditView({
         className={cx('no-scrollbar flex size-full', zoomed ? 'overflow-auto' : 'items-center justify-center overflow-hidden', zoomable && !picking && (zoomed ? (panning ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-zoom-in'))}
       >
       {failed && <p className="m-auto text-sm text-faint">{t('Foto tidak bisa dibuka.')}</p>}
-      {!img && !failed && <p className="m-auto animate-pulse text-sm text-faint">{t('Memuat foto…')}</p>}
+      {!drawn && !failed && (
+        // Until the photo is drawn: its thumbnail where it will be, and a spinner.
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center p-6">
+          {placeholder && <img src={placeholder} alt="" className="max-h-full max-w-full object-contain opacity-60 blur-[2px]" />}
+          <span className="absolute flex items-center gap-2.5 rounded-full bg-black/70 px-4 py-2 text-[13px] text-white shadow-2xl backdrop-blur">
+            <span className="size-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+            {t('Memuat foto…')}
+          </span>
+        </div>
+      )}
       {pic && fit && (
         <div ref={photoBox} className="relative m-auto shrink-0" style={{ width: fit.w, height: fit.h }} onClick={pick}>
           <canvas

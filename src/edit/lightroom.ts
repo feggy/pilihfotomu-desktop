@@ -158,6 +158,16 @@ export function toCrs(a: EditSettings, raw: boolean, aspect?: number): Develop {
   }
   if (seqs.length) attrs.push(['ToneCurveName2012', 'Custom']);
   attrs.push(...cropCrs(a.geometry, aspect));
+  // Lens Corrections: Lightroom applies its own profile for the lens, at the same strengths.
+  const lens = a.geometry?.lens;
+  if (lens?.profile) {
+    attrs.push(['LensProfileEnable', '1'], ['LensProfileSetup', 'LensDefaults']);
+    attrs.push(['LensProfileDistortionScale', String(Math.round(lens.distortion))], ['LensProfileVignettingScale', String(Math.round(lens.vignetting))]);
+  }
+  if (lens?.ca) attrs.push(['AutoLateralCA', '1']);
+  const manual = a.lensManual;
+  if (manual?.distortion) attrs.push(['LensManualDistortionAmount', signed(manual.distortion)]);
+  if (manual?.vignette) attrs.push(['VignetteAmount', signed(manual.vignette)], ['VignetteMidpoint', String(Math.round(manual.midpoint))]);
   return { attrs, seqs, masks: masksCrs(a.masks) };
 }
 

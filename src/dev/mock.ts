@@ -131,6 +131,8 @@ export async function installMock() {
           else for (const [id, k] of a.faces as [number, number][]) session.photos[id].faces![k].person = to;
           return { ...session, photos: session.photos.map((p) => ({ ...p, faces: p.faces?.map((f) => ({ ...f })) })) };
         }
+        case 'lens_info':
+          return { make: 'SONY', model: 'ILCE-7C', lens: 'E 28-75mm F2.8 A063', focal: 28, aperture: 2.8, focal35: 28 };
         case 'face_landmarks':
           return [];
         case 'denoise_photo':

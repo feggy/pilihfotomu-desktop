@@ -35,6 +35,7 @@ export function Slider({
   center = 0,
   track,
   show,
+  disabled,
   onLive,
   onDone,
 }: {
@@ -48,16 +49,19 @@ export function Slider({
   /** A gradient behind the track (white balance, color mixer). */
   track?: string;
   show?: (v: number) => string;
+  /** Greyed out and still (Lightroom's sliders that don't apply). */
+  disabled?: boolean;
   onLive: (v: number) => void;
   onDone: () => void;
 }) {
   const reset = () => {
+    if (disabled) return;
     onLive(center);
     onDone();
   };
   const text = show ? show(value) : value > 0 && min < 0 ? `+${value}` : String(value);
   return (
-    <label className="flex flex-col gap-1" onDoubleClick={reset}>
+    <label className={cx('flex flex-col gap-1', disabled && 'opacity-40')} onDoubleClick={reset}>
       <span className="flex items-center justify-between text-xs">
         <span className="text-muted">{label}</span>
         <span className={cx('tabular-nums', value === center ? 'text-faint' : 'text-fg')}>{text}</span>
@@ -68,6 +72,7 @@ export function Slider({
         max={max}
         step={step}
         value={value}
+        disabled={disabled}
         onChange={(e) => onLive(Number(e.target.value))}
         onPointerUp={onDone}
         onKeyUp={onDone}

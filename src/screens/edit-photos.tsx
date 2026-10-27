@@ -57,6 +57,8 @@ import { previewUrl } from '../kreasi/canvas';
 import { NO_ADJUST, type EditMask, type PhotoAdjust } from '../kreasi/engine/document';
 import { CropPanel, autoAngle, autoUpright, cropFor, ratioValue } from '../edit/crop-panel';
 import { HealLayer, HealPanel } from '../edit/heal';
+import { LensBlurPanel } from '../edit/lens-blur-panel';
+import { LensPanel } from '../edit/lens-panel';
 import { Library } from '../edit/library';
 import { MaskLayer, MaskList, MaskPanel, loadSubjects, useMasking, type BrushSettings, type MaskCreate } from '../edit/masking';
 import { NO_GEOMETRY, frameSize, type EditSettings, type Geometry } from '../edit/geometry';
@@ -65,7 +67,7 @@ import { loadLocalImage } from '../kreasi/kit';
 import { useApp, type Screen } from '../store';
 
 const HISTORY = 60;
-type Panel = 'basic' | 'curve' | 'mixer' | 'grade' | 'detail' | 'effects';
+type Panel = 'basic' | 'curve' | 'mixer' | 'grade' | 'detail' | 'effects' | 'lens' | 'lensblur';
 
 export function EditPhotos({ back, ids, start }: { back: Screen; ids?: number[]; start?: number }) {
   const session = useApp((s) => s.session);
@@ -355,7 +357,7 @@ function Editor({ back, ids, start }: { back: Screen; ids?: number[]; start?: nu
     setGeometry({ ...g, crop: cropFor(id, stand, frame) });
     done();
   };
-  const [open, setOpen] = useState<Record<Panel, boolean>>({ basic: true, curve: false, mixer: false, grade: false, detail: false, effects: false });
+  const [open, setOpen] = useState<Record<Panel, boolean>>({ basic: true, curve: false, mixer: false, grade: false, detail: false, effects: false, lens: false, lensblur: false });
   const toggle = (p: Panel) => setOpen((o) => ({ ...o, [p]: !o[p] }));
 
   const auto = async () => {
@@ -558,6 +560,7 @@ function Editor({ back, ids, start }: { back: Screen; ids?: number[]; start?: nu
             <EditView
               root={root}
               id={photo.id}
+              placeholder={photo.thumb ? thumbUrl(photo.thumb) : undefined}
               settings={shown}
               mode={mode}
               moving={moving}
@@ -697,8 +700,14 @@ function Editor({ back, ids, start }: { back: Screen; ids?: number[]; start?: nu
             )}
             <DetailPanel a={a} onLive={live} onDone={done} />
           </Section>
+          <Section title={t('Lens Corrections')} a={a} open={open.lens} onToggle={() => toggle('lens')} onLive={live} onDone={done}>
+            {photo && <LensPanel root={root} photoId={photo.id} a={a} onLive={live} onDone={done} />}
+          </Section>
           <Section title={t('Effects')} group="efek" a={a} open={open.effects} onToggle={() => toggle('effects')} onLive={live} onDone={done} reset={EFFECTS_RESET}>
             <EffectsPanel a={a} onLive={live} onDone={done} />
+          </Section>
+          <Section title={t('Lens Blur')} a={a} open={open.lensblur} onToggle={() => toggle('lensblur')} onLive={live} onDone={done}>
+            {photo && <LensBlurPanel root={root} photoId={photo.id} a={a} faces={photo.faces ?? []} onLive={live} onDone={done} />}
           </Section>
           <button
             type="button"

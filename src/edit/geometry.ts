@@ -10,6 +10,8 @@
  */
 
 import type { PhotoAdjust } from '../kreasi/engine/document';
+import type { LensBlur } from './lens-blur';
+import type { LensCorrection, LensManual } from './lens-profile';
 
 export interface Geometry {
   /** Straighten, degrees: −45…45, positive turns clockwise. */
@@ -28,6 +30,8 @@ export interface Geometry {
    */
   vertical?: number;
   horizontal?: number;
+  /** Lens Corrections (lens-profile.ts): taken out of the picture as it came, in `prepared` (source.ts). */
+  lens?: LensCorrection;
 }
 
 /** Hapus objek: one sweep painted over something, filled from around it (heal.tsx). */
@@ -44,12 +48,16 @@ export type EditSettings = PhotoAdjust & {
   heal?: HealSpot[];
   /** AI Denoise (`denoise_photo`): the cleaned photo mixed in at `amount`, 0–100. */
   aiDenoise?: { amount: number };
+  /** Lens Blur (lens-blur.ts): softened by distance from the focus. */
+  lensBlur?: LensBlur;
+  /** Lens Corrections › Manual (lens-profile.ts): distortion and corner brightness by hand. */
+  lensManual?: LensManual;
 };
 
 export const NO_GEOMETRY: Geometry = { angle: 0, rot: 0, flipH: false, flipV: false };
 
 export const hasGeometry = (g: Geometry | undefined): g is Geometry =>
-  !!g && (g.angle !== 0 || g.rot % 4 !== 0 || g.flipH || g.flipV || !!g.crop || !!g.vertical || !!g.horizontal);
+  !!g && (g.angle !== 0 || g.rot % 4 !== 0 || g.flipH || g.flipV || !!g.crop || !!g.vertical || !!g.horizontal || !!g.lens);
 
 /** How far a full Upright slider pulls an edge in, as a share of the side. */
 const UPRIGHT_PULL = 0.3;
@@ -123,13 +131,26 @@ function uprighted(src: CanvasImageSource, w: number, h: number, g: Geometry): H
   tx.scale(g.flipH ? -1 : 1, g.flipV ? -1 : 1);
   tx.rotate(((g.rot % 4) * Math.PI) / 2);
   tx.drawImage(src, -w / 2, -h / 2, w, h);
+  return meshWarp(turned, W, H, squareToQuad(uprightQuad(g)));
+}
+
+/**
+ * `src` (`W` × `H`) redrawn so that each point (u, v) of the result (shares)
+ * shows `from(u, v)` of it: a mesh of small triangles, each drawn with the
+ * flat (affine) map of its corners — close enough at this fineness.
+ */
+export function meshWarp(src: CanvasImageSource, W: number, H: number, from: (u: number, v: number) => [number, number], n = 16): HTMLCanvasElement {
+  const turned = src;
+  // The source's own pixels per pixel of the result.
+  const sw = src instanceof HTMLImageElement ? src.naturalWidth : (src as { width: number }).width;
+  const sh = src instanceof HTMLImageElement ? src.naturalHeight : (src as { height: number }).height;
+  const kx = (sw || W) / W;
+  const ky = (sh || H) / H;
   const out = document.createElement('canvas');
   out.width = W;
   out.height = H;
   const ctx = out.getContext('2d')!;
   ctx.imageSmoothingQuality = 'high';
-  const from = squareToQuad(uprightQuad(g));
-  const n = 16;
   const at = (i: number, j: number) => {
     const [u, v] = from(i / n, j / n);
     return { s: [u * W, v * H] as [number, number], d: [(i / n) * W, (j / n) * H] as [number, number] };
@@ -161,7 +182,14 @@ function uprighted(src: CanvasImageSource, w: number, h: number, g: Geometry): H
     ctx.closePath();
     ctx.clip();
     ctx.setTransform(m11, m21, m12, m22, m13, m23);
-    ctx.drawImage(turned, 0, 0);
+    // Only the part of the source round this triangle (a pixel to spare), in
+    // the result's own pixels whatever size the source is (the developed
+    // copy can be smaller): drawing all of it a thousand times is slow.
+    const x0 = Math.max(0, Math.floor(Math.min(sx0, sx1, sx2)) - 1);
+    const y0 = Math.max(0, Math.floor(Math.min(sy0, sy1, sy2)) - 1);
+    const x1 = Math.min(W, Math.ceil(Math.max(sx0, sx1, sx2)) + 1);
+    const y1 = Math.min(H, Math.ceil(Math.max(sy0, sy1, sy2)) + 1);
+    if (x1 > x0 && y1 > y0) ctx.drawImage(turned, x0 * kx, y0 * ky, (x1 - x0) * kx, (y1 - y0) * ky, x0, y0, x1 - x0, y1 - y0);
     ctx.restore();
   };
   for (let j = 0; j < n; j++)
@@ -214,6 +242,7 @@ export function drawGeometry(
   whole = false,
 ) {
   // Upright first, in the frame's own way up; the rest then turns that.
+  // (The lens's distortion is taken out earlier, in `prepared`.)
   if (g.vertical || g.horizontal) {
     const up = uprighted(src, w, h, g);
     return drawGeometry(ctx, up, up.width, up.height, { ...g, rot: 0, flipH: false, flipV: false, vertical: 0, horizontal: 0 }, outW, outH, whole);

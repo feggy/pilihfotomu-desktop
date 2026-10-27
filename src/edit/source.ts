@@ -8,6 +8,8 @@ import { convertFileSrc } from '@tauri-apps/api/core';
 
 import { api } from '../lib/api';
 import { healed } from './heal';
+import { lensBlurred, type DepthMap } from './lens-blur';
+import { devignetted, undistorted, withoutFringes } from './lens-profile';
 import type { EditSettings } from './geometry';
 
 /** Cleaned pictures read back, by path; the last few kept. */
@@ -43,13 +45,18 @@ export function cleanedImage(root: string, id: number, full: boolean, onProgress
 
 const mixes = new WeakMap<object, { clean: object; amount: number; canvas: HTMLCanvasElement }>();
 
-/** `img` (`w` × `h`) with the cleaned copy at `amount` (0–100) and the removals filled. */
+/**
+ * `img` (`w` × `h`) with the cleaned copy at `amount` (0–100), the lens's
+ * dark corners lifted, its distortion and colour fringes taken out, the removals filled, then Lens Blur (with the
+ * photo's `depth`, once read).
+ */
 export function prepared(
   img: HTMLImageElement | HTMLCanvasElement,
   w: number,
   h: number,
   s: EditSettings | undefined,
   clean: CanvasImageSource | null,
+  depth: DepthMap | null = null,
 ): HTMLImageElement | HTMLCanvasElement {
   let base: HTMLImageElement | HTMLCanvasElement = img;
   const amount = s?.aiDenoise?.amount ?? 0;
@@ -68,5 +75,10 @@ export function prepared(
       base = c;
     }
   }
-  return s?.heal?.length ? healed(base, w, h, s.heal) : base;
+  const lens = s?.geometry?.lens;
+  const manual = s?.lensManual;
+  const lit = lens || manual ? withoutFringes(undistorted(devignetted(base, w, h, lens, manual), w, h, lens, manual), w, h, lens) : base;
+  const filled = s?.heal?.length ? healed(lit, w, h, s.heal) : lit;
+  const lb = s?.lensBlur;
+  return lb && lb.amount > 0 && depth ? lensBlurred(filled, w, h, depth, lb) : filled;
 }

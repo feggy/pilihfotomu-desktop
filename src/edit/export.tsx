@@ -18,6 +18,7 @@ import { developed, setDevelopFullSize } from '../kreasi/engine/develop';
 import { drawAdjustOverlays } from '../kreasi/engine/render';
 import { NO_GEOMETRY, drawGeometry, outputSize, type EditSettings } from './geometry';
 import { cleanedImage, prepared } from './source';
+import { depthOf } from './lens-blur';
 import { toCrsFor } from './lightroom';
 
 type Size = 'asli' | '2048' | '1080';
@@ -67,6 +68,9 @@ export function EditExportDialog({
   const [done, setDone] = useState<number | null>(null);
   const [saved, setSaved] = useState<string[] | null>(null);
   const [jpg, setJpg] = useState(true);
+  /** Super Resolution 2×: each JPG, once saved, enlarged by the model (slow). */
+  const [superRes, setSuperRes] = useState(false);
+  const [srProgress, setSrProgress] = useState<{ done: number; total: number } | null>(null);
   const hasRaw = photos.some((p) => p.raw);
   const [xmp, setXmp] = useState(hasRaw);
   const [report, setReport] = useState<ExportReport | null>(null);
@@ -98,7 +102,8 @@ export function EditExportDialog({
         const a = shownAdjust(edits[p.id]);
         const s = edits[p.id];
         const clean = (s?.aiDenoise?.amount ?? 0) > 0 ? await cleanedImage(root, p.id, true) : null;
-        const base = prepared(img, full.width, full.height, s, clean);
+        const depth = (s?.lensBlur?.amount ?? 0) > 0 ? await depthOf(root, p.id).catch(() => null) : null;
+        const base = prepared(img, full.width, full.height, s, clean, depth);
         const dev = developed(base, a);
         // Turned and cropped as in the editor; then the size asked.
         const g = edits[p.id]?.geometry ?? NO_GEOMETRY;
@@ -114,8 +119,14 @@ export function EditExportDialog({
         drawAdjustOverlays(ctx, { x: 0, y: 0, w: c.width, h: c.height }, a, !!dev);
         const blob = await new Promise<Blob | null>((r) => c.toBlob(r, 'image/jpeg', QUALITY[quality]));
         if (!blob) throw new Error(t('Foto tidak bisa disimpan.'));
-        paths.push(await api.saveExport(root, folder.trim(), `${stem(p.name)}.jpg`, new Uint8Array(await blob.arrayBuffer())));
+        const path = await api.saveExport(root, folder.trim(), `${stem(p.name)}.jpg`, new Uint8Array(await blob.arrayBuffer()));
         c.width = c.height = 0;
+        if (superRes && size === 'asli') {
+          setSrProgress({ done: 0, total: 1 });
+          await api.superResolve(path, setSrProgress);
+          setSrProgress(null);
+        }
+        paths.push(path);
         setDone((n) => (n ?? 0) + 1);
       }
       setSaved(paths);
@@ -208,6 +219,17 @@ export function EditExportDialog({
                   ]}
                 />
               </Row>
+              {size === 'asli' && (
+                <label className="flex items-start gap-2.5 text-[13px]">
+                  <input type="checkbox" checked={superRes} onChange={(e) => setSuperRes(e.target.checked)} className="mt-0.5 size-4 accent-[var(--color-gold)]" />
+                  <span className="flex flex-col gap-0.5">
+                    <span className="font-medium">{t('Super Resolution 2×')}</span>
+                    <span className="text-[11px] text-faint">
+                      {t('Lebar dan tinggi jadi dua kali (4× piksel), detail digambar ulang oleh AI di komputer ini. Lambat: beberapa menit per foto besar.')}
+                    </span>
+                  </span>
+                </label>
+              )}
               <Row label={t('Folder')}>
                 <input
                   value={folder}
@@ -240,7 +262,12 @@ export function EditExportDialog({
             </p>
             {error && <p className="text-xs text-reject">{error}</p>}
             <div className="flex items-center justify-end gap-2.5">
-              {busy && <span className="mr-auto text-xs text-muted">{t('Mengekspor {done} dari {total}…', { done: num(done ?? 0), total: num(photos.length) })}</span>}
+              {busy && (
+                <span className="mr-auto text-xs text-muted">
+                  {t('Mengekspor {done} dari {total}…', { done: num(done ?? 0), total: num(photos.length) })}
+                  {srProgress && ` · ${t('Super Resolution {pct}%', { pct: Math.round((srProgress.done * 100) / Math.max(1, srProgress.total)) })}`}
+                </span>
+              )}
               <Button variant="plain" onClick={onClose} disabled={busy}>
                 {t('Batal')}
               </Button>

@@ -46,9 +46,48 @@ DeepLabV3 MobileNetV2 ADE20K segmentation (deeplab_ade20k.onnx) — Masking › 
   Licensed under the Apache License, Version 2.0
   Dikonversi dari frozen_inference_graph.pb dengan tf2onnx
 
+Real-ESRGAN realesr-general-x4v3 (esrgan_x4v3.onnx) — Super Resolution
+  Copyright (c) 2021, Xintao Wang — https://github.com/xinntao/Real-ESRGAN
+  Licensed under the BSD 3-Clause License
+
+  Redistribution and use in source and binary forms, with or without
+  modification, are permitted provided that the following conditions are met:
+  1. Redistributions of source code must retain the above copyright notice,
+     this list of conditions and the following disclaimer.
+  2. Redistributions in binary form must reproduce the above copyright notice,
+     this list of conditions and the following disclaimer in the documentation
+     and/or other materials provided with the distribution.
+  3. Neither the name of the copyright holder nor the names of its
+     contributors may be used to endorse or promote products derived from
+     this software without specific prior written permission.
+  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+  POSSIBILITY OF SUCH DAMAGE.
+
+Depth Anything V2 Small (depth_anything_v2_small_f16.onnx) — Lens Blur
+  Lihe Yang et al. — https://github.com/DepthAnything/Depth-Anything-V2
+  Licensed under the Apache License, Version 2.0
+  ONNX: https://huggingface.co/onnx-community/depth-anything-v2-small
+
 FFDNet color denoising (ffdnet-color.onnx) — AI Denoise
   Kai Zhang et al. — https://github.com/cszn/KAIR
   Licensed under the MIT License, Copyright (c) 2019 Kai Zhang
+
+Lensfun lens database (public/lensfun.json) — Lens Corrections
+  The Lensfun project — https://lensfun.github.io
+  Licensed under the Creative Commons Attribution-Share Alike 3.0 license
+  (https://creativecommons.org/licenses/by-sa/3.0/). Diubah ke JSON ringkas
+  oleh scripts/lensfun-to-json.py (hanya distorsi dan vignetting); JSON itu
+  tetap di bawah lisensi yang sama. Hanya datanya yang dipakai, bukan
+  pustaka lensfun.
 
 Pustaka Rust dan JavaScript yang dipakai tercantum di Cargo.lock dan
 package-lock.json beserta lisensinya masing-masing (MIT / Apache-2.0).

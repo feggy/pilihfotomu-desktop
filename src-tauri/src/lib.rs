@@ -3,6 +3,8 @@ mod client_picks;
 pub mod cull;
 pub mod cutout;
 pub mod denoise;
+pub mod depth;
+pub mod superres;
 mod export;
 pub mod faces;
 pub mod full_res;
@@ -513,6 +515,79 @@ async fn denoise_photo(
     .map_err(|e| e.to_string())?
 }
 
+/// Edit foto › Lens Blur: the photo's depth (`depth.rs`), worked out once
+/// and kept beside its full-size picture: width and height (u32, little
+/// endian) then one nearness byte per pixel (255 nearest).
+#[tauri::command]
+async fn depth_map(app: AppHandle, state: State<'_, AppState>, root: PathBuf, id: u32) -> CmdResult<tauri::ipc::Response> {
+    let (photo, dir) = full_res_of(&app, &state, &root, id)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let file = dir.join(format!("{}.depth", photo.cache_key()));
+        if let Ok(bytes) = std::fs::read(&file) {
+            return Ok(tauri::ipc::Response::new(bytes));
+        }
+        let loaded = preview::load(photo.source(), 1024).map_err(|e| e.to_string())?;
+        let (d, w, h) = depth::depth(&loaded.image.to_rgb8())?;
+        let mut bytes = Vec::with_capacity(8 + d.len());
+        bytes.extend((w as u32).to_le_bytes());
+        bytes.extend((h as u32).to_le_bytes());
+        bytes.extend(d);
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        let _ = std::fs::write(&file, &bytes);
+        Ok(tauri::ipc::Response::new(bytes))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Edit foto › Lens Corrections: the camera and lens the photo was taken
+/// with, and how (focal length, aperture), from its EXIF.
+#[tauri::command]
+async fn lens_info(state: State<'_, AppState>, root: PathBuf, id: u32) -> CmdResult<preview::LensInfo> {
+    let photo = state.photos(&root)?.into_iter().find(|p| p.id == id).ok_or("Foto tidak ditemukan.")?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let data = std::fs::read(photo.raw.as_deref().unwrap_or(photo.source())).map_err(|e| e.to_string())?;
+        Ok(preview::lens_info(&data))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[derive(Serialize)]
+struct Upscaled {
+    width: u32,
+    height: u32,
+}
+
+/// Edit foto › Super Resolution: a JPG this app just exported (`save_export`)
+/// rewritten at twice the width and height (`superres.rs`). Only a .jpg.
+#[tauri::command]
+async fn super_resolve(path: PathBuf, on_progress: Channel<DenoiseProgress>) -> CmdResult<Upscaled> {
+    let is_jpg = path.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("jpg") || e.eq_ignore_ascii_case("jpeg"));
+    if !is_jpg || !path.is_file() {
+        return Err("Foto tidak bisa dibaca.".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let img = image::open(&path).map_err(|e| e.to_string())?.to_rgb8();
+        let (w, h) = (img.width() as usize, img.height() as usize);
+        let big = superres::upscale(img.as_raw(), w, h, |done, total| {
+            let _ = on_progress.send(DenoiseProgress { done, total });
+        })?;
+        let (bw, bh) = ((w * superres::SCALE) as u32, (h * superres::SCALE) as u32);
+        let big = image::RgbImage::from_raw(bw, bh, big).ok_or("Data gambar tidak terbaca.")?;
+        // Written beside, then put in place: a failure leaves the first one.
+        let tmp = path.with_extension("sr-tmp");
+        {
+            let mut f = std::io::BufWriter::new(std::fs::File::create(&tmp).map_err(|e| e.to_string())?);
+            image::codecs::jpeg::JpegEncoder::new_with_quality(&mut f, 95).encode_image(&big).map_err(|e| e.to_string())?;
+        }
+        std::fs::rename(&tmp, &path).map_err(|e| e.to_string())?;
+        Ok(Upscaled { width: bw, height: bh })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 /// Photo list of a folder that hasn't been analyzed (rescans every time, so
 /// files added since are seen).
 #[tauri::command]
@@ -962,6 +1037,9 @@ pub fn run() {
             write_develop_xmp,
             read_presets,
             denoise_photo,
+            super_resolve,
+            depth_map,
+            lens_info,
             face_landmarks,
             open_for_edit,
             merge_people,

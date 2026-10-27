@@ -5,6 +5,7 @@
 //! similarity, so that preview is enough — and it is tens of times faster than
 //! demosaicing the sensor data.
 
+use serde::Serialize;
 use std::fs;
 use std::io::Cursor;
 use std::path::Path;
@@ -238,6 +239,66 @@ pub fn orientation(path: &Path) -> Option<u8> {
 }
 
 /// Shot metadata from the RAW container itself.
+/// The lens a photo was taken with, as its EXIF says (Edit foto › Lens
+/// Corrections looks it up in lensfun's database).
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LensInfo {
+    pub make: Option<String>,
+    pub model: Option<String>,
+    pub lens: Option<String>,
+    /// Millimetres, as set.
+    pub focal: Option<f64>,
+    pub aperture: Option<f64>,
+    /// The same field of view on full frame: with `focal`, the sensor's crop factor.
+    pub focal35: Option<f64>,
+}
+
+/// `LensInfo` from a photo's bytes (a JPEG, a TIFF-based RAW, or a CR3).
+pub fn lens_info(data: &[u8]) -> LensInfo {
+    let mut sources = Vec::new();
+    if let Ok(e) = Reader::new().read_from_container(&mut Cursor::new(data)) {
+        sources.push(e);
+    } else if !data.starts_with(&[0xFF, 0xD8]) {
+        let head = &data[..data.len().min(1 << 20)];
+        for name in [b"CMT1", b"CMT2"] {
+            if let Some(tiff) = iso_box(head, name)
+                && let Ok(e) = Reader::new().read_raw(tiff.to_vec())
+            {
+                sources.push(e);
+            }
+        }
+    }
+    let text = |tag: Tag| {
+        sources.iter().find_map(|e| {
+            let f = e.get_field(tag, In::PRIMARY)?;
+            let Value::Ascii(ref parts) = f.value else { return None };
+            let s = std::str::from_utf8(parts.first()?).ok()?.trim_matches(char::from(0)).trim().to_string();
+            (!s.is_empty()).then_some(s)
+        })
+    };
+    let number = |tag: Tag| {
+        sources.iter().find_map(|e| {
+            let f = e.get_field(tag, In::PRIMARY)?;
+            match &f.value {
+                Value::Rational(v) => v.first().map(|r| r.to_f64()),
+                Value::Short(v) => v.first().map(|&n| n as f64),
+                Value::Long(v) => v.first().map(|&n| n as f64),
+                _ => None,
+            }
+            .filter(|v| v.is_finite() && *v > 0.0)
+        })
+    };
+    LensInfo {
+        make: text(Tag::Make),
+        model: text(Tag::Model),
+        lens: text(Tag::LensModel),
+        focal: number(Tag::FocalLength),
+        aperture: number(Tag::FNumber),
+        focal35: number(Tag::FocalLengthIn35mmFilm),
+    }
+}
+
 fn raw_shot_info(data: &[u8]) -> ShotInfo {
     // TIFF-based RAWs (CR2, NEF, ARW, DNG, ORF, RW2…) are read directly.
     if let Ok(exif) = Reader::new().read_from_container(&mut Cursor::new(data)) {
