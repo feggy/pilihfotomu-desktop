@@ -13,11 +13,7 @@ import { num } from '../lib/format';
 import { t } from '../lib/i18n';
 import { inpaint } from '../kreasi/engine/inpaint';
 import { newId } from '../kreasi/engine/document';
-import { previewUrl } from '../kreasi/canvas';
-import type { LocalAdjust } from '../kreasi/engine/document';
-import { loadLocalImage } from '../kreasi/kit';
 import { BrushRing } from './cursors';
-import { landmarksOf, peopleMask, type FacePart } from './people-mask';
 import { Slider } from './panels';
 import { ToolBox, ToolRow } from './tool-box';
 import type { EditSettings, HealSpot } from './geometry';
@@ -80,105 +76,15 @@ export function healed(src: CanvasImageSource, w: number, h: number, spots: Heal
 
 // ── The panel ──
 
-/** The mask Retouch kulit makes: one soft oval per face found in the photo. */
-const SKIN = 'kulit-wajah';
-
-/** `a` with the faces' skin smoothed by `v` (0–100); 0 takes the mask away. */
-export function withSkin(a: EditSettings, faces: { x: number; y: number; w: number; h: number }[], v: number): EditSettings {
-  const masks = (a.masks ?? []).filter((m) => m.id !== SKIN);
-  if (!v || !faces.length) return { ...a, masks: masks.length ? masks : undefined };
-  const parts = faces.slice(0, 8).map((f, i) => ({
-    id: `${SKIN}-${i}`,
-    kind: 'radial' as const,
-    cx: f.x + f.w / 2,
-    cy: f.y + f.h * 0.55,
-    rx: f.w * 0.55,
-    ry: f.h * 0.62,
-    feather: 70,
-  }));
-  return { ...a, masks: [...masks, { id: SKIN, parts, adjust: { texture: -v, clarity: -Math.round(v * 0.4), noise: Math.round(v * 0.3) } }] };
-}
-export const skinOf = (a: EditSettings) => -((a.masks ?? []).find((m) => m.id === SKIN)?.adjust.texture ?? 0);
-
-/**
- * Cerahkan mata and Putihkan gigi: a mask of every face's eyes (whites and
- * irises) or teeth, from the face's points, and what each slider does to it.
- * `of` reads the slider back from the mask's sliders.
- */
-const RETOUCH = {
-  'retouch-mata': {
-    parts: ['sklera', 'iris'] as FacePart[],
-    adjust: (v: number): LocalAdjust => ({ exposure: Math.round(v * 0.3), clarity: Math.round(v * 0.4), saturation: Math.round(v * 0.1) }),
-    of: (l: LocalAdjust) => Math.round((l.clarity ?? 0) / 0.4),
-  },
-  'retouch-gigi': {
-    parts: ['gigi'] as FacePart[],
-    adjust: (v: number): LocalAdjust => ({ exposure: Math.round(v * 0.3), saturation: -Math.round(v * 0.6), temp: -Math.round(v * 0.15) }),
-    of: (l: LocalAdjust) => Math.round(-(l.saturation ?? 0) / 0.6),
-  },
-};
-type RetouchId = keyof typeof RETOUCH;
-export const retouchOf = (a: EditSettings, id: RetouchId) => {
-  const m = (a.masks ?? []).find((x) => x.id === id);
-  return m ? RETOUCH[id].of(m.adjust) : 0;
-};
-/** The mask's own picture (all faces' parts), made once a photo. */
-async function retouchMask(root: string, photoId: number, id: RetouchId): Promise<string | null> {
-  const points = await landmarksOf(root, photoId).catch(() => []);
-  if (!points.length) return null;
-  const img = await loadLocalImage(await previewUrl(root, photoId));
-  return peopleMask(root, photoId, img, points, points.map((_, i) => i), RETOUCH[id].parts);
-}
-function withRetouch(a: EditSettings, id: RetouchId, subject: string, v: number): Partial<EditSettings> {
-  const masks = (a.masks ?? []).filter((m) => m.id !== id);
-  if (!v) return { masks: masks.length ? masks : undefined };
-  return { masks: [...masks, { id, parts: [{ id: `${id}-0`, kind: 'subject', subject }], adjust: RETOUCH[id].adjust(v) }] };
-}
-
-/** A Retouch slider: its mask worked out on first use (a moment), then live. */
-function RetouchSlider({ root, photoId, a, id, label, onLive, onDone }: { root: string; photoId: number; a: EditSettings; id: RetouchId; label: string; onLive: (p: Partial<EditSettings>) => void; onDone: () => void }) {
-  const [subject, setSubject] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [none, setNone] = useState(false);
-  const existing = (a.masks ?? []).find((m) => m.id === id)?.parts?.[0]?.subject ?? null;
-  const ready = existing ?? subject;
-  const value = retouchOf(a, id);
-  const live = async (v: number) => {
-    if (ready) return onLive(withRetouch(a, id, ready, v));
-    if (busy || none) return;
-    setBusy(true);
-    const made = await retouchMask(root, photoId, id).catch(() => null);
-    setBusy(false);
-    if (!made) return setNone(true);
-    setSubject(made);
-    onLive(withRetouch(a, id, made, v));
-    onDone();
-  };
-  return (
-    <div className="flex flex-col gap-1">
-      <Slider label={label} value={value} min={0} max={100} center={0} onLive={live} onDone={onDone} />
-      {busy && <p className="animate-pulse text-[11px] text-faint">{t('Membaca wajah…')}</p>}
-      {none && <p className="text-[11px] text-faint">{t('Tidak ada wajah yang terbaca jelas.')}</p>}
-    </div>
-  );
-}
-
 export function HealPanel({
-  root,
-  photoId,
   a,
-  faces,
   size,
   onSize,
   onLive,
   onDone,
   onClose,
 }: {
-  root: string;
-  photoId: number;
   a: EditSettings;
-  /** The faces found in this photo (shares of it). */
-  faces: { x: number; y: number; w: number; h: number }[];
   size: number;
   onSize: (v: number) => void;
   onLive: (patch: Partial<EditSettings>) => void;
@@ -186,7 +92,6 @@ export function HealPanel({
   onClose: () => void;
 }) {
   const spots = a.heal ?? [];
-  const skin = skinOf(a);
   return (
     <ToolBox title={t('Hapus objek')} onClose={onClose}>
       <ToolRow>
@@ -195,29 +100,6 @@ export function HealPanel({
       </p>
       <Slider label={t('Ukuran kuas')} value={Math.round(size * 100)} min={1} max={30} center={4} onLive={(v) => onSize(v / 100)} onDone={() => {}} />
       <p className="text-[11px] text-faint">{t('[ dan ] mengubah ukuran kuas. Cocok untuk benda kecil; area besar di atas detail hasilnya bisa kurang rapi.')}</p>
-      </ToolRow>
-      <ToolRow className="gap-3">
-        <span className="text-xs font-semibold">{t('Retouch kulit cepat')}</span>
-        {faces.length ? (
-          <>
-            <Slider
-              label={t('Haluskan kulit')}
-              value={skin}
-              min={0}
-              max={100}
-              center={0}
-              onLive={(v) => onLive({ masks: withSkin(a, faces, v).masks })}
-              onDone={onDone}
-            />
-            <p className="text-[11px] text-faint">
-              {t('Hanya di {count} wajah yang ditemukan di foto ini. Tekstur kulit tetap ada, tidak seperti filter.', { n: faces.length, count: num(faces.length) })}
-            </p>
-            <RetouchSlider root={root} photoId={photoId} a={a} id="retouch-mata" label={t('Cerahkan mata')} onLive={onLive} onDone={onDone} />
-            <RetouchSlider root={root} photoId={photoId} a={a} id="retouch-gigi" label={t('Putihkan gigi')} onLive={onLive} onDone={onDone} />
-          </>
-        ) : (
-          <p className="text-[11px] text-faint">{t('Tidak ada wajah yang ditemukan di foto ini.')}</p>
-        )}
       </ToolRow>
       {spots.length > 0 && (
         <ToolRow className="gap-1">

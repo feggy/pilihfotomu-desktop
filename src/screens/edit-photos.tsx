@@ -662,7 +662,7 @@ function Editor({ back, ids, start }: { back: Screen; ids?: number[]; start?: nu
             ))}
           </div>
           {healing && photo ? (
-            <HealPanel root={root} photoId={photo.id} a={a} faces={photo.faces ?? []} size={healSize} onSize={setHealSize} onLive={live} onDone={done} onClose={() => setHealing(false)} />
+            <HealPanel a={a} size={healSize} onSize={setHealSize} onLive={live} onDone={done} onClose={() => setHealing(false)} />
           ) : masking && photo ? (
             <ToolBox title={t('Masking')}>
               <ToolRow>
