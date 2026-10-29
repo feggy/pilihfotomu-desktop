@@ -171,7 +171,7 @@ export function App() {
     ) : screen.name === 'edit' ? (
       <EditPhotos key={screen.ids ? 'editor' : 'library'} back={screen.back} ids={screen.ids} start={screen.start} />
     ) : screen.name === 'bisnis' ? (
-      <BisnisScreen />
+      <BisnisScreen key={screen.open ?? ''} open={screen.open} />
     ) : screen.name === 'pilih' ? (
       <PilihStart dragging={dragging} />
     ) : screen.name === 'settings' ? (

@@ -7,7 +7,7 @@ export type Screen =
   /** Pilih foto, before a folder: a new one, or a session to carry on with. */
   | { name: 'pilih' }
   /** Kelola Bisnis: bookings, calendar, packages, invoices, money. */
-  | { name: 'bisnis' }
+  | { name: 'bisnis'; open?: string }
   /** A chosen folder: cull it with AI, or (`mode: 'pesan'`) find the photos a client's message names. */
   | { name: 'setup'; folder: FolderInfo; mode?: 'ai' | 'pesan' }
   | { name: 'progress' }

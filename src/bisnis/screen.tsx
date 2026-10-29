@@ -40,7 +40,8 @@ const TABS: { id: BisnisTab; label: string; icon: typeof KanbanSquare }[] = [
   { id: 'pengaturan', label: 'Pengaturan', icon: Settings2 },
 ];
 
-export function BisnisScreen() {
+/** `open`: a booking to show at once (from a reminder on Beranda). */
+export function BisnisScreen({ open }: { open?: string }) {
   const go = useApp((s) => s.go);
   const { data, error, load } = useBisnis();
   const [tab, setTab] = useState<BisnisTab>('board');
@@ -64,8 +65,11 @@ export function BisnisScreen() {
     { key: 'konten', label: t('Buat konten'), icon: <LayoutTemplate size={13} />, run: openKreasi },
   ];
   useEffect(() => {
-    load();
-  }, [load]);
+    load().then(() => {
+      const b = open && useBisnis.getState().data?.bookings.find((x) => x.id === open);
+      if (b) setEditing(b);
+    });
+  }, [load, open]);
 
   let body: ReactNode = null;
   if (data) {

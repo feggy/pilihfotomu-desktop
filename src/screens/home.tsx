@@ -26,6 +26,7 @@ import { date, duration, num, STATUS } from '../lib/format';
 import { t, tRust } from '../lib/i18n';
 import { settingsLine } from '../lib/shoot';
 import { useApp } from '../store';
+import { Recent, Today } from './home-today';
 
 const pickFolder = async () => {
   const picked = await open({ directory: true, title: t('Pilih folder sesi') });
@@ -394,9 +395,13 @@ export function Home({ dragging }: { dragging: boolean }) {
     <div className="flex h-full flex-col">
       <TitleBar />
       <main className="flex-1 overflow-y-auto">
-        <div className="mx-auto flex w-full max-w-[1180px] flex-col gap-7 px-6 pt-10 pb-10 lg:px-8 lg:pt-12">
-          <h1 className="text-2xl font-semibold lg:text-[28px]">{t('Mau mengerjakan apa?')}</h1>
+        <div className="mx-auto flex w-full max-w-[1180px] flex-col gap-7 px-6 pt-8 pb-10 lg:px-8 lg:pt-10">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] lg:gap-5">
+            <Today />
+            <Recent />
+          </div>
 
+          <h1 className="-mb-2 text-xl font-semibold">{t('Mau mengerjakan apa?')}</h1>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:gap-5">
             <ModeCard
               art={<BoardArt />}

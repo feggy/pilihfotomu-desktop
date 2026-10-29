@@ -275,4 +275,17 @@ export default {
   'Backup berisi {b} booking dan {c} klien. Data yang ada sekarang ({nb} booking) akan diganti.': 'The backup has {b} bookings and {c} clients. The current data ({nb} bookings) will be replaced.',
   'Data dipulihkan dari backup.': 'Data restored from the backup.',
   'Ganti data': 'Replace data',
+
+  // Beranda
+  'Buka Kelola Bisnis': 'Open Manage Business',
+  'Jadwal, pembayaran, dan pengingat klien muncul di sini.': 'Shoots, payments and client reminders show up here.',
+  'Catat booking pertama di Kelola Bisnis: tanggal foto, paket, dan DP-nya.': 'Record your first booking in Manage Business: the shoot date, package and deposit.',
+  'Catat booking': 'Record a booking',
+  'Jadwal foto bulan ini': 'Shoots this month',
+  'Masuk bulan ini': 'Received this month',
+  'Belum dibayar klien': 'Owed by clients',
+  'Tidak ada jadwal atau tagihan yang perlu diingat hari ini dan besok.': 'No shoots or payments to remember today or tomorrow.',
+  '{n} pengingat lagi': '{n} more reminders',
+  '{date} · {picks} dipilih': '{date} · {picks} picked',
+  'Sesi foto dan desain yang terakhir dikerjakan muncul di sini.': 'Your latest photo session and design show up here.',
 } as Record<string, string | [string, string]>;
