@@ -59,9 +59,9 @@ function BoardArt() {
     { color: '#5fb87a', cards: [0.55] },
   ];
   return (
-    <span className="flex aspect-[296/196] w-full gap-2 rounded-xl bg-panel-2 p-3">
+    <span className="flex aspect-[296/196] w-full gap-2 overflow-hidden rounded-xl bg-panel-2 p-3">
       {cols.map((c, i) => (
-        <span key={i} className="flex flex-1 flex-col gap-1.5 rounded-lg bg-bg/60 p-1.5">
+        <span key={i} className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-hidden rounded-lg bg-bg/60 p-1.5">
           <span className="h-1.5 w-1/2 rounded-full" style={{ background: c.color }} />
           {c.cards.map((w, j) => (
             <span key={j} className="flex flex-col gap-1 rounded-md bg-raised p-1.5">
@@ -115,7 +115,7 @@ function ModeCard({
             <span className="flex size-[30px] items-center justify-center rounded-lg bg-raised text-gold-text">
               <Icon size={16} />
             </span>
-            <span className="text-[17px] font-semibold">{title}</span>
+            <span className="text-[17px] font-semibold whitespace-nowrap">{title}</span>
             {soon && <Chip color="var(--color-faint)">{t('Segera')}</Chip>}
           </span>
           <span
@@ -413,6 +413,14 @@ export function Home({ dragging }: { dragging: boolean }) {
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:gap-5 xl:grid-cols-4">
             <ModeCard
+              art={<BoardArt />}
+              icon={Briefcase}
+              title={t('Kelola Bisnis')}
+              sub={t('Booking klien di board dan kalender, paket, invoice, pesan WhatsApp, dan laporan keuangan.')}
+              tags={[t('Board'), t('Kalender'), t('Invoice')]}
+              onClick={() => go({ name: 'bisnis' })}
+            />
+            <ModeCard
               highlight={dragging}
               preview="/home/pilih.jpg"
               icon={Sparkles}
@@ -436,14 +444,6 @@ export function Home({ dragging }: { dragging: boolean }) {
               sub={t('Story dan feed Instagram dari template. Pilih template, isi fotonya, selesai.')}
               tags={['Story 9:16', 'Feed 4:5', '1:1']}
               onClick={() => go({ name: 'kreasi', back: { name: 'home' } })}
-            />
-            <ModeCard
-              art={<BoardArt />}
-              icon={Briefcase}
-              title={t('Kelola Bisnis')}
-              sub={t('Booking klien di board dan kalender, paket, invoice, pesan WhatsApp, dan laporan keuangan.')}
-              tags={[t('Board'), t('Kalender'), t('Invoice')]}
-              onClick={() => go({ name: 'bisnis' })}
             />
           </div>
 
