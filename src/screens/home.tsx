@@ -11,6 +11,7 @@ import {
   FolderX,
   Image as ImageIcon,
   LayoutTemplate,
+  Play,
   RotateCw,
   SlidersHorizontal,
   Sparkles,
@@ -373,7 +374,7 @@ export function Home({ dragging }: { dragging: boolean }) {
               extra={
                 last && (
                   <button type="button" onClick={() => openSession(last.id)} title={`${t('Lanjutkan sesi terakhir')} (⇧⌘O)`} className="flex h-8 max-w-56 items-center gap-1.5 rounded-lg border border-line px-2.5 text-xs font-medium text-fg hover:border-gold/70">
-                    <RotateCw size={12} className="shrink-0 text-gold-text" />
+                    <Play size={12} className="shrink-0 fill-current text-gold-text" />
                     <span className="truncate">{t('Lanjutkan: {name}', { name: last.name })}</span>
                   </button>
                 )
