@@ -5,6 +5,8 @@ import { TriangleAlert, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { BisnisScreen } from './bisnis/screen';
+// Kelola Bisnis's folder backup follows every save from here on.
+import './bisnis/backup';
 import { useReminderWatch } from './bisnis/reminder-watch';
 import { flushBisnis } from './bisnis/store';
 import { saveNow } from './kreasi/autosave';

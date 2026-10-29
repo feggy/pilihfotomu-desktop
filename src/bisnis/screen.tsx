@@ -3,13 +3,16 @@
  * calendar, packages and the rest — tabs over one set of data, kept offline.
  */
 
-import { ArrowLeft, CalendarDays, FileText, KanbanSquare, MessageCircle, Package as PackageIcon, Plus, Settings2, TriangleAlert, Users, Wallet } from 'lucide-react';
+import { ArrowLeft, CalendarDays, FileText, KanbanSquare, MessageCircle, Package as PackageIcon, Plus, Settings2, TriangleAlert, Users, Wallet, Sparkles, SlidersHorizontal, LayoutTemplate, ShieldAlert } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 
 import { TitleBar } from '../components/title-bar';
 import { cx } from '../components/ui';
 import { t } from '../lib/i18n';
+import { useKreasi } from '../kreasi/store';
 import { useApp } from '../store';
+import { clientOf } from './model';
+import { lastBackupAt } from './backup';
 import { Board } from './board';
 import { BookingEditor, newBooking, type BookingAction } from './booking-editor';
 import { Calendar } from './calendar';
@@ -43,10 +46,22 @@ export function BisnisScreen() {
   const [tab, setTab] = useState<BisnisTab>('board');
   const [editing, setEditing] = useState<Booking | null>(null);
   const [invoice, setInvoice] = useState<string | null>(null);
+  // Buat konten for this booking: its client's name and first shoot day fill the templates.
+  const openKreasi = (bookingId: string) => {
+    const d = useBisnis.getState().data;
+    const b = d?.bookings.find((x) => x.id === bookingId);
+    if (!d || !b) return;
+    const first = [...b.sessions].sort((x, y) => x.start.localeCompare(y.start))[0];
+    useKreasi.getState().setClient({ name: clientOf(d, b)?.name ?? b.title, date: first ? Date.parse(`${first.start.split('T')[0]}T00:00:00Z`) / 1000 : null });
+    go({ name: 'kreasi', back: { name: 'bisnis' } });
+  };
   const [message, setMessage] = useState<{ bookingId: string | null; phone?: string; name?: string } | null>(null);
   const actions: BookingAction[] = [
     { key: 'invoice', label: t('Invoice'), icon: <FileText size={13} />, run: setInvoice },
     { key: 'wa', label: t('WhatsApp'), icon: <MessageCircle size={13} />, run: (bookingId) => setMessage({ bookingId }) },
+    { key: 'pilih', label: t('Pilih foto##mode'), icon: <Sparkles size={13} />, run: () => go({ name: 'pilih' }) },
+    { key: 'edit', label: t('Edit foto'), icon: <SlidersHorizontal size={13} />, run: () => go({ name: 'edit', back: { name: 'bisnis' } }) },
+    { key: 'konten', label: t('Buat konten'), icon: <LayoutTemplate size={13} />, run: openKreasi },
   ];
   useEffect(() => {
     load();
@@ -104,10 +119,40 @@ export function BisnisScreen() {
           <TriangleAlert size={14} /> {t('Data Kelola Bisnis tidak bisa dibaca atau disimpan: {e}', { e: error })}
         </p>
       )}
+      {data && tab !== 'pengaturan' && <BackupNotice onSetUp={() => setTab('pengaturan')} />}
       {body}
       {editing && <BookingEditor key={editing.id} initial={editing} onClose={() => setEditing(null)} actions={actions} />}
       {invoice && <InvoiceDialog bookingId={invoice} onClose={() => setInvoice(null)} />}
       {message && <SendDialog {...message} onClose={() => setMessage(null)} />}
+    </div>
+  );
+}
+
+const FORTNIGHT = 14 * 86_400_000;
+
+/**
+ * Everything here lives on this computer only: once there is something to
+ * lose and no recent backup, say so — not again for two weeks if put off.
+ */
+function BackupNotice({ onSetUp }: { onSetUp: () => void }) {
+  const data = useBisnis((s) => s.data)!;
+  const update = useBisnis((s) => s.update);
+  const now = Date.now();
+  const last = lastBackupAt(data);
+  const later = data.settings.backupNoticeAt;
+  if (!data.bookings.length || (last && now - last < FORTNIGHT) || (later && now - later < FORTNIGHT)) return null;
+  return (
+    <div className="mx-6 mt-3 flex items-center gap-3 rounded-xl border border-maybe/50 bg-maybe/[0.06] px-4 py-2.5 text-xs lg:mx-8">
+      <ShieldAlert size={16} className="shrink-0 text-maybe" />
+      <span className="min-w-0 flex-1 text-muted">
+        {last ? t('Backup terakhir lebih dari 2 minggu lalu.') : t('Belum ada backup.')} {t('Data Kelola Bisnis hanya ada di komputer ini: kalau komputernya rusak atau hilang, datanya ikut hilang.')}
+      </span>
+      <button type="button" onClick={onSetUp} className="shrink-0 font-semibold text-gold-text hover:underline">
+        {t('Atur backup')}
+      </button>
+      <button type="button" onClick={() => update((d) => ({ ...d, settings: { ...d.settings, backupNoticeAt: Date.now() } }))} className="shrink-0 text-faint hover:text-fg">
+        {t('Nanti')}
+      </button>
     </div>
   );
 }

@@ -11,8 +11,8 @@
 export const DEVELOPER = '[NAMA PENGEMBANG]';
 /** Where support and privacy questions go. */
 export const CONTACT = '[EMAIL KONTAK]';
-export const TERMS_VERSION = 2;
-export const TERMS_DATE = { id: '26 Oktober 2026', en: '26 October 2026' };
+export const TERMS_VERSION = 3;
+export const TERMS_DATE = { id: '29 Oktober 2026', en: '29 October 2026' };
 
 export interface LegalDoc {
   title: string;
@@ -32,7 +32,7 @@ export const TERMS: Record<'id' | 'en', LegalDoc> = {
       {
         heading: '2. Apa itu pilihfotomu',
         body: [
-          'pilihfotomu membantu fotografer memilah dan mengolah foto: menilai ketajaman, eksposur, duplikat, mata dan ekspresi; mengelompokkan orang dalam satu sesi; memberi status Pilih / Cek / Lewati beserta alasannya; mengekspor penanda untuk Lightroom, Capture One dan Photo Mechanic; serta membuat konten dari template.',
+          'pilihfotomu membantu fotografer memilah dan mengolah foto: menilai ketajaman, eksposur, duplikat, mata dan ekspresi; mengelompokkan orang dalam satu sesi; memberi status Pilih / Cek / Lewati beserta alasannya; mengekspor penanda untuk Lightroom, Capture One dan Photo Mechanic; membuat konten dari template; serta mencatat booking, jadwal, invoice, dan keuangan studio (Kelola Bisnis).',
           'Semua pengolahan berjalan di perangkat Anda. Aplikasi tidak meng-upload foto.',
         ],
       },
@@ -56,6 +56,8 @@ export const TERMS: Record<'id' | 'en', LegalDoc> = {
         body: [
           'Aplikasi tidak mengubah atau menghapus file foto asli. Aplikasi menulis file pendamping (XMP), salinan, dan folder ekspor di tempat yang Anda pilih.',
           'Buat cadangan foto Anda. Kami tidak bertanggung jawab atas kehilangan data akibat kerusakan perangkat, drive, atau cara pemakaian.',
+          'Data Kelola Bisnis (booking, klien, paket, pembayaran, pengeluaran, dan template pesan) hanya disimpan di perangkat Anda, tidak di server kami atau server mana pun. Kami tidak dapat melihat, memulihkan, atau mengembalikan data tersebut. Bila perangkat rusak atau hilang, aplikasi dihapus, atau file datanya terhapus, data itu ikut hilang.',
+          'Menjaga cadangan data Kelola Bisnis, misalnya dengan fitur backup ke file atau ke folder yang disinkronkan ke layanan cloud pilihan Anda, sepenuhnya menjadi tanggung jawab Anda. Kehilangan data tersebut menjadi tanggung jawab Anda.',
         ],
       },
       {
@@ -113,7 +115,7 @@ export const TERMS: Record<'id' | 'en', LegalDoc> = {
       {
         heading: '2. What pilihfotomu is',
         body: [
-          'pilihfotomu helps photographers sort and work with photos. It judges sharpness, exposure, duplicates, eyes and expressions, and groups the people in a session. It gives each photo a Pick, Check or Skip status with reasons, exports marks for Lightroom, Capture One and Photo Mechanic, and makes content from templates.',
+          'pilihfotomu helps photographers sort and work with photos. It judges sharpness, exposure, duplicates, eyes and expressions, and groups the people in a session. It gives each photo a Pick, Check or Skip status with reasons, exports marks for Lightroom, Capture One and Photo Mechanic, makes content from templates, and keeps the studio’s bookings, schedule, invoices and finances (Manage Business).',
           'All processing runs on your device. The app doesn’t upload photos.',
         ],
       },
@@ -137,6 +139,8 @@ export const TERMS: Record<'id' | 'en', LegalDoc> = {
         body: [
           'The app never changes or deletes your original photo files. It writes sidecar files (XMP), copies and export folders where you choose.',
           'Keep backups of your photos. We are not responsible for data loss caused by device or drive failure, or by how the app is used.',
+          'Manage Business data (bookings, clients, packages, payments, expenses and message templates) is stored only on your device, not on our servers or anyone else’s. We cannot see, recover or restore it. If the device is damaged or lost, the app is removed, or its data file is deleted, that data is lost too.',
+          'Keeping backups of Manage Business data, for example with the backup to a file or to a folder synced to a cloud service of your choice, is entirely your responsibility. Any loss of that data is your responsibility.',
         ],
       },
       {
