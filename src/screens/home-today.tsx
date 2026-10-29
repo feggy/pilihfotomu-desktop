@@ -1,10 +1,10 @@
 /**
- * The top of Beranda: what today holds (from Kelola Bisnis — shoots, money
+ * Beranda under the modes: what today holds (from Kelola Bisnis — shoots, money
  * due, deliveries, and the month in three numbers) and what was left open
  * last (a culling session, a Buat konten design), one click from each.
  */
 
-import { ArrowRight, CalendarClock, CalendarPlus, Images, LayoutTemplate, Send, Wallet } from 'lucide-react';
+import { ArrowRight, Briefcase, CalendarClock, Images, LayoutTemplate, Send, Wallet } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
 import { cx } from '../components/ui';
@@ -19,7 +19,12 @@ import { listDrafts, type Draft } from '../kreasi/drafts';
 
 const ICON = { shoot: CalendarClock, due: Wallet, kirim: Send } as const;
 
-export function Today() {
+/**
+ * Kelola Bisnis on Beranda: today's shoots, money due and the month for a
+ * studio using it; for one that doesn't (yet), a small card saying what it
+ * is — not a list of empty boxes.
+ */
+export function Today({ art }: { art: React.ReactNode }) {
   const data = useBisnis((s) => s.data);
   const go = useApp((s) => s.go);
   const list = useMemo(() => (data ? remindersOf(data) : []), [data]);
@@ -37,7 +42,22 @@ export function Today() {
   }, [data]);
 
   if (!data || !month) return null;
-  const empty = !data.bookings.length;
+
+  if (!data.bookings.length)
+    return (
+      <button type="button" onClick={() => go({ name: 'bisnis' })} className="group flex min-w-0 items-center gap-4 rounded-[18px] border border-line-soft bg-panel p-3 text-left hover:border-gold/70">
+        <span className="w-40 shrink-0">{art}</span>
+        <span className="flex min-w-0 flex-1 flex-col gap-1.5 pr-2">
+          <span className="flex items-center gap-2 text-[15px] font-semibold">
+            <Briefcase size={15} className="text-gold-text" /> {t('Kelola Bisnis')}
+          </span>
+          <span className="text-xs text-muted">{t('Booking klien di board dan kalender, paket, invoice, pesan WhatsApp, dan laporan keuangan.')}</span>
+          <span className="mt-1 flex items-center gap-1 text-xs font-medium text-gold-text group-hover:underline">
+            {t('Buka Kelola Bisnis')} <ArrowRight size={13} />
+          </span>
+        </span>
+      </button>
+    );
 
   return (
     <section className="flex min-w-0 flex-col gap-4 rounded-[18px] border border-line-soft bg-panel p-5">
@@ -47,15 +67,7 @@ export function Today() {
           {t('Buka Kelola Bisnis')} <ArrowRight size={13} />
         </button>
       </div>
-      {empty ? (
-        <div className="flex flex-1 flex-col items-start justify-center gap-3 rounded-xl bg-panel-2 p-5">
-          <span className="text-[13px] font-medium">{t('Jadwal, pembayaran, dan pengingat klien muncul di sini.')}</span>
-          <span className="text-xs text-muted">{t('Catat booking pertama di Kelola Bisnis: tanggal foto, paket, dan DP-nya.')}</span>
-          <button type="button" onClick={() => go({ name: 'bisnis' })} className="mt-1 flex h-9 items-center gap-2 rounded-[10px] bg-gold-gradient px-4 text-[13px] font-semibold text-white">
-            <CalendarPlus size={15} /> {t('Catat booking')}
-          </button>
-        </div>
-      ) : (
+      {
         <>
           <div className="grid grid-cols-3 gap-2">
             {(
@@ -94,7 +106,7 @@ export function Today() {
             )}
           </div>
         </>
-      )}
+      }
     </section>
   );
 }

@@ -2,7 +2,6 @@ import { open } from '@tauri-apps/plugin-dialog';
 import {
   ArrowLeft,
   ArrowRight,
-  Briefcase,
   Check,
   ChevronRight,
   Clock,
@@ -98,16 +97,16 @@ function ModeCard({
       type="button"
       onClick={onClick}
       className={cx(
-        // Two to a row: picture beside the words on a wide window, above them on a narrow one.
-        'group flex flex-col gap-3.5 rounded-[18px] border bg-panel p-3 text-left transition-colors outline-none md:flex-row md:items-stretch md:gap-4',
+        // Three to a row, the picture above the words.
+        'group flex flex-col gap-3.5 rounded-[18px] border bg-panel p-3 text-left transition-colors outline-none',
         // Gold only while pointed at (or a folder is dragged over): a click opens the mode, nothing stays selected.
         highlight ? 'border-2 border-gold bg-raised' : 'border-line-soft hover:border-gold/70 focus-visible:border-gold/70',
       )}
     >
-      <span className="w-full shrink-0 md:w-[46%]">
+      <span className="w-full shrink-0">
         {art ?? <img src={preview} alt="" className="aspect-[296/196] w-full rounded-xl object-cover" draggable={false} />}
       </span>
-      <span className="flex min-w-0 flex-1 flex-col gap-3 md:py-1.5 md:pr-1">
+      <span className="flex min-w-0 flex-1 flex-col gap-3">
         <span className="flex flex-col gap-1.5 px-1.5">
           <span className="flex items-center justify-between gap-2">
             <span className="flex items-center gap-2.5">
@@ -129,7 +128,7 @@ function ModeCard({
           <span className="text-xs text-muted">{sub}</span>
         </span>
         <span className="mx-1.5 h-px bg-line-soft" />
-        <span className="flex flex-wrap gap-1.5 px-1.5 pb-0.5 md:mt-auto">
+        <span className="mt-auto flex flex-wrap gap-1.5 px-1.5 pb-0.5">
           {tags.map((tag) => (
             <span key={tag} className="rounded-md bg-panel-2 px-1.5 py-0.5 text-[10px] text-faint">
               {tag}
@@ -396,21 +395,9 @@ export function Home({ dragging }: { dragging: boolean }) {
       <TitleBar />
       <main className="flex-1 overflow-y-auto">
         <div className="mx-auto flex w-full max-w-[1180px] flex-col gap-7 px-6 pt-8 pb-10 lg:px-8 lg:pt-10">
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] lg:gap-5">
-            <Today />
-            <Recent />
-          </div>
-
+          {/* The photo work first, for everyone; Kelola Bisnis after, for those who use it. */}
           <h1 className="-mb-2 text-xl font-semibold">{t('Mau mengerjakan apa?')}</h1>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:gap-5">
-            <ModeCard
-              art={<BoardArt />}
-              icon={Briefcase}
-              title={t('Kelola Bisnis')}
-              sub={t('Booking klien di board dan kalender, paket, invoice, pesan WhatsApp, dan laporan keuangan.')}
-              tags={[t('Board'), t('Kalender'), t('Invoice')]}
-              onClick={() => go({ name: 'bisnis' })}
-            />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 lg:gap-5">
             <ModeCard
               highlight={dragging}
               preview="/home/pilih.jpg"
@@ -438,6 +425,10 @@ export function Home({ dragging }: { dragging: boolean }) {
             />
           </div>
 
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)] lg:gap-5">
+            <Recent />
+            <Today art={<BoardArt />} />
+          </div>
         </div>
       </main>
     </div>
