@@ -79,4 +79,14 @@ export default {
   'Booking klien, jadwal, invoice, dan pesan WhatsApp di satu tempat.': 'Client bookings, schedule, invoices and WhatsApp messages in one place.',
   'Tidak ada jadwal atau tagihan hari ini dan besok.': 'No shoots or payments due today or tomorrow.',
   '{picks} dipilih': '{picks} picked',
+
+  // Beranda cards
+  'Ratusan foto sesi dipilah otomatis jadi Pilih, Cek, dan Lewati.': 'Hundreds of session photos sorted into Pick, Check and Skip automatically.',
+  'Story dan feed Instagram dari template, langsung dari fotomu.': 'Instagram stories and feed posts from templates, straight from your photos.',
+  'Besok 08:00 · Akad': 'Tomorrow 08:00 · Ceremony',
+  '{n} Pilih': '{n} Pick',
+  '{n} Cek': '{n} Check',
+  '{n} Lewati': '{n} Skip',
+  'Kehangatan': 'Warmth',
+  'Akad nikah': 'Wedding ceremony',
 } as Record<string, string | [string, string]>;
