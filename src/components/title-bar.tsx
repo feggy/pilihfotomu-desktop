@@ -1,6 +1,7 @@
 import { House, Settings } from 'lucide-react';
 import type { ReactNode } from 'react';
 
+import { useUnsaved } from '../bisnis/unsaved';
 import { t } from '../lib/i18n';
 import { useApp } from '../store';
 import { cx } from './ui';
@@ -15,6 +16,8 @@ export const isMac = navigator.userAgent.includes('Mac');
 export function TitleBar({ title = 'pilihfotomu', right }: { title?: ReactNode; right?: ReactNode }) {
   const screen = useApp((s) => s.screen);
   const go = useApp((s) => s.go);
+  // Leaving Kelola Bisnis with changes not saved asks first, as its own back button does.
+  const guard = useUnsaved((s) => s.guard);
   return (
     <header
       data-tauri-drag-region
@@ -27,7 +30,7 @@ export function TitleBar({ title = 'pilihfotomu', right }: { title?: ReactNode; 
         {screen.name !== 'home' && screen.name !== 'progress' && (
           <button
             type="button"
-            onClick={() => go({ name: 'home' })}
+            onClick={() => guard(() => go({ name: 'home' }))}
             title={t('Beranda')}
             aria-label={t('Beranda')}
             className="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-faint hover:bg-raised hover:text-fg"
@@ -44,7 +47,7 @@ export function TitleBar({ title = 'pilihfotomu', right }: { title?: ReactNode; 
         {screen.name !== 'settings' && (
           <button
             type="button"
-            onClick={() => go({ name: 'settings', back: screen })}
+            onClick={() => guard(() => go({ name: 'settings', back: screen }))}
             title={`${t('Pengaturan')} (${isMac ? '⌘' : 'Ctrl+'},)`}
             aria-label={t('Pengaturan')}
             className="inline-flex size-7 items-center justify-center rounded-md text-faint hover:bg-raised hover:text-fg"
