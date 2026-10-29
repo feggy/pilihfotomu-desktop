@@ -56,7 +56,7 @@ export function undoable(text: string, change: (d: BisnisData) => BisnisData) {
 const hide = () => (window.clearTimeout(timer), useUndo.setState({ pending: null }));
 
 /** `now` with what changed from `before` to `after` put back as it was, each in its old place. */
-function revert<T extends Item>(now: T[], before: T[], after: T[]): T[] {
+export function revert<T extends Item>(now: T[], before: T[], after: T[]): T[] {
   if (before === after) return now;
   const was = new Map(before.map((x) => [x.id, x]));
   const became = new Map(after.map((x) => [x.id, x]));
