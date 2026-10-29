@@ -190,6 +190,7 @@ export function BisnisScreen({ open }: { open?: string }) {
           onClose={() => setViewing(null)}
           onEdit={() => setEditing(data?.bookings.find((b) => b.id === viewing) ?? null)}
           onReceipt={(paymentId) => setReceipt({ bookingId: viewing, paymentId })}
+          onMessage={(template) => setMessage({ bookingId: viewing, template })}
           actions={actions}
         />
       )}

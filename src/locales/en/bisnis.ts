@@ -426,4 +426,6 @@ export default {
   'Tambah {label}': 'Add {label}',
   'Ubah link': 'Change link',
   'Link Google Calendar jadwal': 'Google Calendar link for the session',
+  'Pembayaran tercatat. Kirim "{name}" ke klien?': 'Payment recorded. Send "{name}" to the client?',
+  'Kirim': 'Send',
 } as Record<string, string | [string, string]>;

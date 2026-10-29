@@ -6,7 +6,7 @@
  */
 
 import { openUrl } from '@tauri-apps/plugin-opener';
-import { AlertTriangle, ArrowRight, CalendarPlus, Link2, MapPin, Pencil, Phone, Plus, ReceiptText, X, Check, ChevronDown } from 'lucide-react';
+import { AlertTriangle, ArrowRight, CalendarPlus, Link2, MapPin, MessageCircle, Pencil, Phone, Plus, ReceiptText, X, Check, ChevronDown } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 
 import { DateInput, popoverJustClosed } from '../components/date-picker';
@@ -28,6 +28,7 @@ export function BookingDetail({
   onClose,
   onEdit,
   onReceipt,
+  onMessage,
   actions,
 }: {
   bookingId: string;
@@ -35,12 +36,15 @@ export function BookingDetail({
   onEdit: () => void;
   /** The kuitansi for one of its payments. */
   onReceipt: (paymentId: string) => void;
+  /** A WhatsApp message to its client, with this template. */
+  onMessage: (templateId: string) => void;
   actions: BookingAction[];
 }) {
   const data = useBisnis((s) => s.data)!;
   const update = useBisnis((s) => s.update);
   const b = data.bookings.find((x) => x.id === bookingId);
   const [paying, setPaying] = useState<{ date: string; amount: number; method: string } | null>(null);
+  const [offer, setOffer] = useState<string | null>(null);
   useEscape(onClose);
   if (!b) return null;
 
@@ -51,8 +55,13 @@ export function BookingDetail({
   const sessions = [...b.sessions].sort((x, y) => x.start.localeCompare(y.start));
   const savePayment = () => {
     if (!paying?.amount) return;
+    const before = payState(b);
+    const after = payState({ ...b, payments: [...b.payments, { id: '', date: paying.date, amount: paying.amount, method: paying.method, note: '' }] });
     update((d) => ({ ...d, bookings: d.bookings.map((x) => (x.id === b.id ? { ...x, payments: [...x.payments, { id: newId(), date: paying.date, amount: paying.amount, method: paying.method, note: x.payments.length ? '' : 'DP' }], updatedAt: Date.now() } : x)) }));
     setPaying(null);
+    // The message that payment calls for: paid in full, or the first one (the deposit) in.
+    const offer = after === 'lunas' && before !== 'lunas' ? 'lunas' : before === 'belum' ? 'konfirmasi' : null;
+    setOffer(offer && data.templates.some((x) => x.id === offer) ? offer : null);
   };
 
   return (
@@ -166,6 +175,19 @@ export function BookingDetail({
                     {t('Simpan pembayaran')}
                   </button>
                 </span>
+              </div>
+            ) : offer ? (
+              <div className="flex items-center gap-3 rounded-lg border border-gold/40 bg-bg px-3 py-2.5">
+                <Check size={14} className="shrink-0 text-pick" />
+                <span className="min-w-0 flex-1 text-xs text-muted">
+                  {t('Pembayaran tercatat. Kirim "{name}" ke klien?', { name: data.templates.find((x) => x.id === offer)?.name ?? '' })}
+                </span>
+                <button type="button" onClick={() => (onMessage(offer), setOffer(null))} className={cx(btnPrimary, 'h-8 shrink-0 px-3 text-xs')}>
+                  <MessageCircle size={13} /> {t('Kirim')}
+                </button>
+                <button type="button" onClick={() => setOffer(null)} aria-label={t('Nanti')} title={t('Nanti')} className="shrink-0 text-faint hover:text-fg">
+                  <X size={14} />
+                </button>
               </div>
             ) : (
               owed > 0 && (
