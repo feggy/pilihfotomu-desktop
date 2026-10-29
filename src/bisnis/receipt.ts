@@ -130,6 +130,14 @@ export function drawReceipt(canvas: HTMLCanvasElement, { data, booking: b, payme
   text(studio || ' ', sx + 130, boxY + 140, { size: 18, weight: 600, align: 'center' });
 }
 
+/** The receipt as a PNG picture, to send in a chat. */
+export async function receiptPng(input: ReceiptInput): Promise<Blob> {
+  await document.fonts.ready;
+  const canvas = document.createElement('canvas');
+  drawReceipt(canvas, input);
+  return new Promise<Blob>((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Kuitansi gagal dibuat'))), 'image/png'));
+}
+
 export async function receiptPdf(input: ReceiptInput): Promise<Uint8Array> {
   await document.fonts.ready;
   const canvas = document.createElement('canvas');

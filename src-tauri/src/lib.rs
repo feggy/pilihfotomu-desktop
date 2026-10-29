@@ -939,7 +939,7 @@ fn save_bisnis(app: AppHandle, json: String) -> CmdResult<()> {
 }
 
 /// Kinds of file the UI may write where the person chose (a save dialog, a backup folder).
-const USER_FILE_KINDS: &[&str] = &["pdf", "csv", "json", "ics"];
+const USER_FILE_KINDS: &[&str] = &["pdf", "csv", "json", "ics", "png"];
 
 fn user_file(path: &str) -> CmdResult<PathBuf> {
     let p = PathBuf::from(path);

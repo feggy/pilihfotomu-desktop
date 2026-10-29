@@ -162,6 +162,14 @@ export function drawInvoice(canvas: HTMLCanvasElement, { data, booking: b, clien
   text(`Dibuat ${longDate(issued)}`, W - M, H - 56, { size: 16, color: SOFT, align: 'right' });
 }
 
+/** The invoice as a PNG picture, to send in a chat. */
+export async function invoicePng(input: InvoiceInput): Promise<Blob> {
+  await document.fonts.ready;
+  const canvas = document.createElement('canvas');
+  drawInvoice(canvas, input);
+  return new Promise<Blob>((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Invoice gagal dibuat'))), 'image/png'));
+}
+
 /** The invoice as PDF bytes (one A4 page). */
 export async function invoicePdf(input: InvoiceInput): Promise<Uint8Array> {
   await document.fonts.ready;

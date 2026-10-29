@@ -18,6 +18,7 @@ export const DEFAULT_COLUMNS: Column[] = [
   { id: 'batal', name: 'Batal', color: '#c96a6a', inactive: true },
 ];
 
+/** The built-in templates: one for each default stage, plus the pricelist and the balance reminder. */
 export const DEFAULT_TEMPLATES: MessageTemplate[] = [
   {
     id: 'pricelist',
@@ -25,26 +26,56 @@ export const DEFAULT_TEMPLATES: MessageTemplate[] = [
     body: 'Halo {nama}, terima kasih sudah menghubungi {studio}. Ini pilihan paket kami:\n\n{pricelist}\n\nTanggal yang diinginkan kapan? Kami cek jadwalnya dulu ya.',
   },
   {
-    id: 'konfirmasi',
-    name: 'Konfirmasi booking',
-    body: 'Halo {nama}, booking {paket} sudah kami catat untuk {jadwal}.\n\nTotal: {total}\nDP untuk mengunci tanggal: {dp_minimal}\n\nPembayaran ke:\n{rekening}\n\nTerima kasih!',
+    id: 'follow-up',
+    name: 'Follow up',
+    columnId: 'tanya',
+    body: 'Halo {nama}, mau follow up soal {paket} untuk {tanggal}. Tanggalnya masih kami tahan sementara; DP {dp_minimal} untuk mengunci jadwal.\n\nPembayaran ke:\n{rekening}\n\nKabari kami ya. Terima kasih!',
   },
   {
-    id: 'tagihan',
-    name: 'Tagihan pelunasan',
-    body: 'Halo {nama}, mengingatkan sisa pembayaran {paket} sebesar {sisa}, paling lambat {jatuh_tempo}.\n\nPembayaran ke:\n{rekening}\n\nTerima kasih!',
+    id: 'konfirmasi',
+    name: 'Konfirmasi booking',
+    attach: 'invoice',
+    body: 'Halo {nama}, booking {paket} sudah kami catat untuk {jadwal}.\n\nTotal: {total}\nDP untuk mengunci tanggal: {dp_minimal}\n\nPembayaran ke:\n{rekening}\n\nInvoice terlampir. Terima kasih!',
+  },
+  {
+    id: 'dp-diterima',
+    name: 'DP diterima',
+    columnId: 'dp',
+    attach: 'kuitansi',
+    body: 'Halo {nama}, DP untuk {paket} sudah kami terima, terima kasih! Jadwal {jadwal} sudah terkunci.\n\nSudah dibayar: {terbayar}\nSisa: {sisa}, paling lambat {jatuh_tempo}.\n\nKuitansi terlampir.',
   },
   {
     id: 'pengingat',
     name: 'Pengingat jadwal',
+    columnId: 'jadwal',
     body: 'Halo {nama}, mengingatkan jadwal foto {jadwal}. Sampai jumpa!',
+  },
+  {
+    id: 'sedang-diedit',
+    name: 'Foto sedang diedit',
+    columnId: 'edit',
+    body: 'Halo {nama}, terima kasih untuk sesi fotonya! Foto sedang kami pilih dan edit. Kami kabari begitu hasilnya siap ya.',
+  },
+  {
+    id: 'hasil-siap',
+    name: 'Hasil siap',
+    columnId: 'kirim',
+    body: 'Halo {nama}, hasil foto {paket} sudah siap! Ini link-nya:\n\n\nSilakan diunduh dan disimpan. Kalau ada yang perlu ditanyakan, kabari kami ya.',
+  },
+  {
+    id: 'tagihan',
+    name: 'Tagihan pelunasan',
+    attach: 'invoice',
+    body: 'Halo {nama}, mengingatkan sisa pembayaran {paket} sebesar {sisa}, paling lambat {jatuh_tempo}.\n\nPembayaran ke:\n{rekening}\n\nInvoice terlampir. Terima kasih!',
   },
   {
     id: 'terima-kasih',
     name: 'Terima kasih',
+    columnId: 'selesai',
     body: 'Halo {nama}, terima kasih sudah mempercayakan momennya ke {studio}. Semoga suka dengan hasilnya!',
   },
 ];
+const TEMPLATES_VERSION = 2;
 
 export const DEFAULT_EXPENSE_CATEGORIES = ['Transport', 'Sewa alat', 'Freelancer', 'Cetak & album', 'Makan', 'Iklan', 'Lainnya'];
 
@@ -59,6 +90,7 @@ export function emptyData(): BisnisData {
     blocked: [],
     expenses: [],
     templates: DEFAULT_TEMPLATES,
+    templatesVersion: TEMPLATES_VERSION,
     expenseCategories: DEFAULT_EXPENSE_CATEGORIES,
     dismissed: [],
     notified: [],
@@ -88,7 +120,19 @@ export function fromJson(json: string): BisnisData {
   const raw = JSON.parse(json) as Partial<BisnisData>;
   if (!raw || typeof raw !== 'object' || !Array.isArray(raw.bookings)) throw new Error('Bukan data Kelola Bisnis.');
   const base = emptyData();
-  return { ...base, ...raw, v: DATA_VERSION, settings: { ...base.settings, ...raw.settings } };
+  const data: BisnisData = { ...base, ...raw, v: DATA_VERSION, settings: { ...base.settings, ...raw.settings } };
+  // Data from before the stage templates: they are added, and the built-in ones it kept get their stage and picture.
+  if ((data.templatesVersion ?? 1) < TEMPLATES_VERSION) {
+    const builtIn = new Map(DEFAULT_TEMPLATES.map((x) => [x.id, x]));
+    const kept = data.templates.map((x) => {
+      const d = builtIn.get(x.id);
+      return d ? { ...x, columnId: x.columnId ?? d.columnId, attach: x.attach ?? d.attach } : x;
+    });
+    const added = DEFAULT_TEMPLATES.filter((x) => !kept.some((y) => y.id === x.id) && ['follow-up', 'dp-diterima', 'sedang-diedit', 'hasil-siap'].includes(x.id));
+    data.templates = [...kept, ...added];
+    data.templatesVersion = TEMPLATES_VERSION;
+  }
+  return data;
 }
 
 // ── Money ────────────────────────────────────────────────────────

@@ -138,7 +138,7 @@ export function Overview({
           tone: 'info',
           order: 5,
           acts: [
-            { label: t('Tanya kabar'), icon: <MessageCircle size={13} />, run: () => onMessage(b.id, 'konfirmasi'), primary: true },
+            { label: t('Tanya kabar'), icon: <MessageCircle size={13} />, run: () => onMessage(b.id, 'follow-up'), primary: true },
             { label: t('Catat DP'), icon: <Wallet size={13} />, run: () => onOpen(b) },
           ],
         });

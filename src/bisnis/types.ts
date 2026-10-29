@@ -125,6 +125,10 @@ export interface MessageTemplate {
   name: string;
   /** With {nama}, {paket}, {tanggal}… filled in when sent. */
   body: string;
+  /** The board stage it is for: picked first when messaging a booking in that column. */
+  columnId?: string;
+  /** A picture to go with it (WhatsApp links carry text only: copied, to paste in the chat). */
+  attach?: 'invoice' | 'kuitansi';
 }
 
 export interface BisnisSettings {
@@ -170,6 +174,8 @@ export interface BisnisData {
   settings: BisnisSettings;
   /** Reminders put away by hand (`Reminder.key`). */
   dismissed: string[];
+  /** Which set of built-in templates the data has had added (stage templates came with 2). */
+  templatesVersion?: number;
   /** Reminders already shown as a system notification, so a restart doesn't repeat them. */
   notified: string[];
 }

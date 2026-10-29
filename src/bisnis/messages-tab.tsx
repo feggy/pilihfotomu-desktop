@@ -14,6 +14,7 @@ import { useBrand } from '../kreasi/brand';
 import { VARIABLES, fillTemplate, pricelistText, waLink, waNumber } from './messages';
 import { DEFAULT_TEMPLATES, newId } from './model';
 import { useBisnis } from './store';
+import type { MessageTemplate } from './types';
 import { Field, SectionTitle, btnGhost, btnPrimary, inputCls } from './ui';
 import { SaveBar, useDirty, useUnsaved } from './unsaved';
 
@@ -23,15 +24,18 @@ export function MessagesTab() {
   const studio = useBrand((s) => s.studio);
   const [picked, setPicked] = useState(data.templates[0]?.id ?? '');
   const tpl = data.templates.find((x) => x.id === picked) ?? data.templates[0];
-  const setTpl = (patch: { name?: string; body?: string }) => tpl && update((d) => ({ ...d, templates: d.templates.map((x) => (x.id === tpl.id ? { ...x, ...patch } : x)) }));
+  const setTpl = (patch: Partial<MessageTemplate>) => tpl && update((d) => ({ ...d, templates: d.templates.map((x) => (x.id === tpl.id ? { ...x, ...patch } : x)) }));
   // Filled from the newest booking, so the preview reads like a real message.
   const sample = [...data.bookings].sort((a, b) => b.updatedAt - a.updatedAt)[0] ?? null;
 
   // The template is edited as a copy, kept by Simpan perubahan; going to another one first asks.
   const [name, setName] = useState(tpl?.name ?? '');
   const [body, setBody] = useState(tpl?.body ?? '');
-  useEffect(() => (setName(tpl?.name ?? ''), setBody(tpl?.body ?? '')), [tpl?.id]);
-  const dirty = !!tpl && (name !== tpl.name || body !== tpl.body);
+  const [stage, setStage] = useState(tpl?.columnId ?? '');
+  const [attach, setAttach] = useState<'' | 'invoice' | 'kuitansi'>(tpl?.attach ?? '');
+  const reset = () => (setName(tpl?.name ?? ''), setBody(tpl?.body ?? ''), setStage(tpl?.columnId ?? ''), setAttach(tpl?.attach ?? ''));
+  useEffect(reset, [tpl?.id]);
+  const dirty = !!tpl && (name !== tpl.name || body !== tpl.body || stage !== (tpl.columnId ?? '') || attach !== (tpl.attach ?? ''));
   useDirty(dirty);
   const guard = useUnsaved((s) => s.guard);
   const area = useRef<HTMLTextAreaElement>(null);
@@ -79,8 +83,14 @@ export function MessagesTab() {
           <div className="grid min-h-[420px] grid-cols-[220px_1fr_1fr] gap-4">
             <nav className="flex flex-col gap-1">
               {data.templates.map((x) => (
-                <button key={x.id} type="button" onClick={() => x.id !== tpl?.id && guard(() => setPicked(x.id))} className={cx('truncate rounded-lg px-3 py-2 text-left text-[13px]', x.id === tpl?.id ? 'bg-raised font-semibold text-fg ring-1 ring-gold' : 'text-muted hover:bg-panel hover:text-fg')}>
-                  {x.name}
+                <button key={x.id} type="button" onClick={() => x.id !== tpl?.id && guard(() => setPicked(x.id))} className={cx('flex flex-col rounded-lg px-3 py-2 text-left text-[13px]', x.id === tpl?.id ? 'bg-raised font-semibold text-fg ring-1 ring-gold' : 'text-muted hover:bg-panel hover:text-fg')}>
+                  <span className="truncate">{x.name}</span>
+                  {x.columnId && (
+                    <span className="flex items-center gap-1.5 truncate text-[11px] font-normal text-faint">
+                      <span className="size-1.5 shrink-0 rounded-full" style={{ background: data.columns.find((c) => c.id === x.columnId)?.color }} />
+                      {data.columns.find((c) => c.id === x.columnId)?.name}
+                    </span>
+                  )}
                 </button>
               ))}
             </nav>
@@ -106,7 +116,26 @@ export function MessagesTab() {
                     ))}
                   </div>
                   <span className="text-[11px] text-faint">{t('Klik isian untuk menaruhnya di posisi kursor. *teks* jadi tebal di WhatsApp.')}</span>
-                  {dirty && <SaveBar onSave={() => setTpl({ name: name.trim() || tpl.name, body })} onCancel={() => (setName(tpl.name), setBody(tpl.body))} />}
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label={t('Untuk tahap')} hint={t('Terpilih otomatis saat mengirim pesan ke booking di tahap ini.')}>
+                      <select value={stage} onChange={(e) => setStage(e.target.value)} className={inputCls}>
+                        <option value="">{t('Semua tahap')}</option>
+                        {data.columns.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                    <Field label={t('Lampiran gambar')}>
+                      <select value={attach} onChange={(e) => setAttach(e.target.value as '' | 'invoice' | 'kuitansi')} className={inputCls}>
+                        <option value="">{t('Tidak ada')}</option>
+                        <option value="invoice">{t('Invoice')}</option>
+                        <option value="kuitansi">{t('Kuitansi pembayaran terakhir')}</option>
+                      </select>
+                    </Field>
+                  </div>
+                  {dirty && <SaveBar onSave={() => setTpl({ name: name.trim() || tpl.name, body, columnId: stage || undefined, attach: attach || undefined })} onCancel={reset} />}
                 </div>
                 <div className="flex flex-col gap-2">
                   <span className="text-[11px] font-medium text-muted">{sample ? t('Pratinjau dengan booking terakhir') : t('Pratinjau')}</span>

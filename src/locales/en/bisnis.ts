@@ -396,4 +396,19 @@ export default {
   'Kontak studio': 'Studio contact',
   'Di bawah nama studio pada invoice dan kuitansi.': 'Under the studio name on invoices and receipts.',
   'Berikutnya: {step}': 'Next: {step}',
+
+  // Stage templates and pictures
+  'Salin teks': 'Copy text',
+  'Salin gambar & buka WhatsApp': 'Copy picture & open WhatsApp',
+  'Gambar invoice': 'Invoice picture',
+  'Gambar kuitansi pembayaran terakhir': 'Picture of the latest payment’s receipt',
+  'Belum ada pembayaran tercatat, jadi belum ada kuitansi.': 'No payment recorded yet, so there’s no receipt.',
+  'Gambar tersalin. Di chat WhatsApp, tekan ⌘V untuk menempelkannya.': 'Picture copied. In the WhatsApp chat, press ⌘V to paste it.',
+  'Link WhatsApp hanya membawa teks: gambarnya disalin saat WhatsApp dibuka, lalu tempel di chat dengan ⌘V.': 'WhatsApp links carry text only: the picture is copied as WhatsApp opens; paste it in the chat with ⌘V.',
+  'Simpan gambar…': 'Save picture…',
+  'Simpan gambar': 'Save picture',
+  'Untuk tahap': 'For stage',
+  'Terpilih otomatis saat mengirim pesan ke booking di tahap ini.': 'Picked automatically when messaging a booking at this stage.',
+  'Lampiran gambar': 'Picture attachment',
+  'Kuitansi pembayaran terakhir': 'Latest payment’s receipt',
 } as Record<string, string | [string, string]>;
