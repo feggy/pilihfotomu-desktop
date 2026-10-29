@@ -5,7 +5,8 @@
  * silently or keeping them unasked.
  */
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { create } from 'zustand';
 
 import { t } from '../lib/i18n';
@@ -36,19 +37,40 @@ export function useDirty(dirty: boolean) {
   useEffect(() => () => useUnsaved.getState().setDirty(false), []);
 }
 
-/** The bar at the foot of a form with changes: Batal throws them away, Simpan keeps them. */
+/**
+ * The bar for a form with changes, floating at the foot of the window
+ * (wherever the form is scrolled to): Batal throws them away, Simpan — or
+ * ⌘S — keeps them.
+ */
 export function SaveBar({ onSave, onCancel }: { onSave: () => void; onCancel: () => void }) {
-  return (
-    <div className="sticky bottom-0 z-10 -mx-1 mt-2 flex items-center gap-3 rounded-xl border border-gold/50 bg-panel-2 px-4 py-2.5 shadow-2xl">
-      <span className="size-2 shrink-0 rounded-full bg-gold" />
-      <span className="min-w-0 flex-1 text-xs text-muted">{t('Ada perubahan yang belum disimpan.')}</span>
-      <button type="button" onClick={onCancel} className={btnPlain}>
-        {t('Batal')}
-      </button>
-      <button type="button" onClick={onSave} className={btnPrimary}>
-        {t('Simpan perubahan')}
-      </button>
-    </div>
+  const save = useRef(onSave);
+  save.current = onSave;
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        (document.activeElement as HTMLElement | null)?.blur?.();
+        // After the blur, so a field that saves on leaving is in.
+        requestAnimationFrame(() => save.current());
+      }
+    };
+    window.addEventListener('keydown', key);
+    return () => window.removeEventListener('keydown', key);
+  }, []);
+  return createPortal(
+    <div className="pointer-events-none fixed inset-x-0 bottom-6 z-40 flex justify-center px-6">
+      <div className="pointer-events-auto flex animate-[saveBarIn_160ms_ease-out] items-center gap-3 rounded-2xl border border-gold/60 bg-panel-2 py-2.5 pr-2.5 pl-4 shadow-[0_12px_40px_rgb(0_0_0/0.55)]">
+        <span className="size-2 shrink-0 rounded-full bg-gold" />
+        <span className="text-[13px] whitespace-nowrap text-fg">{t('Ada perubahan yang belum disimpan.')}</span>
+        <button type="button" onClick={onCancel} className={btnPlain}>
+          {t('Batal')}
+        </button>
+        <button type="button" onClick={onSave} title="⌘S" className={btnPrimary}>
+          {t('Simpan perubahan')}
+        </button>
+      </div>
+    </div>,
+    document.body,
   );
 }
 

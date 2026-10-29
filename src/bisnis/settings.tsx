@@ -72,7 +72,7 @@ export function Settings({ sections }: { sections?: ReactNode }) {
   const setSettings = (patch: Partial<BisnisSettings>) => setDraft((d) => ({ ...d, settings: { ...d.settings, ...patch } }));
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 pt-4 pb-10 lg:px-8">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 pt-4 pb-28 lg:px-8">
       <div className="mx-auto flex w-full max-w-[720px] flex-col gap-8">
         <section className="flex flex-col gap-3">
           <SectionTitle

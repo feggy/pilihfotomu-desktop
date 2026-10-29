@@ -153,3 +153,11 @@ select:focus-visible,
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+/* Kelola Bisnis: the unsaved-changes bar rising into view. */
+@keyframes saveBarIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
