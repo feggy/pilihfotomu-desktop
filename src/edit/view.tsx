@@ -293,7 +293,20 @@ export function EditView({
     scaleRef.current = v;
     setScale(v);
   };
+  // A glide or pinch keeps its on-screen scale until the new size is laid out
+  // (here, before the browser paints): dropped earlier, the photo would show
+  // a frame at its old size — a flicker as the zoom lands.
+  const held = useRef(false);
+  const unhold = () => {
+    const box = photoBox.current;
+    held.current = false;
+    if (!box) return;
+    box.style.transition = '';
+    box.style.transform = '';
+    box.style.willChange = '';
+  };
   useLayoutEffect(() => {
+    if (held.current) unhold();
     const a = anchor.current;
     const el = scroller.current;
     const r = photoBox.current?.getBoundingClientRect();
@@ -302,6 +315,10 @@ export function EditView({
     el.scrollTop += r.top + a.fy * r.height - a.cy;
     anchor.current = null;
   }, [fit?.w, fit?.h]);
+  // A new scale that rounds to the same size lays nothing out: let go of the hold anyway.
+  useLayoutEffect(() => {
+    if (held.current) unhold();
+  }, [scale]);
 
   /**
    * A click or Z: the zoom glides there (scaled on screen, as a pinch is),
@@ -331,9 +348,8 @@ export function EditView({
     box.style.transition = `transform ${GLIDE_MS}ms cubic-bezier(0.2, 0.7, 0.2, 1)`;
     box.style.transform = `translate(${left - r.left}px, ${top - r.top}px) scale(${k})`;
     gliding.current = window.setTimeout(() => {
-      box.style.transition = '';
-      box.style.transform = '';
-      box.style.willChange = '';
+      if (Math.abs(to - scaleRef.current) < 1e-6) return unhold();
+      held.current = true;
       anchor.current = { fx: 0, fy: 0, cx: left, cy: top };
       scaleRef.current = to;
       setScale(to);
@@ -374,9 +390,9 @@ export function EditView({
     live.current = null;
     if (!g || !box) return;
     // The point pinched stays where it was on the photo as drawn before.
+    if (Math.abs(g.to - scaleRef.current) < 1e-6) return unhold();
     anchor.current = { fx: (g.cx - g.rect.left) / g.rect.width, fy: (g.cy - g.rect.top) / g.rect.height, cx: g.cx, cy: g.cy };
-    box.style.transform = '';
-    box.style.willChange = '';
+    held.current = true;
     scaleRef.current = g.to;
     setScale(g.to);
   };
