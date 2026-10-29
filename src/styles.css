@@ -48,6 +48,14 @@
   /* Edit foto's crop handles: they sit half on the photo, half on the ground. */
   --handle: #ffffff;
   --handle-edge: rgb(0 0 0 / 0.9);
+  /* Edit foto's histogram (edit/view.tsx). */
+  --hist-ground: #0c110f;
+  --hist-foot: #161d1a;
+  --hist-line: #2a3530;
+  --hist-text: #a9b5af;
+  --hist-r: rgb(205 70 72);
+  --hist-g: rgb(70 172 92);
+  --hist-b: rgb(72 108 226);
 }
 
 /* Warm paper and white panels. Gold and the marks are deep enough to read as
@@ -69,6 +77,13 @@
   --color-ink: #ffffff;
   --handle: #16201b;
   --handle-edge: rgb(255 255 255 / 0.95);
+  --hist-ground: #f7f5f0;
+  --hist-foot: #ebe7df;
+  --hist-line: #d6d0c4;
+  --hist-text: #4f5d56;
+  --hist-r: rgb(236 128 128);
+  --hist-g: rgb(128 204 142);
+  --hist-b: rgb(132 160 242);
 
   --color-pick: #1f8a53;
   --color-maybe: #a87a0c;

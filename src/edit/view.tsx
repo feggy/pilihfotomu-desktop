@@ -877,11 +877,14 @@ function shutter(s: number) {
 }
 
 /**
- * The histogram as Lightroom shows it: on its own dark ground in both
- * themes, the three channels added up like light (where all three meet it
- * turns grey-white), and the shot's ISO, focal length, aperture and shutter
- * underneath.
+ * The histogram as Lightroom shows it, with the shot's ISO, focal length,
+ * aperture and shutter underneath. On the dark theme the channels are added
+ * up like light on a dark ground (where all three meet: grey-white); on the
+ * light theme they are laid over like ink on a light one (there: grey).
+ * Colors in styles.css (--hist-*).
  */
+const BLEND = 'mix-blend-screen in-data-[theme=light]:mix-blend-multiply';
+
 export function HistogramView({ h, root, photoId }: { h: Histogram | null; root?: string; photoId?: number }) {
   const W = 256;
   const H = 64;
@@ -902,17 +905,17 @@ export function HistogramView({ h, root, photoId }: { h: Histogram | null; root?
     shot.exposure ? shutter(shot.exposure) : '',
   ];
   return (
-    <div className="flex shrink-0 flex-col overflow-hidden rounded-md border border-[#2a3530] bg-[#161d1a]">
-      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="block h-[84px] w-full bg-[#0c110f]">
+    <div className="flex shrink-0 flex-col overflow-hidden rounded-md border border-[var(--hist-line)] bg-[var(--hist-foot)]">
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="block h-[84px] w-full bg-[var(--hist-ground)]">
         {h && (
           <g className="isolate">
-            <path d={path(h[0])} fill="rgb(205 70 72)" className="mix-blend-screen" />
-            <path d={path(h[1])} fill="rgb(70 172 92)" className="mix-blend-screen" />
-            <path d={path(h[2])} fill="rgb(72 108 226)" className="mix-blend-screen" />
+            {(['--hist-r', '--hist-g', '--hist-b'] as const).map((c, i) => (
+              <path key={c} d={path(h[i as 0 | 1 | 2])} fill={`var(${c})`} className={BLEND} />
+            ))}
           </g>
         )}
       </svg>
-      <span className="flex h-6 items-center justify-between px-2 text-[10px] text-[#a9b5af] tabular-nums">
+      <span className="flex h-6 items-center justify-between px-2 text-[10px] text-[var(--hist-text)] tabular-nums">
         {facts?.some(Boolean) ? facts.map((f, i) => <span key={i}>{f}</span>) : <span>&nbsp;</span>}
       </span>
     </div>

@@ -6,10 +6,10 @@
  * drag inside to move it, drag outside it to turn the photo.
  */
 
-import { FlipHorizontal2, FlipVertical2, Lock, LockOpen, RotateCcw, RotateCw, Ruler, Wand2 } from 'lucide-react';
+import { FlipHorizontal2, FlipVertical2, Lock, LockOpen, RotateCcw, RotateCw, Wand2 } from 'lucide-react';
 
 import { Select } from '../components/select';
-import { Button, cx } from '../components/ui';
+import { Button, Kbd, cx } from '../components/ui';
 import { num } from '../lib/format';
 import { t } from '../lib/i18n';
 import { Slider } from './panels';
@@ -94,9 +94,27 @@ export function CropPanel({
             {locked ? <Lock size={14} /> : <LockOpen size={14} />}
           </button>
         </div>
-        <button type="button" onClick={onSwap} disabled={!locked || ratioId === '1:1'} className="self-start pl-16 text-[11px] text-faint hover:text-fg disabled:opacity-40">
-          {portrait ? t('Tegak') : t('Datar')} · {t('tekan X untuk tukar tegak/datar')}
-        </button>
+        <div className="flex items-center gap-2">
+          <span className="w-14 shrink-0 text-xs text-muted">{t('Arah##crop')}</span>
+          <div role="radiogroup" aria-label={t('Arah##crop')} className="flex flex-1 rounded-md border border-line p-0.5">
+            {([false, true] as const).map((stand) => (
+              <button
+                key={String(stand)}
+                type="button"
+                role="radio"
+                aria-checked={portrait === stand}
+                onClick={() => portrait !== stand && onSwap()}
+                disabled={!locked || ratioId === '1:1'}
+                className={cx('h-6 flex-1 rounded text-xs disabled:opacity-40', portrait === stand ? 'bg-raised font-semibold text-fg' : 'text-muted hover:text-fg')}
+              >
+                {stand ? t('Tegak') : t('Datar')}
+              </button>
+            ))}
+          </div>
+          <span title={t('tekan X untuk tukar tegak/datar')}>
+            <Kbd>X</Kbd>
+          </span>
+        </div>
       </ToolRow>
 
       <ToolRow>
@@ -108,7 +126,7 @@ export function CropPanel({
             aria-pressed={leveling}
             className={cx('flex size-8 items-center justify-center rounded-md', leveling ? 'bg-gold/15 text-gold-text ring-1 ring-gold' : 'text-muted hover:bg-raised hover:text-fg')}
           >
-            <Ruler size={15} />
+            <LevelIcon />
           </button>
           <span className="flex-1 text-xs text-muted">{t('Luruskan')}</span>
           <Button icon={Wand2} onClick={onAuto} title={t('Luruskan otomatis dari garis cakrawala atau bangunan')}>
@@ -384,4 +402,15 @@ export function autoUpright(img: HTMLImageElement | HTMLCanvasElement, g: Geomet
     return pick;
   };
   return { vertical: best(slope(ups), 'v'), horizontal: best(slope(levels), 'h') };
+}
+
+/** Lightroom's straighten tool: a spirit level, its bubble in the middle, in a dashed ring. */
+function LevelIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden>
+      <circle cx="12" cy="12" r="10" strokeDasharray="2 2.6" />
+      <rect x="3.5" y="9.5" width="17" height="5" rx="1" />
+      <rect x="9.5" y="10.75" width="5" height="2.5" rx="1.25" fill="currentColor" stroke="none" />
+    </svg>
+  );
 }
