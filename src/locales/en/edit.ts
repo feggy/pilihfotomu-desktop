@@ -326,4 +326,5 @@ export default {
   'Batal': 'Cancel',
   'Hapus##heal': 'Remove',
   'Tahan Alt sambil menyapu untuk sebaliknya': 'Hold Alt while brushing for the opposite',
+  'Mengisi dengan AI…': 'Filling with AI…',
 } as Record<string, string | [string, string]>;

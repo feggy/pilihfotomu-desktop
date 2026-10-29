@@ -1,6 +1,7 @@
 pub mod analyze;
 mod client_picks;
 mod errlog;
+mod inpaint_ai;
 pub mod cull;
 pub mod cutout;
 pub mod denoise;
@@ -1104,6 +1105,23 @@ async fn cutout_mask(request: tauri::ipc::Request<'_>) -> CmdResult<tauri::ipc::
     Ok(tauri::ipc::Response::new(alpha))
 }
 
+/// Edit foto › Hapus objek: a 512 × 512 part of the photo (RGB) followed by
+/// its mask (one byte a pixel, not 0 = fill), as the raw body; the part
+/// filled in comes back (`inpaint_ai.rs`).
+#[tauri::command]
+async fn inpaint_ai(request: tauri::ipc::Request<'_>) -> CmdResult<tauri::ipc::Response> {
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+        return Err("Data gambar tidak terbaca.".into());
+    };
+    let n = inpaint_ai::SIDE * inpaint_ai::SIDE;
+    if bytes.len() != n * 4 {
+        return Err("Data gambar tidak terbaca.".into());
+    }
+    let data = bytes.clone();
+    let out = tauri::async_runtime::spawn_blocking(move || inpaint_ai::fill(&data[..n * 3], &data[n * 3..])).await.map_err(|e| e.to_string())??;
+    Ok(tauri::ipc::Response::new(out))
+}
+
 /// The bytes come as the raw request body; root, folder and file name as
 /// URI-encoded headers. Never overwrites: a name already taken gets " (2)".
 #[tauri::command]
@@ -1224,6 +1242,7 @@ pub fn run() {
             open_files,
             add_files,
             cutout_mask,
+            inpaint_ai,
             save_asset,
             load_asset,
             list_uploads,

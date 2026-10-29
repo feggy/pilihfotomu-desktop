@@ -17,6 +17,7 @@ memperbarui checksum di sini.
 | `esrgan_x4v3.onnx` | `realesr-general-x4v3.pth` dari [Real-ESRGAN v0.2.5.0](https://github.com/xinntao/Real-ESRGAN/releases/tag/v0.2.5.0) (Xintao Wang dkk., sha256 pth `8dc7edb9…6292`), SRVGGNetCompact diekspor `torch.onnx` opset 13 (selisih dengan PyTorch < 1e-5) | BSD-3-Clause | `19780c61e2679c3259abbcf55ef279aff4f9d037d00509bc3b4328a709528820` |
 | `depth_anything_v2_small_f16.onnx` | lihat di bawah | Apache-2.0 | `285c12d0e9188bf3d1758a14260a69ace314cdb454de4c1fc9363906d7f76cab` |
 | `face_landmarks.onnx` | [fernandotonon/QtMeshEditor-facemesh-onnx](https://huggingface.co/fernandotonon/QtMeshEditor-facemesh-onnx) — konversi ONNX dari MediaPipe Face Mesh V2 (Google) | Apache-2.0 | `d16e5a55e6a480284d468ee32469692464049518c311662ab3956681de31e3e9` |
+| `migan_512_places2.onnx` | `migan.onnx` dari [andraniksargsyan/migan](https://huggingface.co/andraniksargsyan/migan) — MI-GAN-512-Places2 resmi [Picsart AI Research](https://github.com/Picsart-AI-Research/MI-GAN) | MIT (kode dan bobot) — `LICENSE-migan.txt` | `593eba0b7e04730f1b61c0a3cbca68d97d8d6a7ff5c6a44a7b9d7fcd880fc5ae` |
 
 `face_landmarks.onnx` adalah konversi pihak ketiga, bukan rilisan resmi
 Google. Sebelum dijual, pertimbangkan mengonversi sendiri dari
@@ -74,3 +75,12 @@ bisa menyatukan `batch_size` simbolik), lalu bobot disimpan float16 dengan
 `scripts/onnx-fp16-weights.py`. Input `[1, 3, h, w]` (sisi kelipatan 14, sisi
 panjang 518) dinormalisasi ImageNet; output kedalaman relatif `[1, h, w]`.
 Versi Base/Large tidak dipakai: lisensinya CC-BY-NC.
+
+`migan_512_places2.onnx` (Edit foto › Hapus objek, `src/inpaint_ai.rs`):
+input `image [1, 3, 512, 512]` RGB uint8 dan `mask [1, 1, 512, 512]` uint8
+(255 = dipertahankan, 0 = diisi), output `[1, 3, 512, 512]` RGB uint8. Bukan
+`migan_pipeline_v2.onnx` dari repo yang sama: pra-prosesnya (NonZero, potong
+otomatis) tidak bisa diketik tract. `heal.tsx` memotong area di sekitar tanda
+(sekitar 2,4 × ukurannya) ke 512, lalu memadukan hasilnya kembali; PatchMatch
+tetap dipakai sementara dan bila model gagal. Sekitar 0,8 detik per bagian di
+CPU (M-series, profil optimized).

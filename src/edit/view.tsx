@@ -22,6 +22,7 @@ import { EYEDROPPER } from './cursors';
 import { depthOf, type DepthMap } from './lens-blur';
 import { shotLens, type ShotLens } from './lens-profile';
 import { cleanedImage, prepared } from './source';
+import { healingNow, onHealing } from './heal';
 import { NO_GEOMETRY, coverScale, cropFromView, cropToView, drawGeometry, frameSize, outputSize, type EditSettings, type Geometry } from './geometry';
 
 export type ViewMode = 'after' | 'split' | 'before';
@@ -216,6 +217,11 @@ export function EditView({
     };
   }, [denoising, bigClean, root, id]);
 
+  // Hapus objek's AI fill arrives after the quick one: drawn again then, and said while it works.
+  const [healTick, setHealTick] = useState(0);
+  const [healing, setHealing] = useState(0);
+  useEffect(() => onHealing(() => (setHealTick((n) => n + 1), setHealing(healingNow()))), []);
+
   // Lens Blur's depth, read once it is used.
   const [depth, setDepth] = useState<DepthMap | null>(null);
   const blurring = (settings?.lensBlur?.amount ?? 0) > 0;
@@ -274,7 +280,7 @@ export function EditView({
       draw(img);
       ctx.restore();
     }
-  }, [pic, clean, depth, settings, mode, split, moving, cropping, masking, fit?.w, fit?.h, backing]);
+  }, [pic, clean, depth, settings, mode, split, moving, cropping, masking, fit?.w, fit?.h, backing, healTick]);
 
   // Zooming keeps the point under the pointer (or fingers) where it is.
   const scroller = useRef<HTMLDivElement>(null);
@@ -633,6 +639,7 @@ export function EditView({
       )}
       </div>
       {needFull && !full && <span className={cx(label, 'left-3 animate-pulse')}>{t('Membaca foto ukuran penuh…')}</span>}
+      {healing > 0 && !(needFull && !full) && <span className={cx(label, 'left-3 animate-pulse')}>{t('Mengisi dengan AI…')}</span>}
       {zoomed && pic === full && fit && <span className={cx(label, 'right-3')}>{Math.round((fit.w * dpr * 100) / shown.w)}%</span>}
     </div>
   );

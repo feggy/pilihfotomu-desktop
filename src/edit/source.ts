@@ -7,7 +7,7 @@
 import { convertFileSrc } from '@tauri-apps/api/core';
 
 import { api } from '../lib/api';
-import { healed } from './heal';
+import { healReady, healed } from './heal';
 import { lensBlurred, type DepthMap } from './lens-blur';
 import { devignetted, undistorted, withoutFringes } from './lens-profile';
 import type { EditSettings } from './geometry';
@@ -45,19 +45,8 @@ export function cleanedImage(root: string, id: number, full: boolean, onProgress
 
 const mixes = new WeakMap<object, { clean: object; amount: number; canvas: HTMLCanvasElement }>();
 
-/**
- * `img` (`w` × `h`) with the cleaned copy at `amount` (0–100), the lens's
- * dark corners lifted, its distortion and colour fringes taken out, the removals filled, then Lens Blur (with the
- * photo's `depth`, once read).
- */
-export function prepared(
-  img: HTMLImageElement | HTMLCanvasElement,
-  w: number,
-  h: number,
-  s: EditSettings | undefined,
-  clean: CanvasImageSource | null,
-  depth: DepthMap | null = null,
-): HTMLImageElement | HTMLCanvasElement {
+/** `img` (`w` × `h`) with the cleaned copy at `amount` (0–100), the lens's dark corners lifted, its distortion and colour fringes taken out. */
+function lit(img: HTMLImageElement | HTMLCanvasElement, w: number, h: number, s: EditSettings | undefined, clean: CanvasImageSource | null): HTMLImageElement | HTMLCanvasElement {
   let base: HTMLImageElement | HTMLCanvasElement = img;
   const amount = s?.aiDenoise?.amount ?? 0;
   if (clean && amount > 0) {
@@ -77,8 +66,41 @@ export function prepared(
   }
   const lens = s?.geometry?.lens;
   const manual = s?.lensManual;
-  const lit = lens || manual ? withoutFringes(undistorted(devignetted(base, w, h, lens, manual), w, h, lens, manual), w, h, lens) : base;
-  const filled = s?.heal?.length ? healed(lit, w, h, s.heal) : lit;
+  return lens || manual ? withoutFringes(undistorted(devignetted(base, w, h, lens, manual), w, h, lens, manual), w, h, lens) : base;
+}
+
+/** Then Lens Blur, with the photo's `depth` once read. */
+function blurred(filled: HTMLImageElement | HTMLCanvasElement, w: number, h: number, s: EditSettings | undefined, depth: DepthMap | null) {
   const lb = s?.lensBlur;
   return lb && lb.amount > 0 && depth ? lensBlurred(filled, w, h, depth, lb) : filled;
+}
+
+/**
+ * `img` (`w` × `h`) as Edit foto develops from it: the cleaned copy mixed in,
+ * the lens corrected, the removals filled (the quick fill while the AI's is
+ * not there yet), then Lens Blur.
+ */
+export function prepared(
+  img: HTMLImageElement | HTMLCanvasElement,
+  w: number,
+  h: number,
+  s: EditSettings | undefined,
+  clean: CanvasImageSource | null,
+  depth: DepthMap | null = null,
+): HTMLImageElement | HTMLCanvasElement {
+  const base = lit(img, w, h, s, clean);
+  return blurred(s?.heal?.length ? healed(base, w, h, s.heal) : base, w, h, s, depth);
+}
+
+/** The same, waiting for the removals' AI fill: for export, never the quick fill. */
+export async function preparedReady(
+  img: HTMLImageElement | HTMLCanvasElement,
+  w: number,
+  h: number,
+  s: EditSettings | undefined,
+  clean: CanvasImageSource | null,
+  depth: DepthMap | null = null,
+): Promise<HTMLImageElement | HTMLCanvasElement> {
+  const base = lit(img, w, h, s, clean);
+  return blurred(s?.heal?.length ? await healReady(base, w, h, s.heal) : base, w, h, s, depth);
 }

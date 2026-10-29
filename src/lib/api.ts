@@ -304,6 +304,8 @@ export const api = {
   /** Edit foto › Lens Corrections (and the line under the histogram): camera, lens, focal length, aperture, ISO and shutter (seconds) from the photo's EXIF. */
   lensInfo: (root: string, id: number) =>
     invoke<{ make: string | null; model: string | null; lens: string | null; focal: number | null; aperture: number | null; focal35: number | null; iso: number | null; exposure: number | null }>('lens_info', { root, id }),
+  /** Edit foto › Hapus objek: a 512 × 512 part (RGB) then its mask (1 = fill), filled by MI-GAN; RGB back. */
+  inpaintAi: (body: Uint8Array) => invoke<ArrayBuffer>('inpaint_ai', body),
   /** Edit foto › Lens Blur: the photo's depth — width, height (u32 LE), then a nearness byte per pixel. */
   depthMap: (root: string, id: number) => invoke<ArrayBuffer>('depth_map', { root, id }),
   /** Edit foto › Super Resolution: a JPG this app just exported, rewritten at twice the width and height. */
