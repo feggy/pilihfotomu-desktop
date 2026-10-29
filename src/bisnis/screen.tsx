@@ -55,6 +55,8 @@ export function BisnisScreen({ open }: { open?: string }) {
   const guard = useUnsaved((s) => s.guard);
   // Booking as a table or as the board: two tools over the same bookings.
   const [view, setView] = useState<'daftar' | 'board'>('daftar');
+  // Persiapan's "Tambah paket": the Paket tab opens on a new package's form.
+  const [addPackage, setAddPackage] = useState(false);
   const [editing, setEditing] = useState<Booking | null>(null);
   // A booking opened from a list: its detail first; Edit opens the form over it.
   const [viewing, setViewing] = useState<string | null>(null);
@@ -87,7 +89,17 @@ export function BisnisScreen({ open }: { open?: string }) {
 
   let body: ReactNode = null;
   if (data) {
-    if (tab === 'ringkasan') body = <Overview onOpen={view_} onEdit={setEditing} onMessage={(bookingId, template) => setMessage({ bookingId, template })} onStage={() => (setTab('booking'), setView('board'))} />;
+    if (tab === 'ringkasan')
+      body = (
+        <Overview
+          onOpen={view_}
+          onEdit={setEditing}
+          onMessage={(bookingId, template) => setMessage({ bookingId, template })}
+          onStage={() => (setTab('booking'), setView('board'))}
+          onAddPackage={() => (setTab('paket'), setAddPackage(true))}
+          onNewBooking={() => setEditing(newBooking(data, data.columns[0]?.id ?? ''))}
+        />
+      );
     else if (tab === 'booking')
       body = (
         <>
@@ -115,7 +127,7 @@ export function BisnisScreen({ open }: { open?: string }) {
           onMessage={(c, bookingId) => setMessage({ bookingId, phone: c.phone, name: c.name })}
         />
       );
-    else if (tab === 'paket') body = <Packages />;
+    else if (tab === 'paket') body = <Packages startAdding={addPackage} onStarted={() => setAddPackage(false)} />;
     else if (tab === 'pesan') body = <MessagesTab />;
     else if (tab === 'keuangan') body = <Finance onOpen={view_} />;
     else body = <Settings />;
@@ -155,7 +167,8 @@ export function BisnisScreen({ open }: { open?: string }) {
           <TriangleAlert size={14} /> {t('Data Kelola Bisnis tidak bisa dibaca atau disimpan: {e}', { e: error })}
         </p>
       )}
-      {data && tab !== 'pengaturan' && <BackupNotice onSetUp={() => setTab('pengaturan')} />}
+      {/* On Ringkasan, Persiapan's backup step says it already while the checklist shows. */}
+      {data && tab !== 'pengaturan' && !(tab === 'ringkasan' && !data.settings.setupHidden && !data.settings.backupDir) && <BackupNotice onSetUp={() => setTab('pengaturan')} />}
       {body}
       {viewing && (
         <BookingDetail

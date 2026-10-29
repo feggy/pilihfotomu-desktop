@@ -6,7 +6,7 @@
  */
 
 import { Archive, ArchiveRestore, Clock, Package as PackageIcon, Pencil, Plus, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { cx } from '../components/ui';
 import { t } from '../lib/i18n';
@@ -19,9 +19,12 @@ const duration = (min: number) => (min % 60 === 0 ? t('{n} jam', { n: min / 60 }
 
 const blank = (): Package => ({ id: '', name: '', price: 0, description: '', durationMin: 120 });
 
-export function Packages() {
+export function Packages({ startAdding, onStarted }: { startAdding?: boolean; onStarted?: () => void }) {
   const data = useBisnis((s) => s.data)!;
-  const [editing, setEditing] = useState<Package | null>(null);
+  const [editing, setEditing] = useState<Package | null>(() => (startAdding ? blank() : null));
+  useEffect(() => {
+    if (startAdding) onStarted?.();
+  }, []);
   const [addon, setAddon] = useState<Addon | null>(null);
   const active = data.packages.filter((p) => !p.archived);
   const archived = data.packages.filter((p) => p.archived);

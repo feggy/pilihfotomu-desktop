@@ -12,6 +12,7 @@ import { cx } from '../components/ui';
 import { t } from '../lib/i18n';
 import { moveBooking } from './board';
 import { PAY_COLOR, PAY_LABEL, balanceOf, dayKey, longDate, nextSession, parseLocal, payState, rupiah, shortDate, timeOf, titleOf, totalOf } from './model';
+import { Setup } from './setup';
 import { useBisnis } from './store';
 import type { BisnisData, Booking, Column } from './types';
 
@@ -32,6 +33,8 @@ export function Overview({
   onEdit,
   onMessage,
   onStage,
+  onAddPackage,
+  onNewBooking,
 }: {
   onOpen: (b: Booking) => void;
   /** The booking's form, for what only it holds (a session to add). */
@@ -39,6 +42,9 @@ export function Overview({
   onMessage: (bookingId: string, template: string) => void;
   /** A stage picked: show its bookings (on the board). */
   onStage: (columnId: string) => void;
+  /** Persiapan's steps: a package to add, a first booking. */
+  onAddPackage: () => void;
+  onNewBooking: () => void;
 }) {
   const data = useBisnis((s) => s.data)!;
   const update = useBisnis((s) => s.update);
@@ -171,6 +177,7 @@ export function Overview({
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 pt-4 pb-10 lg:px-8">
       <div className="mx-auto grid w-full max-w-[1180px] grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
+        <Setup onAddPackage={onAddPackage} onNewBooking={onNewBooking} />
         <section className="flex flex-col gap-3 rounded-2xl bg-panel p-4">
           <h2 className="flex items-center gap-2 text-[13px] font-semibold">
             {t('Perlu tindakan')}

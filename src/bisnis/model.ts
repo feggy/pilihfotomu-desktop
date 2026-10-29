@@ -78,6 +78,7 @@ export function emptyData(): BisnisData {
       backupDir: null,
       lastBackup: null,
       backupNoticeAt: null,
+      setupHidden: false,
     },
   };
 }

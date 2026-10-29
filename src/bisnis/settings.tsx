@@ -212,6 +212,11 @@ export function Settings({ sections }: { sections?: ReactNode }) {
           </div>
         </section>
         <BackupSection />
+        {data.settings.setupHidden && (
+          <button type="button" onClick={() => update((d) => ({ ...d, settings: { ...d.settings, setupHidden: false } }))} className="self-start text-xs font-medium text-gold-text hover:underline">
+            {t('Tampilkan lagi Persiapan di Ringkasan')}
+          </button>
+        )}
         {sections}
         {dirty && <SaveBar onSave={saveDraft} onCancel={cancel} />}
       </div>
