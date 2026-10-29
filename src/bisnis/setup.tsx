@@ -3,12 +3,12 @@
  * studio's name and logo (invoices, receipts, messages), its contact and
  * bank details, a package, a first booking, a backup, notifications — each
  * ticked by itself once done, each a click from where it is done. Gone
- * when all are; put away earlier at will.
+ * when all are; folded to one line at will.
  */
 
 import { open } from '@tauri-apps/plugin-dialog';
 import { isPermissionGranted, requestPermission } from '@tauri-apps/plugin-notification';
-import { Bell, Building2, CalendarPlus, Check, FolderSync, Landmark, Package as PackageIcon, Stamp } from 'lucide-react';
+import { Bell, Building2, CalendarPlus, Check, ChevronDown, ChevronUp, FolderSync, Landmark, Package as PackageIcon, Stamp } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 
 import { cx } from '../components/ui';
@@ -90,8 +90,29 @@ export function Setup({ onAddPackage, onNewBooking }: { onAddPackage: () => void
     },
   ];
   const done = steps.filter((x) => x.done).length;
-  if (s.setupHidden || done === steps.length) return null;
+  if (done === steps.length) return null;
   const next = steps.find((x) => !x.done);
+  const folded = s.setupHidden;
+  const fold = (setupHidden: boolean) => update((d) => ({ ...d, settings: { ...d.settings, setupHidden } }));
+  const progress = (
+    <span className="flex min-w-0 flex-1 items-center gap-3">
+      <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-raised">
+        <span className="block h-full rounded-full bg-gold transition-[width]" style={{ width: `${(done / steps.length) * 100}%` }} />
+      </span>
+      <span className="shrink-0 text-xs font-medium text-muted tabular-nums">{t('{done} dari {total} selesai', { done, total: steps.length })}</span>
+    </span>
+  );
+
+  // Folded: one line, still showing how far it is; a click opens it again.
+  if (folded)
+    return (
+      <button type="button" onClick={() => fold(false)} className="flex items-center gap-4 rounded-2xl border border-gold/30 bg-panel px-5 py-3 text-left hover:border-gold/60 lg:col-span-2">
+        <span className="shrink-0 text-[13px] font-semibold">{t('Persiapan Kelola Bisnis')}</span>
+        {progress}
+        {next && <span className="hidden shrink-0 text-xs text-faint md:inline">{t('Berikutnya: {step}', { step: next.title })}</span>}
+        <ChevronDown size={16} className="shrink-0 text-faint" />
+      </button>
+    );
 
   return (
     <section className="flex flex-col gap-4 rounded-2xl border border-gold/40 bg-panel p-5 lg:col-span-2">
@@ -100,16 +121,11 @@ export function Setup({ onAddPackage, onNewBooking }: { onAddPackage: () => void
           <h2 className="text-[15px] font-semibold">{t('Persiapan Kelola Bisnis')}</h2>
           <p className="text-xs text-muted">{t('Lengkapi langkah ini sekali, supaya invoice, pesan, dan pengingat langsung rapi.')}</p>
         </div>
-        <button type="button" onClick={() => update((d) => ({ ...d, settings: { ...d.settings, setupHidden: true } }))} className="shrink-0 text-xs text-faint hover:text-fg">
-          {t('Sembunyikan')}
+        <button type="button" onClick={() => fold(true)} className="flex shrink-0 items-center gap-1 text-xs text-faint hover:text-fg">
+          {t('Tutup')} <ChevronUp size={14} />
         </button>
       </div>
-      <div className="flex items-center gap-3">
-        <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-raised">
-          <span className="block h-full rounded-full bg-gold transition-[width]" style={{ width: `${(done / steps.length) * 100}%` }} />
-        </span>
-        <span className="shrink-0 text-xs font-medium text-muted tabular-nums">{t('{done} dari {total} selesai', { done, total: steps.length })}</span>
-      </div>
+      <div className="flex items-center gap-3">{progress}</div>
       <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
         {steps.map((x, i) => (
           <div key={x.key} className={cx('flex items-start gap-3 rounded-xl p-3', x.done ? 'bg-panel-2/50' : x === next ? 'bg-panel-2 ring-1 ring-gold/50' : 'bg-panel-2')}>

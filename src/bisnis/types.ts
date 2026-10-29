@@ -152,7 +152,7 @@ export interface BisnisSettings {
   lastBackup: number | null;
   /** When the notice about keeping a backup was last put away. */
   backupNoticeAt: number | null;
-  /** The Persiapan checklist put away before every step was done. */
+  /** The Persiapan checklist folded to one line (still there until every step is done). */
   setupHidden: boolean;
 }
 

@@ -395,5 +395,5 @@ export default {
   'PNG dengan latar transparan paling rapi. Juga dipakai di Buat konten.': 'A PNG with a transparent background looks best. Also used in Create content.',
   'Kontak studio': 'Studio contact',
   'Di bawah nama studio pada invoice dan kuitansi.': 'Under the studio name on invoices and receipts.',
-  'Tampilkan lagi Persiapan di Ringkasan': 'Show the setup checklist on the Overview again',
+  'Berikutnya: {step}': 'Next: {step}',
 } as Record<string, string | [string, string]>;

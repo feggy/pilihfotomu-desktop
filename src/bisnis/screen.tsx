@@ -168,7 +168,7 @@ export function BisnisScreen({ open }: { open?: string }) {
         </p>
       )}
       {/* On Ringkasan, Persiapan's backup step says it already while the checklist shows. */}
-      {data && tab !== 'pengaturan' && !(tab === 'ringkasan' && !data.settings.setupHidden && !data.settings.backupDir) && <BackupNotice onSetUp={() => setTab('pengaturan')} />}
+      {data && tab !== 'pengaturan' && !(tab === 'ringkasan' && !data.settings.backupDir) && <BackupNotice onSetUp={() => setTab('pengaturan')} />}
       {body}
       {viewing && (
         <BookingDetail
