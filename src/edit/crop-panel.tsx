@@ -6,13 +6,14 @@
  * drag inside to move it, drag outside it to turn the photo.
  */
 
-import { Check, FlipHorizontal2, FlipVertical2, Lock, LockOpen, RotateCcw, RotateCw, Ruler, Wand2 } from 'lucide-react';
+import { FlipHorizontal2, FlipVertical2, Lock, LockOpen, RotateCcw, RotateCw, Ruler, Wand2 } from 'lucide-react';
 
 import { Select } from '../components/select';
 import { Button, cx } from '../components/ui';
 import { num } from '../lib/format';
 import { t } from '../lib/i18n';
 import { Slider } from './panels';
+import { ToolBox, ToolRow } from './tool-box';
 import { NO_GEOMETRY, cropForRatio, drawGeometry, squareToQuad, uprightQuad, type Geometry } from './geometry';
 
 /** Lightroom's aspects (the longer side first; X turns them to stand), the photo's own, and free. */
@@ -74,31 +75,31 @@ export function CropPanel({
     onDone();
   };
   const locked = ratioId !== 'bebas';
-  const icon = 'flex h-8 items-center justify-center rounded-md border border-line text-muted hover:text-fg';
+  const icon = 'flex size-8 items-center justify-center rounded-md border border-line text-muted hover:text-fg';
   const edited = !!(g.crop || g.angle || g.rot || g.flipH || g.flipV || g.vertical || g.horizontal);
   return (
-    <div className="flex h-full flex-col gap-4">
-      <h2 className="text-[15px] font-semibold">{t('Crop & luruskan')}</h2>
-
-      <div className="flex flex-col gap-2">
-        <span className="flex items-center justify-between text-xs text-muted">
-          {t('Rasio')}
+    <ToolBox title={t('Crop & luruskan')} onReset={onReset} resetDisabled={g === NO_GEOMETRY || !edited} onClose={onClose} closeTitle="Enter">
+      <ToolRow>
+        <div className="flex items-center gap-2">
+          <span className="w-14 shrink-0 text-xs text-muted">{t('Rasio')}</span>
+          <div className="min-w-0 flex-1">
+            <Select value={ratioId} onChange={onRatio} size="sm" options={RATIOS.map((r) => ({ value: r.id, label: t(r.label) }))} />
+          </div>
           <button
             type="button"
             onClick={() => onRatio(locked ? 'bebas' : 'asli')}
             title={locked ? t('Lepas kunci rasio') : t('Kunci rasio')}
-            className={cx('flex size-7 items-center justify-center rounded-md', locked ? 'text-gold-text' : 'text-faint hover:text-fg')}
+            className={cx('flex size-7 shrink-0 items-center justify-center rounded-md', locked ? 'text-gold-text' : 'text-faint hover:text-fg')}
           >
             {locked ? <Lock size={14} /> : <LockOpen size={14} />}
           </button>
-        </span>
-        <Select value={ratioId} onChange={onRatio} size="sm" options={RATIOS.map((r) => ({ value: r.id, label: t(r.label) }))} />
-        <button type="button" onClick={onSwap} disabled={!locked || ratioId === '1:1'} className="self-start text-[11px] text-faint hover:text-fg disabled:opacity-40">
+        </div>
+        <button type="button" onClick={onSwap} disabled={!locked || ratioId === '1:1'} className="self-start pl-16 text-[11px] text-faint hover:text-fg disabled:opacity-40">
           {portrait ? t('Tegak') : t('Datar')} · {t('tekan X untuk tukar tegak/datar')}
         </button>
-      </div>
+      </ToolRow>
 
-      <div className="flex flex-col gap-2.5 border-t border-line-soft pt-4">
+      <ToolRow>
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -129,9 +130,9 @@ export function CropPanel({
             ? t('Tarik garis di sepanjang cakrawala atau dinding yang harusnya lurus.')
             : t('Atau seret di luar kotak crop untuk memutar foto.')}
         </p>
-      </div>
+      </ToolRow>
 
-      <div className="flex flex-col gap-2.5 border-t border-line-soft pt-4">
+      <ToolRow>
         <div className="flex items-center justify-between">
           <span className="text-xs text-muted">{t('Upright')}</span>
           <Button icon={Wand2} onClick={onUpright} title={t('Luruskan garis bangunan yang menguncup ke atas atau ke samping')}>
@@ -140,42 +141,33 @@ export function CropPanel({
         </div>
         <Slider label={t('Vertikal')} value={g.vertical ?? 0} onLive={(v) => onChange({ ...g, vertical: v || undefined })} onDone={onDone} />
         <Slider label={t('Horizontal')} value={g.horizontal ?? 0} onLive={(v) => onChange({ ...g, horizontal: v || undefined })} onDone={onDone} />
-      </div>
+      </ToolRow>
 
-      <div className="flex flex-col gap-2 border-t border-line-soft pt-4">
-        <span className="text-xs text-muted">{t('Putar & balik')}</span>
-        <div className="grid grid-cols-4 gap-1.5">
-          <button type="button" onClick={() => turn(-1)} title={t('Putar ke kiri')} className={icon}>
-            <RotateCcw size={15} />
-          </button>
-          <button type="button" onClick={() => turn(1)} title={t('Putar ke kanan')} className={icon}>
-            <RotateCw size={15} />
-          </button>
-          <button type="button" onClick={() => (onChange({ ...g, flipH: !g.flipH }), onDone())} title={t('Balik kiri-kanan')} className={cx(icon, g.flipH && 'border-gold text-fg')}>
-            <FlipHorizontal2 size={15} />
-          </button>
-          <button type="button" onClick={() => (onChange({ ...g, flipV: !g.flipV }), onDone())} title={t('Balik atas-bawah')} className={cx(icon, g.flipV && 'border-gold text-fg')}>
-            <FlipVertical2 size={15} />
-          </button>
-        </div>
-      </div>
+      <ToolRow className="flex-row items-center gap-2">
+        <span className="flex-1 text-xs text-muted">{t('Putar & balik')}</span>
+        <button type="button" onClick={() => turn(-1)} title={t('Putar ke kiri')} className={icon}>
+          <RotateCcw size={15} />
+        </button>
+        <button type="button" onClick={() => turn(1)} title={t('Putar ke kanan')} className={icon}>
+          <RotateCw size={15} />
+        </button>
+        <button type="button" onClick={() => (onChange({ ...g, flipH: !g.flipH }), onDone())} title={t('Balik kiri-kanan')} className={cx(icon, g.flipH && 'border-gold text-fg')}>
+          <FlipHorizontal2 size={15} />
+        </button>
+        <button type="button" onClick={() => (onChange({ ...g, flipV: !g.flipV }), onDone())} title={t('Balik atas-bawah')} className={cx(icon, g.flipV && 'border-gold text-fg')}>
+          <FlipVertical2 size={15} />
+        </button>
+      </ToolRow>
 
-      <div className="flex-1" />
       {others > 0 && (
-        <label className={cx('flex items-start gap-2.5 rounded-xl border p-3 text-xs', applyAll ? 'border-gold/70 bg-gold/[0.05]' : 'border-line-soft')}>
-          <input type="checkbox" checked={applyAll} onChange={(e) => onApplyAll(e.target.checked)} className="mt-0.5 size-4 accent-[var(--color-gold)]" />
-          {t('Pakai crop yang sama untuk {count} foto terpilih', { n: others, count: num(others) })}
-        </label>
+        <ToolRow>
+          <label className="flex items-start gap-2.5 text-xs text-muted">
+            <input type="checkbox" checked={applyAll} onChange={(e) => onApplyAll(e.target.checked)} className="mt-0.5 size-3.5 accent-[var(--color-gold)]" />
+            {t('Pakai crop yang sama untuk {count} foto terpilih', { n: others, count: num(others) })}
+          </label>
+        </ToolRow>
       )}
-      <div className="grid grid-cols-2 gap-2">
-        <Button onClick={onReset} disabled={g === NO_GEOMETRY || !edited}>
-          {t('Reset')}
-        </Button>
-        <Button variant="primary" icon={Check} onClick={onClose} title="Enter">
-          {t('Selesai')}
-        </Button>
-      </div>
-    </div>
+    </ToolBox>
   );
 }
 

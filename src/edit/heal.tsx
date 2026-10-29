@@ -9,7 +9,6 @@
 import { Eraser, Trash2 } from 'lucide-react';
 import { useRef, useState } from 'react';
 
-import { Button } from '../components/ui';
 import { num } from '../lib/format';
 import { t } from '../lib/i18n';
 import { inpaint } from '../kreasi/engine/inpaint';
@@ -20,6 +19,7 @@ import { loadLocalImage } from '../kreasi/kit';
 import { BrushRing } from './cursors';
 import { landmarksOf, peopleMask, type FacePart } from './people-mask';
 import { Slider } from './panels';
+import { ToolBox, ToolRow } from './tool-box';
 import type { EditSettings, HealSpot } from './geometry';
 
 
@@ -188,19 +188,15 @@ export function HealPanel({
   const spots = a.heal ?? [];
   const skin = skinOf(a);
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-[15px] font-semibold">{t('Hapus objek')}</h2>
-        <Button variant="primary" onClick={onClose}>
-          {t('Selesai')}
-        </Button>
-      </div>
+    <ToolBox title={t('Hapus objek')} onClose={onClose}>
+      <ToolRow>
       <p className="text-xs leading-relaxed text-muted">
         {t('Sapukan di atas yang mau dihapus: orang di latar, papan, kabel, noda. Bagian itu diisi dari sekitarnya, di komputer ini.')}
       </p>
       <Slider label={t('Ukuran kuas')} value={Math.round(size * 100)} min={1} max={30} center={4} onLive={(v) => onSize(v / 100)} onDone={() => {}} />
       <p className="text-[11px] text-faint">{t('[ dan ] mengubah ukuran kuas. Cocok untuk benda kecil; area besar di atas detail hasilnya bisa kurang rapi.')}</p>
-      <div className="flex flex-col gap-3 border-t border-line-soft pt-3">
+      </ToolRow>
+      <ToolRow className="gap-3">
         <span className="text-xs font-semibold">{t('Retouch kulit cepat')}</span>
         {faces.length ? (
           <>
@@ -222,9 +218,9 @@ export function HealPanel({
         ) : (
           <p className="text-[11px] text-faint">{t('Tidak ada wajah yang ditemukan di foto ini.')}</p>
         )}
-      </div>
+      </ToolRow>
       {spots.length > 0 && (
-        <div className="flex flex-col gap-1 border-t border-line-soft pt-3">
+        <ToolRow className="gap-1">
           <span className="pb-1 text-xs font-semibold">{t('{count} bagian dihapus', { n: spots.length, count: num(spots.length) })}</span>
           {spots.map((s, i) => (
             <div key={s.id} className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-[13px] hover:bg-panel-2">
@@ -240,9 +236,9 @@ export function HealPanel({
               </button>
             </div>
           ))}
-        </div>
+        </ToolRow>
       )}
-    </div>
+    </ToolBox>
   );
 }
 

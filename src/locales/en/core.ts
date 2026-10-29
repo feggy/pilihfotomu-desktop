@@ -119,4 +119,5 @@ export default {
   'Terang': 'Light',
   'Foto dinilai paling jujur di latar gelap, seperti di Lightroom.': 'Photos are judged most honestly on a dark background, as in Lightroom.',
   'Lebih nyaman di ruangan terang, atau untuk Kelola Bisnis seharian.': 'Easier in a bright room, or for a day of Manage Business.',
+  'Alat:': 'Tool:',
 } as Record<string, string | [string, string]>;

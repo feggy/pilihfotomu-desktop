@@ -61,6 +61,7 @@ import { HealLayer, HealPanel } from '../edit/heal';
 import { LensBlurPanel } from '../edit/lens-blur-panel';
 import { LensPanel } from '../edit/lens-panel';
 import { Library } from '../edit/library';
+import { ToolBox, ToolRow } from '../edit/tool-box';
 import { MaskLayer, MaskList, MaskPanel, loadSubjects, useMasking, type BrushSettings, type MaskCreate } from '../edit/masking';
 import { NO_GEOMETRY, frameSize, hasGeometry, type EditSettings, type Geometry } from '../edit/geometry';
 import { autoAdjust, neutralBalance } from '../kreasi/engine/develop';
@@ -663,7 +664,11 @@ function Editor({ back, ids, start }: { back: Screen; ids?: number[]; start?: nu
           {healing && photo ? (
             <HealPanel root={root} photoId={photo.id} a={a} faces={photo.faces ?? []} size={healSize} onSize={setHealSize} onLive={live} onDone={done} onClose={() => setHealing(false)} />
           ) : masking && photo ? (
-            <MaskPanel m={maskTools} part={selPart} creating={maskCreate} brush={brush} onCreating={setMaskCreate} onBrush={setBrush} onDone={done} onClose={() => setMasking(false)} />
+            <ToolBox title={t('Masking')}>
+              <ToolRow>
+                <MaskPanel m={maskTools} part={selPart} creating={maskCreate} brush={brush} onCreating={setMaskCreate} onBrush={setBrush} onDone={done} onClose={() => setMasking(false)} />
+              </ToolRow>
+            </ToolBox>
           ) : cropping ? (
             <CropPanel
               g={g}
