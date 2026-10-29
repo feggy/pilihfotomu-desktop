@@ -467,6 +467,8 @@ function Editor({ back, ids, start }: { back: Screen; ids?: number[]; start?: nu
       } else if (cropping && e.key === 'Enter') {
         closeCrop();
       } else if (healing && healSel.strokes.length && e.key === 'Enter') {
+        // Not also the focused button's click (the tool strip's would close the tool).
+        e.preventDefault();
         removeSel();
       } else if (e.key === 'Escape') {
         if (maskTools.boxing) maskTools.setBoxing(false);

@@ -165,8 +165,10 @@ export function EditView({
   }, [root, id]);
 
   // Zoom: 1 fits the photo in; more is bigger (pinch, ⌘/ctrl-scroll, Z, a click).
+  // While masking or removing it zooms too, but a click or drag is the brush's:
+  // there it moves round with two fingers (scroll) or the Navigator.
   const [scale, setScale] = useState(1);
-  const zoomable = !cropping && !masking;
+  const zoomable = !cropping;
   const zoomed = zoomable && scale > 1.001;
   useEffect(() => {
     // Another photo: back to fit, and a glide under way dropped.
@@ -459,7 +461,7 @@ export function EditView({
   /** Dragging a zoomed photo: the hand closes. */
   const [panning, setPanning] = useState(false);
   const press = (e: React.PointerEvent) => {
-    if (picking || !zoomable || e.button !== 0) return;
+    if (picking || !zoomable || masking || e.button !== 0) return;
     const el = scroller.current!;
     if (zoomed) setPanning(true);
     const start = { x: e.clientX, y: e.clientY, l: el.scrollLeft, t: el.scrollTop };
@@ -521,7 +523,7 @@ export function EditView({
         onPointerDown={press}
         // The browser's own scroll anchoring would move the zoom's anchor point again.
         style={{ overflowAnchor: 'none' }}
-        className={cx('no-scrollbar flex size-full', zoomed ? 'overflow-auto' : 'items-center justify-center overflow-hidden', zoomable && !picking && (zoomed ? (panning ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-zoom-in'))}
+        className={cx('no-scrollbar flex size-full', zoomed ? 'overflow-auto' : 'items-center justify-center overflow-hidden', zoomable && !picking && !masking && (zoomed ? (panning ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-zoom-in'))}
       >
       {failed && <p className="m-auto text-sm text-faint">{t('Foto tidak bisa dibuka.')}</p>}
       {!drawn && !failed && (
