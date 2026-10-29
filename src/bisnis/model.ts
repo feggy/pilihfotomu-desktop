@@ -123,7 +123,7 @@ export function withStageTemplates(data: BisnisData): BisnisData {
   );
   return { ...data, templates: [...data.templates, ...added] };
 }
-const TEMPLATES_VERSION = 6;
+const TEMPLATES_VERSION = 7;
 
 export const DEFAULT_EXPENSE_CATEGORIES = ['Transport', 'Sewa alat', 'Freelancer', 'Cetak & album', 'Makan', 'Iklan', 'Lainnya'];
 
@@ -169,8 +169,10 @@ export function fromJson(json: string): BisnisData {
   if (!raw || typeof raw !== 'object' || !Array.isArray(raw.bookings)) throw new Error('Bukan data Kelola Bisnis.');
   const base = emptyData();
   const data: BisnisData = { ...base, ...raw, v: DATA_VERSION, settings: { ...base.settings, ...raw.settings } };
+  // The file's own version, not the fresh one `base` brings: a file from before versions had none.
+  const version = raw.templatesVersion ?? 1;
   // Data from before the stage templates: they are added, and the built-in ones it kept get their stage and picture.
-  if ((data.templatesVersion ?? 1) < 2) {
+  if (version < 2) {
     const builtIn = new Map(DEFAULT_TEMPLATES.map((x) => [x.id, x]));
     const kept = data.templates.map((x) => {
       const d = builtIn.get(x.id);
@@ -180,14 +182,14 @@ export function fromJson(json: string): BisnisData {
     data.templates = [...kept, ...added];
   }
   // DP diterima became Konfirmasi booking (a booking is confirmed by its deposit): one template, for DP masuk.
-  if ((data.templatesVersion ?? 1) < 3) {
+  if (version < 3) {
     const konfirmasi = DEFAULT_TEMPLATES.find((x) => x.id === 'konfirmasi')!;
     data.templates = data.templates
       .filter((x) => x.id !== 'dp-diterima')
       .map((x) => (x.id === 'konfirmasi' ? { ...x, columnId: 'dp', attach: 'kuitansi', body: x.body.includes('DP untuk mengunci tanggal') ? konfirmasi.body : x.body } : x));
   }
   // The Pilih & edit and Kirim hasil templates carry the Drive links: replaced where still as they came.
-  if ((data.templatesVersion ?? 1) < 4) {
+  if (version < 4) {
     const was: Record<string, string> = { 'sedang-diedit': 'Halo {nama}, terima kasih untuk sesi fotonya! Foto sedang kami pilih dan edit. Kami kabari begitu hasilnya siap ya.', 'hasil-siap': 'Halo {nama}, hasil foto {paket} sudah siap! Ini link-nya:\n\n\nSilakan diunduh dan disimpan. Kalau ada yang perlu ditanyakan, kabari kami ya.' };
     data.templates = data.templates.map((x) => {
       const d = DEFAULT_TEMPLATES.find((y) => y.id === x.id);
@@ -195,15 +197,22 @@ export function fromJson(json: string): BisnisData {
     });
   }
   // Konfirmasi booking and Pengingat jadwal carry the Google Calendar link: replaced where still as they came.
-  if ((data.templatesVersion ?? 1) < 5) {
+  if (version < 5) {
     const was: Record<string, string> = { konfirmasi: 'Halo {nama}, DP untuk {paket} sudah kami terima, terima kasih! Booking kamu sudah terkonfirmasi untuk {jadwal}.\n\nSudah dibayar: {terbayar}\nSisa: {sisa}, paling lambat {jatuh_tempo}.\n\nPembayaran ke:\n{rekening}\n\nKuitansi terlampir.', pengingat: 'Halo {nama}, mengingatkan jadwal foto {jadwal}. Sampai jumpa!' };
     data.templates = data.templates.map((x) => (was[x.id] === x.body ? { ...x, body: DEFAULT_TEMPLATES.find((y) => y.id === x.id)!.body } : x));
   }
   // Pelunasan diterima came with 6: put after Tagihan pelunasan.
-  if ((data.templatesVersion ?? 1) < 6 && !data.templates.some((x) => x.id === 'lunas')) {
+  if (version < 6 && !data.templates.some((x) => x.id === 'lunas')) {
     const lunas = DEFAULT_TEMPLATES.find((x) => x.id === 'lunas')!;
     const at = data.templates.findIndex((x) => x.id === 'tagihan');
     data.templates = at < 0 ? [...data.templates, lunas] : [...data.templates.slice(0, at + 1), lunas, ...data.templates.slice(at + 1)];
+  }
+  // Files the steps above were skipped for (the version came from `base`): the built-in templates' pictures.
+  if (version < 7) {
+    data.templates = data.templates.map((x) => {
+      const d = DEFAULT_TEMPLATES.find((y) => y.id === x.id);
+      return d?.attach && !x.attach ? { ...x, attach: d.attach } : x;
+    });
   }
   data.templatesVersion = TEMPLATES_VERSION;
   return withStageTemplates(data);
