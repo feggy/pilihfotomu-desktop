@@ -7,6 +7,9 @@ import { cx } from '../components/ui';
 import { t } from '../lib/i18n';
 import { parseMoney } from './model';
 
+/** For an email (or anything typed as written): no capital first letter, no autocorrect — the WebView adds both otherwise. */
+export const PLAIN = { autoCapitalize: 'off', autoCorrect: 'off', spellCheck: false } as const;
+
 export const inputCls = 'h-9 w-full rounded-lg border border-line bg-bg px-2.5 text-[13px] text-fg outline-none placeholder:text-faint focus:border-gold';
 
 export function Field({ label, children, className, hint }: { label: string; children: ReactNode; className?: string; hint?: ReactNode }) {
@@ -31,11 +34,12 @@ export function MoneyInput({ value, onChange, className, placeholder }: { value:
 }
 
 /** A text box that saves when it loses focus (or Enter), not on every key: one undo-free write per edit. */
-export function LazyInput({ value, onCommit, className, placeholder }: { value: string; onCommit: (v: string) => void; className?: string; placeholder?: string }) {
+export function LazyInput({ value, onCommit, className, placeholder, email }: { value: string; onCommit: (v: string) => void; className?: string; placeholder?: string; email?: boolean }) {
   const [v, setV] = useState(value);
   useEffect(() => setV(value), [value]);
   return (
     <input
+      {...(email ? { type: 'email', ...PLAIN } : {})}
       value={v}
       placeholder={placeholder}
       onChange={(e) => setV(e.target.value)}

@@ -15,7 +15,7 @@ import { nextColumn } from './overview';
 import { googleCalendarLink } from './reminders';
 import { useBisnis } from './store';
 import type { BisnisData, Booking, Client, Payment, Session } from './types';
-import { Dialog, Field, MoneyInput, SectionTitle, btnPlain, btnPrimary, inputCls } from './ui';
+import { Dialog, Field, MoneyInput, PLAIN, SectionTitle, btnPlain, btnPrimary, inputCls } from './ui';
 
 /** A new booking in column `columnId`, its first session on `day` if given. */
 export function newBooking(data: BisnisData, columnId: string, day?: string): Booking {
@@ -175,7 +175,7 @@ export function BookingEditor({ initial, onClose, actions = [] }: { initial: Boo
             <input value={client.phone} onChange={(e) => setClient({ ...client, phone: e.target.value })} placeholder="0812…" inputMode="tel" className={inputCls} />
           </Field>
           <Field label={t('Email (opsional)')}>
-            <input value={client.email} onChange={(e) => setClient({ ...client, email: e.target.value })} className={inputCls} />
+            <input type="email" {...PLAIN} value={client.email} onChange={(e) => setClient({ ...client, email: e.target.value })} placeholder="nama@email.com" className={inputCls} />
           </Field>
           <Field label={t('Judul di board (opsional)')}>
             <input value={b.title} onChange={(e) => set({ title: e.target.value })} placeholder={client.name || t('Nama klien')} className={inputCls} />

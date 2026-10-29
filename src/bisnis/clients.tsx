@@ -94,7 +94,7 @@ export function Clients({ onOpen, onNew, onMessage }: { onOpen: (b: Booking) => 
                   <LazyInput value={row.client.phone} onCommit={(phone) => setClient(row.client.id, { phone: phone.trim() })} />
                 </Field>
                 <Field label={t('Email')}>
-                  <LazyInput value={row.client.email} onCommit={(email) => setClient(row.client.id, { email: email.trim() })} />
+                  <LazyInput email value={row.client.email} onCommit={(email) => setClient(row.client.id, { email: email.trim() })} />
                 </Field>
               </div>
               {row.bookings.length === 0 && (
