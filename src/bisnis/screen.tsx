@@ -32,6 +32,7 @@ import { useBisnis } from './store';
 import { LeaveUnsaved, useUnsaved } from './unsaved';
 import type { Booking } from './types';
 import { btnPrimary } from './ui';
+import { UndoToast } from './undo';
 
 export type BisnisTab = 'ringkasan' | 'booking' | 'kalender' | 'klien' | 'paket' | 'pesan' | 'keuangan' | 'pengaturan';
 
@@ -197,6 +198,7 @@ export function BisnisScreen({ open }: { open?: string }) {
       {receipt && <ReceiptDialog {...receipt} onClose={() => setReceipt(null)} />}
       {editing && <BookingEditor key={editing.id} initial={editing} onClose={() => setEditing(null)} actions={actions} />}
       <LeaveUnsaved />
+      <UndoToast />
       {invoice && <InvoiceDialog bookingId={invoice} onClose={() => setInvoice(null)} />}
       {message && <SendDialog {...message} onClose={() => setMessage(null)} />}
     </div>

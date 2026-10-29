@@ -20,6 +20,7 @@ import { nextColumn } from './overview';
 import { googleCalendarLink } from './reminders';
 import { useBisnis } from './store';
 import { MoneyInput, PLAIN, btnPrimary, inputCls, useEscape } from './ui';
+import { undoable } from './undo';
 
 const METHODS = ['Transfer', 'Tunai', 'QRIS', 'E-wallet'];
 
@@ -71,9 +72,9 @@ export function BookingDetail({
           <div className="flex min-w-0 flex-1 flex-col gap-1.5">
             <h2 className="truncate text-lg font-semibold">{titleOf(data, b)}</h2>
             <span className="flex flex-wrap items-center gap-2 text-xs">
-              <StagePicker current={b.columnId} onPick={(id) => update((d) => moveBooking(d, b.id, id, null))} />
+              <StagePicker current={b.columnId} onPick={(id) => undoable(t('Dipindah ke {col}', { col: data.columns.find((c) => c.id === id)?.name ?? '' }), (d) => moveBooking(d, b.id, id, null))} />
               {next && (
-                <button type="button" onClick={() => update((d) => moveBooking(d, b.id, next.id, null))} className="flex items-center gap-1 rounded-full border border-line px-2.5 py-1 font-medium text-gold-text hover:border-gold">
+                <button type="button" onClick={() => undoable(t('Dipindah ke {col}', { col: next.name }), (d) => moveBooking(d, b.id, next.id, null))} className="flex items-center gap-1 rounded-full border border-line px-2.5 py-1 font-medium text-gold-text hover:border-gold">
                   {t('Lanjut ke {col}', { col: next.name })} <ArrowRight size={12} />
                 </button>
               )}

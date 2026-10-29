@@ -13,6 +13,7 @@ import { PAY_COLOR, PAY_LABEL, balanceOf, nextSession, paidOf, payState, rupiah,
 import { useBisnis } from './store';
 import type { Booking, Client } from './types';
 import { Dialog, Empty, Field, PLAIN, btnGhost, btnPlain, btnPrimary, inputCls } from './ui';
+import { undoable } from './undo';
 
 export function Clients({ onOpen, onNew, onMessage }: { onOpen: (b: Booking) => void; onNew: (clientId: string) => void; onMessage: (client: Client, bookingId: string | null) => void }) {
   const data = useBisnis((s) => s.data)!;
@@ -176,7 +177,7 @@ function ClientForm({ client, canDelete, onClose, onDeleted }: { client: Client;
       footer={
         <>
           {canDelete && (
-            <button type="button" onClick={() => (update((d) => ({ ...d, clients: d.clients.filter((x) => x.id !== client.id) })), onDeleted(), onClose())} className={cx(btnPlain, 'mr-auto hover:text-reject')}>
+            <button type="button" onClick={() => (undoable(t('Klien dihapus'), (d) => ({ ...d, clients: d.clients.filter((x) => x.id !== client.id) })), onDeleted(), onClose())} className={cx(btnPlain, 'mr-auto hover:text-reject')}>
               <Trash2 size={14} /> {t('Hapus klien')}
             </button>
           )}

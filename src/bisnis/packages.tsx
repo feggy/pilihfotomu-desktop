@@ -14,6 +14,7 @@ import { newId, rupiah } from './model';
 import { useBisnis } from './store';
 import type { Addon, Package } from './types';
 import { Dialog, Empty, Field, MinutesInput, MoneyInput, SectionTitle, btnGhost, btnPlain, btnPrimary, inputCls } from './ui';
+import { undoable } from './undo';
 
 const duration = (min: number) => (min % 60 === 0 ? t('{n} jam', { n: min / 60 }) : min > 60 ? t('{h} jam {m} menit', { h: Math.floor(min / 60), m: min % 60 }) : t('{n} menit', { n: min }));
 
@@ -167,7 +168,7 @@ function PackageForm({ initial, onClose }: { initial: Package; onClose: () => vo
                 {initial.archived ? <ArchiveRestore size={14} /> : <Archive size={14} />} {initial.archived ? t('Tampilkan lagi') : t('Arsipkan')}
               </button>
             ) : (
-              <button type="button" onClick={() => (update((d) => ({ ...d, packages: d.packages.filter((x) => x.id !== initial.id) })), onClose())} className={cx(btnPlain, 'mr-auto hover:text-reject')}>
+              <button type="button" onClick={() => (undoable(t('Paket dihapus'), (d) => ({ ...d, packages: d.packages.filter((x) => x.id !== initial.id) })), onClose())} className={cx(btnPlain, 'mr-auto hover:text-reject')}>
                 <Trash2 size={14} /> {t('Hapus paket')}
               </button>
             ))}
@@ -216,7 +217,7 @@ function AddonForm({ initial, onClose }: { initial: Addon; onClose: () => void }
       footer={
         <>
           {!isNew && (
-            <button type="button" onClick={() => (update((d) => ({ ...d, addons: d.addons.filter((x) => x.id !== initial.id) })), onClose())} className={cx(btnPlain, 'mr-auto hover:text-reject')}>
+            <button type="button" onClick={() => (undoable(t('Add-on dihapus'), (d) => ({ ...d, addons: d.addons.filter((x) => x.id !== initial.id) })), onClose())} className={cx(btnPlain, 'mr-auto hover:text-reject')}>
               <Trash2 size={14} /> {t('Hapus add-on')}
             </button>
           )}

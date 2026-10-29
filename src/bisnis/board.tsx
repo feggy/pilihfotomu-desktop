@@ -12,6 +12,7 @@ import { t } from '../lib/i18n';
 import { PAY_COLOR, PAY_LABEL, balanceOf, clashesOf, nextSession, payState, rupiah, shortDate, timeOf, titleOf, totalOf } from './model';
 import { useBisnis } from './store';
 import type { BisnisData, Booking } from './types';
+import { undoable } from './undo';
 
 /** `id` put in column `columnId` before booking `before` (or last); the column numbered again. */
 export function moveBooking(d: BisnisData, id: string, columnId: string, before: string | null): BisnisData {
@@ -54,7 +55,7 @@ export function Board({ onOpen, onNew }: { onOpen: (b: Booking) => void; onNew: 
   const step = (b: Booking, by: number) => {
     const i = data.columns.findIndex((c) => c.id === b.columnId);
     const to = data.columns[i + by];
-    if (to) update((d) => moveBooking(d, b.id, to.id, null));
+    if (to) undoable(t('Dipindah ke {col}', { col: to.name }), (d) => moveBooking(d, b.id, to.id, null));
   };
 
   /** Where a card let go at (x, y) goes: the column under it, before the card whose upper half it is on. */
@@ -100,7 +101,9 @@ export function Board({ onOpen, onNew }: { onOpen: (b: Booking) => void; onNew: 
       cancelAnimationFrame(frame);
       if (moving) {
         const to = targetAt(ev.clientX, ev.clientY, b.id);
-        if (to) update((d) => moveBooking(d, b.id, to.column, to.before));
+        // Moved within its own column: just the order, nothing to take back.
+        if (to && to.column !== b.columnId) undoable(t('Dipindah ke {col}', { col: data.columns.find((c) => c.id === to.column)?.name ?? '' }), (d) => moveBooking(d, b.id, to.column, to.before));
+        else if (to) update((d) => moveBooking(d, b.id, to.column, to.before));
         justDragged.current = true;
         window.setTimeout(() => (justDragged.current = false), 0);
       }

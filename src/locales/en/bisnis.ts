@@ -428,4 +428,13 @@ export default {
   'Link Google Calendar jadwal': 'Google Calendar link for the session',
   'Pembayaran tercatat. Kirim "{name}" ke klien?': 'Payment recorded. Send "{name}" to the client?',
   'Kirim': 'Send',
+
+  // Undo
+  'Booking dihapus': 'Booking deleted',
+  'Dipindah ke {col}': 'Moved to {col}',
+  'Klien dihapus': 'Client deleted',
+  'Pengeluaran dihapus': 'Expense deleted',
+  'Paket dihapus': 'Package deleted',
+  'Add-on dihapus': 'Add-on deleted',
+  'Template dihapus': 'Template deleted',
 } as Record<string, string | [string, string]>;

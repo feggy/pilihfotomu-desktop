@@ -17,6 +17,7 @@ import { DEFAULT_TEMPLATES, newId } from './model';
 import { useBisnis } from './store';
 import type { MessageTemplate } from './types';
 import { Field, SectionTitle, btnGhost, btnPrimary, inputCls } from './ui';
+import { undoable } from './undo';
 import { SaveBar, useDirty, useUnsaved } from './unsaved';
 
 export function MessagesTab() {
@@ -103,7 +104,7 @@ export function MessagesTab() {
                     <Field label={t('Nama template')} className="flex-1">
                       <input value={name} onChange={(e) => setName(e.target.value)} className={inputCls} />
                     </Field>
-                    <button type="button" onClick={() => update((d) => ({ ...d, templates: d.templates.filter((x) => x.id !== tpl.id) }))} title={t('Hapus template')} className="mb-1 rounded-lg p-2 text-faint hover:text-reject">
+                    <button type="button" onClick={() => undoable(t('Template dihapus'), (d) => ({ ...d, templates: d.templates.filter((x) => x.id !== tpl.id) }))} title={t('Hapus template')} className="mb-1 rounded-lg p-2 text-faint hover:text-reject">
                       <Trash2 size={15} />
                     </button>
                   </div>

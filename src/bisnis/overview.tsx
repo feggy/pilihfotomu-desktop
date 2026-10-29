@@ -16,6 +16,7 @@ import { Setup } from './setup';
 import { useBisnis } from './store';
 import { useEscape } from './ui';
 import type { BisnisData, Booking, Column } from './types';
+import { undoable } from './undo';
 
 /** The column after this booking's, skipping inactive ones (Batal): where "Lanjut" takes it. */
 export function nextColumn(data: BisnisData, b: Booking): Column | null {
@@ -48,7 +49,6 @@ export function Overview({
   onNewBooking: () => void;
 }) {
   const data = useBisnis((s) => s.data)!;
-  const update = useBisnis((s) => s.update);
   const [stage, setStage] = useState<string | null>(null);
   // A stage's list closes on a click outside the stages, or Escape.
   const stagesRef = useRef<HTMLElement>(null);
@@ -63,7 +63,7 @@ export function Overview({
   }, [stage]);
   const now = new Date();
   const today = dayKey(now);
-  const move = (b: Booking, to: Column) => update((d) => moveBooking(d, b.id, to.id, null));
+  const move = (b: Booking, to: Column) => undoable(t('Dipindah ke {col}', { col: to.name }), (d) => moveBooking(d, b.id, to.id, null));
   const doneCol = data.columns.find((c) => c.done && !c.inactive) ?? null;
 
   /**

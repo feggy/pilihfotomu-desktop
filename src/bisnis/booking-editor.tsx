@@ -18,6 +18,7 @@ import { useBisnis } from './store';
 import { DateInput, TimeInput } from '../components/date-picker';
 import type { BisnisData, Booking, Client, Payment, Session } from './types';
 import { Dialog, Field, MoneyInput, PLAIN, SectionTitle, btnPlain, btnPrimary, inputCls } from './ui';
+import { undoable } from './undo';
 
 /** A new booking in column `columnId`, its first session on `day` if given. */
 export function newBooking(data: BisnisData, columnId: string, day?: string): Booking {
@@ -110,7 +111,7 @@ export function BookingEditor({ initial, onClose, actions = [] }: { initial: Boo
     onClose();
   };
   const remove = () => {
-    update((d) => ({ ...d, bookings: d.bookings.filter((x) => x.id !== b.id), expenses: d.expenses.map((e) => (e.bookingId === b.id ? { ...e, bookingId: null } : e)) }));
+    undoable(t('Booking dihapus'), (d) => ({ ...d, bookings: d.bookings.filter((x) => x.id !== b.id), expenses: d.expenses.map((e) => (e.bookingId === b.id ? { ...e, bookingId: null } : e)) }));
     onClose();
   };
 

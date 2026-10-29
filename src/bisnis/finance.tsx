@@ -20,6 +20,7 @@ import { useBisnis } from './store';
 import { DateInput } from '../components/date-picker';
 import type { BisnisData, Booking } from './types';
 import { Field, MoneyInput, SectionTitle, btnGhost, inputCls } from './ui';
+import { undoable } from './undo';
 
 type Period = { kind: 'bulan' | 'tahun'; year: number; month: number };
 
@@ -262,7 +263,7 @@ function Expenses({ period }: { period: Period }) {
               {b && <span className="text-faint"> · {titleOf(data, b)}</span>}
             </span>
             <span className="text-right font-medium text-reject tabular-nums">− {rupiah(e.amount)}</span>
-            <button type="button" onClick={() => update((d) => ({ ...d, expenses: d.expenses.filter((x) => x.id !== e.id) }))} aria-label={t('Hapus')} className="text-faint hover:text-reject">
+            <button type="button" onClick={() => undoable(t('Pengeluaran dihapus'), (d) => ({ ...d, expenses: d.expenses.filter((x) => x.id !== e.id) }))} aria-label={t('Hapus')} className="text-faint hover:text-reject">
               <Trash2 size={14} />
             </button>
           </div>
