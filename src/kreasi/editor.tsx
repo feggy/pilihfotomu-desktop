@@ -81,12 +81,14 @@ import { useBrand } from './brand';
 import { BrandPanel } from './brand-panel';
 import { CutoutRefine } from './cutout-refine';
 import { ExportDialog } from './export';
-import { CATEGORIES, EMPTY_PICTURE, fontFamilies, formatLabel, isPicturePlace, photoIdOf, photoSticker, saveMyTemplate, slotShapes, type TemplateCategory } from './kit';
+import { CATEGORIES, EMPTY_PICTURE, fontFamilies, formatLabel, isBlankId, isPicturePlace, photoIdOf, photoSticker, saveMyTemplate, slotShapes, type TemplateCategory } from './kit';
 import { PhotosPanel } from './photos-panel';
 import { addDropped } from './sources';
 import { BackgroundPanel, ElementsPanel, HistoryPanel, LayersPanel, TextPanel, elementName } from './panels';
 import { facePan, placed, ranked, useKreasi, type SourcePhoto } from './store';
 import { saveNow } from './autosave';
+import { setStep as setHistoryStep } from './history';
+import { MAX_SLIDES, MIN_SLIDES, addSlide, duplicateSlide, removeSlide } from './slides';
 import { PhotoThumb, SHAPE_LABEL, ShapeIcon, Steps } from './ui';
 
 type Panel = 'lapisan' | 'foto' | 'teks' | 'elemen' | 'latar' | 'brand' | 'riwayat';
@@ -193,6 +195,31 @@ export function Editor() {
   }, []);
   const [safe, setSafe] = useState(false);
   const [stageRef, stage] = useBox<HTMLDivElement>();
+  // Space held: a drag anywhere on the stage moves the view (zoomed in), as in Figma and Photoshop.
+  const [spaceHeld, setSpaceHeld] = useState(false);
+  const panFrom = useRef<{ x: number; y: number } | null>(null);
+  const [panning, setPanning] = useState(false);
+  useEffect(() => {
+    const typing = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
+    };
+    const down = (e: KeyboardEvent) => {
+      if (e.code !== 'Space' || typing(e)) return;
+      e.preventDefault();
+      if (!e.repeat) setSpaceHeld(true);
+    };
+    const up = (e: KeyboardEvent) => e.code === 'Space' && setSpaceHeld(false);
+    const off = () => setSpaceHeld(false);
+    window.addEventListener('keydown', down);
+    window.addEventListener('keyup', up);
+    window.addEventListener('blur', off);
+    return () => {
+      window.removeEventListener('keydown', down);
+      window.removeEventListener('keyup', up);
+      window.removeEventListener('blur', off);
+    };
+  }, []);
   const images = useDocImages(doc, source?.root ?? null, true);
 
   // View zoom: 1 fits the canvas in the window; up to 8× for detail.
@@ -569,6 +596,8 @@ export function Editor() {
   }, []);
   const selText = selection?.kind === 'text' ? doc.texts.find((x) => x.id === selection.id) : undefined;
   const selSticker = selection?.kind === 'sticker' ? doc.stickers.find((x) => x.id === selection.id) : undefined;
+  // A new carousel slide: a template's gets a photo place, a blank canvas's is blank too.
+  const withPhotoPlace = !!template && !isBlankId(template.id);
   // One movable thing picked: to the middle or an edge of the canvas.
   const alignable = !!selection && movableIn(doc, selection) && !isLayerLocked(doc, keyOf(selection, doc) ?? '');
   const alignRow = alignable ? (
@@ -752,7 +781,33 @@ export function Editor() {
               </button>
             </div>
           )}
-          <div ref={stageRef} className={cx('relative min-h-0 flex-1 overflow-auto', fileOver && 'ring-2 ring-gold ring-inset')}>
+          <div
+            ref={stageRef}
+            className={cx('relative min-h-0 flex-1 overflow-auto', fileOver && 'ring-2 ring-gold ring-inset', spaceHeld && (panning ? 'cursor-grabbing' : 'cursor-grab'))}
+            // Caught before the canvas sees it: with Space held nothing is picked or moved, only the view.
+            onPointerDownCapture={(e) => {
+              if (!spaceHeld || e.button !== 0) return;
+              e.preventDefault();
+              e.stopPropagation();
+              e.currentTarget.setPointerCapture(e.pointerId);
+              panFrom.current = { x: e.clientX, y: e.clientY };
+              setPanning(true);
+            }}
+            onPointerMoveCapture={(e) => {
+              const from = panFrom.current;
+              if (!from) return;
+              e.stopPropagation();
+              e.currentTarget.scrollLeft -= e.clientX - from.x;
+              e.currentTarget.scrollTop -= e.clientY - from.y;
+              panFrom.current = { x: e.clientX, y: e.clientY };
+            }}
+            onPointerUpCapture={(e) => {
+              if (!panFrom.current) return;
+              e.stopPropagation();
+              panFrom.current = null;
+              setPanning(false);
+            }}
+          >
             {fileOver && (
               <span className="pointer-events-none absolute top-3 left-1/2 z-20 -translate-x-1/2 rounded-full bg-panel-2 px-3 py-1.5 text-xs text-gold-text shadow-xl">
                 {t('Lepas untuk menambah foto')}
@@ -782,6 +837,7 @@ export function Editor() {
                     onMulti: (list) => (pickMany(list), list.length > 1 && setPanel('lapisan')),
                     onMove: (moves) => live(placeMany(moves)),
                     // ⌥ + drag: copies where the originals are; the drag then moves the copies.
+                    onAddSlide: (after) => (select(null), edit(addSlide(after, withPhotoPlace))),
                     onCloneDrag: (list) => {
                       const dup = duplicateMany(list, doc, 0);
                       edit(dup.edit);
@@ -814,6 +870,54 @@ export function Editor() {
           </div>
           <div className="flex h-10 shrink-0 items-center justify-center gap-4 overflow-hidden border-t border-line-soft px-3 text-[11px] whitespace-nowrap text-faint">
             <span className="shrink-0">{formatLabel(doc.format)}</span>
+            {doc.format === 'carousel' && (
+              <>
+                <span className="h-3 w-px bg-line" />
+                {/* The slides: ⧉ on one copies it right after, × takes it away (⌘Z brings it back), + adds one at the end. */}
+                <span className="flex items-center gap-1">
+                  {Array.from({ length: doc.slides }, (_, k) => (
+                    <span key={k} className="group relative flex h-6 min-w-6 items-center justify-center rounded-md bg-raised px-1.5 font-medium text-fg tabular-nums">
+                      {k + 1}
+                      {doc.slides < MAX_SLIDES && (
+                        <button
+                          type="button"
+                          onClick={() => (select(null), edit(duplicateSlide(k)), setHistoryStep(useKreasi.getState().doc!, { label: 'Duplikat slide', at: Date.now() }))}
+                          title={t('Duplikat slide {n}', { n: k + 1 })}
+                          aria-label={t('Duplikat slide {n}', { n: k + 1 })}
+                          className="absolute -top-1.5 -left-1.5 hidden size-4 items-center justify-center rounded-full bg-gold text-bg group-hover:flex"
+                        >
+                          <Copy size={9} strokeWidth={3} />
+                        </button>
+                      )}
+                      {doc.slides > MIN_SLIDES && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            select(null);
+                            edit(removeSlide(k));
+                            setNotice({ text: t('Slide {n} dihapus. ⌘Z mengembalikannya.', { n: k + 1 }) });
+                          }}
+                          title={t('Hapus slide {n}', { n: k + 1 })}
+                          aria-label={t('Hapus slide {n}', { n: k + 1 })}
+                          className="absolute -top-1.5 -right-1.5 hidden size-4 items-center justify-center rounded-full bg-reject text-white group-hover:flex"
+                        >
+                          <X size={10} strokeWidth={3} />
+                        </button>
+                      )}
+                    </span>
+                  ))}
+                  <button
+                    type="button"
+                    disabled={doc.slides >= MAX_SLIDES}
+                    onClick={() => edit(addSlide(doc.slides - 1, withPhotoPlace))}
+                    title={doc.slides >= MAX_SLIDES ? t('Carousel Instagram paling banyak {n} slide', { n: MAX_SLIDES }) : t('Tambah slide')}
+                    className="flex h-6 items-center gap-1 rounded-md px-1.5 hover:bg-raised hover:text-fg disabled:opacity-40 disabled:hover:bg-transparent"
+                  >
+                    <Plus size={12} /> {t('Slide')}
+                  </button>
+                </span>
+              </>
+            )}
             <span className="h-3 w-px bg-line" />
             <span className="flex items-center gap-1">
               <button type="button" onClick={() => zoomBy(0.8)} title={t('Perkecil')} className="rounded p-1 hover:bg-raised hover:text-fg">

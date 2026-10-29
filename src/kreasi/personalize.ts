@@ -89,3 +89,14 @@ export function personalize(doc: CollageDoc, client: ClientInfo, studio: string)
   });
   return changed ? { ...doc, texts } : doc;
 }
+
+/** The client's day as written into a design: "7 November 2026". */
+export function clientDate(date: number): string {
+  const d = new Date(date * 1000);
+  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+}
+
+/** Whether the design has an example name, date or studio for "Terapkan ke desain" to swap. */
+export function hasExamples(doc: CollageDoc, applied?: string): boolean {
+  return personalize(doc, { name: '\u0000', date: 0, applied }, '\u0000') !== doc;
+}

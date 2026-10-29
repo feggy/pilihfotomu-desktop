@@ -1,9 +1,10 @@
 /**
- * The editor's Brand panel: the studio's logo and name onto the design, and
- * the watermark. The brand itself is set in Pengaturan › Brand studio.
+ * The editor's Brand panel: the studio's logo and name onto the design, the
+ * watermark, and the client's name and date (swapped into a template's
+ * examples, or added as texts to a design without any). The brand itself is set in Pengaturan › Brand studio.
  */
 
-import { Settings2, Stamp, Type, UserRound } from 'lucide-react';
+import { Building2, Settings2, Stamp, Type, UserRound } from 'lucide-react';
 
 import { Segmented, Switch, cx } from '../components/ui';
 import { t } from '../lib/i18n';
@@ -11,7 +12,7 @@ import { useApp } from '../store';
 import { addText, type Edit } from './actions';
 import { LOGO_STICKER, useBrand } from './brand';
 import { newId, type CollageDoc, type Watermark, type WatermarkPosition } from './engine/document';
-import { personalize } from './personalize';
+import { clientDate, hasExamples, personalize } from './personalize';
 import { useKreasi } from './store';
 
 const POSITIONS: { id: WatermarkPosition; label: string }[] = [
@@ -61,59 +62,53 @@ export function BrandPanel({ doc, edit, onAdd }: { doc: CollageDoc; edit: (fn: E
     setClient({ applied: client.name.trim() });
   };
 
+  // A blank design has no example name or date to swap: its client data goes in as new texts.
+  const examples = hasExamples(doc, client.applied);
+  const addClientText = (text: string) => onAdd(addText(text, 0.05, 600));
+  const openBrand = () => go({ name: 'settings', back: useApp.getState().screen, section: 'brand' });
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-2.5 rounded-lg border border-line-soft bg-bg p-3">
-        <span className="flex items-center gap-2 text-xs font-semibold">
-          <UserRound size={14} className="text-gold-text" /> {t('Data klien')}
+        <span className="flex items-center justify-between gap-2">
+          <span className="flex items-center gap-2 text-xs font-semibold">
+            <Building2 size={14} className="text-gold-text" /> {t('Brand studio')}
+          </span>
+          {!empty && (
+            <button type="button" onClick={openBrand} className="text-[11px] font-medium text-gold-text hover:underline">
+              {t('Ubah')}
+            </button>
+          )}
         </span>
-        <label className="flex flex-col gap-1 text-[11px] text-muted">
-          {t('Nama klien')}
-          <input
-            value={client.name}
-            onChange={(e) => setClient({ name: e.target.value })}
-            placeholder={t('mis. Rina & Dimas')}
-            className="h-8 rounded-md border border-line bg-panel px-2 text-xs text-fg outline-none placeholder:text-faint focus:border-gold"
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-[11px] text-muted">
-          {t('Tanggal acara')}
-          <input
-            type="date"
-            value={dateValue}
-            onChange={(e) => setClient({ date: e.target.value ? Date.parse(`${e.target.value}T00:00:00Z`) / 1000 : null })}
-            className="h-8 rounded-md border border-line bg-panel px-2 text-xs text-fg outline-none focus:border-gold"
-          />
-        </label>
-        <button type="button" onClick={apply} className="h-8 rounded-md bg-raised text-xs font-medium hover:bg-line">
-          {t('Terapkan ke desain')}
-        </button>
-        <span className="text-[11px] leading-snug text-faint">
-          {t('Mengganti nama, tanggal dan nama studio contoh di template. Template berikutnya terisi sendiri.')}
-        </span>
+        {empty ? (
+          <>
+            <span className="text-[11px] leading-snug text-muted">{t('Isi nama studio dan logo sekali di Pengaturan. Setelah itu tinggal klik untuk menaruhnya di desain mana pun, atau jadikan watermark.')}</span>
+            <button type="button" onClick={openBrand} className="flex h-8 items-center justify-center gap-1.5 rounded-md bg-gold-gradient text-xs font-semibold text-white">
+              <Settings2 size={13} /> {t('Atur brand studio')}
+            </button>
+          </>
+        ) : (
+          <>
+            <span className="text-[11px] text-faint">{t('Klik untuk menaruhnya di desain.')}</span>
+            {brand.logo && (
+              <button type="button" onClick={addLogo} className="flex items-center gap-3 rounded-lg border border-line-soft bg-panel p-2 text-left hover:border-gold">
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-[repeating-conic-gradient(#2a3a33_0_25%,#1a2622_0_50%)] bg-[length:10px_10px] p-1">
+                  <img src={brand.logo} alt="" className="max-h-full max-w-full" />
+                </span>
+                <span className="text-xs font-medium">{t('Logo')}</span>
+              </button>
+            )}
+            {brand.studio.trim() && (
+              <button type="button" onClick={addName} className="flex items-center gap-3 rounded-lg border border-line-soft bg-panel p-2 text-left hover:border-gold">
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-raised">
+                  <Type size={16} className="text-gold-text" />
+                </span>
+                <span className="min-w-0 truncate text-xs font-medium">{brand.studio}</span>
+              </button>
+            )}
+          </>
+        )}
       </div>
-      {empty ? (
-        <p className="text-xs leading-relaxed text-muted">{t('Isi nama studio dan logo sekali, lalu pakai di semua desain.')}</p>
-      ) : (
-        <div className="flex flex-col gap-2">
-          {brand.logo && (
-            <button type="button" onClick={addLogo} className="flex items-center gap-3 rounded-lg border border-line-soft bg-bg p-2 text-left hover:border-gold">
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-[repeating-conic-gradient(#2a3a33_0_25%,#1a2622_0_50%)] bg-[length:10px_10px] p-1">
-                <img src={brand.logo} alt="" className="max-h-full max-w-full" />
-              </span>
-              <span className="text-xs font-medium">{t('Tambah logo')}</span>
-            </button>
-          )}
-          {brand.studio.trim() && (
-            <button type="button" onClick={addName} className="flex items-center gap-3 rounded-lg border border-line-soft bg-bg p-2 text-left hover:border-gold">
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-raised">
-                <Type size={16} className="text-gold-text" />
-              </span>
-              <span className="min-w-0 truncate text-xs font-medium">{brand.studio}</span>
-            </button>
-          )}
-        </div>
-      )}
 
       <div className="flex flex-col gap-3 rounded-lg border border-line-soft bg-bg p-3">
         <div className="flex items-center justify-between gap-2">
@@ -122,12 +117,13 @@ export function BrandPanel({ doc, edit, onAdd }: { doc: CollageDoc; edit: (fn: E
           </span>
           <Switch
             label={t('Watermark')}
-            checked={wm.enabled}
+            checked={wm.enabled && !empty}
             disabled={empty}
             onChange={(enabled) => setWm({ enabled, kind: wm.kind === 'gambar' && !brand.logo ? 'teks' : wm.kind })}
           />
         </div>
-        {wm.enabled && (
+        {empty && <span className="text-[11px] leading-snug text-faint">{t('Butuh nama studio atau logo dulu: atur di Brand studio di atas.')}</span>}
+        {wm.enabled && !empty && (
           <>
             {brand.logo && (
               <Segmented<Watermark['kind']>
@@ -176,13 +172,50 @@ export function BrandPanel({ doc, edit, onAdd }: { doc: CollageDoc; edit: (fn: E
         )}
       </div>
 
-      <button
-        type="button"
-        onClick={() => go({ name: 'settings', back: useApp.getState().screen, section: 'brand' })}
-        className="flex items-center gap-1.5 self-start text-xs font-medium text-gold-text hover:underline"
-      >
-        <Settings2 size={13} /> {t('Atur brand studio')}
-      </button>
+
+      <div className="flex flex-col gap-2.5 rounded-lg border border-line-soft bg-bg p-3">
+        <span className="flex items-center gap-2 text-xs font-semibold">
+          <UserRound size={14} className="text-gold-text" /> {t('Data klien')}
+        </span>
+        <label className="flex flex-col gap-1 text-[11px] text-muted">
+          {t('Nama klien')}
+          <input
+            value={client.name}
+            onChange={(e) => setClient({ name: e.target.value })}
+            placeholder={t('mis. Rina & Dimas')}
+            className="h-8 rounded-md border border-line bg-panel px-2 text-xs text-fg outline-none placeholder:text-faint focus:border-gold"
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-[11px] text-muted">
+          {t('Tanggal acara')}
+          <input
+            type="date"
+            value={dateValue}
+            onChange={(e) => setClient({ date: e.target.value ? Date.parse(`${e.target.value}T00:00:00Z`) / 1000 : null })}
+            className="h-8 rounded-md border border-line bg-panel px-2 text-xs text-fg outline-none focus:border-gold"
+          />
+        </label>
+        {examples ? (
+          <>
+            <button type="button" onClick={apply} className="h-8 rounded-md bg-raised text-xs font-medium hover:bg-line">
+              {t('Terapkan ke desain')}
+            </button>
+            <span className="text-[11px] leading-snug text-faint">{t('Mengganti nama, tanggal, dan nama studio contoh di desain ini. Template berikutnya terisi sendiri.')}</span>
+          </>
+        ) : (
+          <>
+            <div className="flex gap-1.5">
+              <button type="button" disabled={!client.name.trim()} onClick={() => addClientText(client.name.trim())} className="h-8 flex-1 rounded-md bg-raised text-xs font-medium hover:bg-line disabled:opacity-40">
+                {t('Tambah nama')}
+              </button>
+              <button type="button" disabled={client.date == null} onClick={() => client.date != null && addClientText(clientDate(client.date))} className="h-8 flex-1 rounded-md bg-raised text-xs font-medium hover:bg-line disabled:opacity-40">
+                {t('Tambah tanggal')}
+              </button>
+            </div>
+            <span className="text-[11px] leading-snug text-faint">{t('Desain ini belum punya teks nama atau tanggal: tambahkan sebagai teks baru. Template berikutnya terisi sendiri.')}</span>
+          </>
+        )}
+      </div>
     </div>
   );
 }

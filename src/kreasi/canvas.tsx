@@ -1,6 +1,8 @@
 import { convertFileSrc } from '@tauri-apps/api/core';
+import { Plus } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
+import { cx } from '../components/ui';
 import { api } from '../lib/api';
 import { t } from '../lib/i18n';
 import {
@@ -26,6 +28,7 @@ import { coverCrop, fontFamilies, loadDocFonts, loadLocalImage, photoIdOf, photo
 import { assetIdOf, assetImage } from './assets';
 import { LOGO_STICKER, useBrand, useBrandLogo } from './brand';
 import { emptyAssets } from './preview';
+import { MAX_SLIDES } from './slides';
 
 const previewPaths = new Map<string, Promise<string>>();
 /** The 2048 px preview of a session photo (made on first use, cached by Rust). */
@@ -131,6 +134,8 @@ export interface CanvasHandlers {
   onMove?: (moves: Placed[]) => void;
   /** ⌥ + drag: copies of these, right where they are, picked; the drag moves the copies. */
   onCloneDrag?: (list: Multi) => Multi;
+  /** Carousel: a new slide after slide `after` (-1: before the first). */
+  onAddSlide?: (after: number) => void;
   /** Free layout: a photo from the list dropped on empty canvas, at (x, y) as 0–1 of it. */
   onDropNew?: (photoId: number, x: number, y: number) => void;
   /** Double-click on a photo: "Atur foto" for it. */
@@ -828,6 +833,35 @@ export function DocCanvas({
             {t('Slide {n}', { n: i + 1 })}
           </span>
         ))}
+      {/* + at either end and between slides (on the numbers' row, clear of the canvas): a slide there. */}
+      {outlines &&
+        doc.format === 'carousel' &&
+        handlers.onAddSlide &&
+        doc.slides < MAX_SLIDES &&
+        Array.from({ length: doc.slides + 1 }, (_, i) => {
+          const end = i === 0 || i === doc.slides;
+          const label = i === 0 ? t('Tambah slide di awal') : i === doc.slides ? t('Tambah slide di akhir') : t('Tambah slide di antara {a} dan {b}', { a: i, b: i + 1 });
+          return (
+            <button
+              key={i}
+              type="button"
+              onClick={() => handlers.onAddSlide!(i - 1)}
+              title={label}
+              aria-label={label}
+              className={cx(
+                'absolute z-10 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-line bg-raised text-muted shadow-md transition-colors hover:border-gold hover:bg-gold hover:text-bg',
+                end ? 'size-[22px]' : 'size-[18px]',
+              )}
+              style={
+                end
+                  ? { left: i === 0 ? -16 : `calc(100% + 16px)`, top: '50%' }
+                  : { left: `${(i / doc.slides) * 100}%`, top: -17 }
+              }
+            >
+              <Plus size={end ? 13 : 11} strokeWidth={2.5} />
+            </button>
+          );
+        })}
       {crop && (
         <>
           {/* The rest of the picture, faint, beyond its place. */}

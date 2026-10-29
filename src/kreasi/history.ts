@@ -43,6 +43,9 @@ function layersChange<T extends Placed>(a: T[], b: T[], noun: string, own?: (x: 
 }
 
 export function describe(a: CollageDoc, b: CollageDoc): string {
+  // Everything moves when a slide comes or goes: that is the step, not the moves.
+  // (Duplikat slide labels itself where it is done.)
+  if (a.format === 'carousel' && a.slides !== b.slides) return b.slides > a.slides ? 'Tambah slide' : 'Hapus slide';
   const texts = layersChange(a.texts, b.texts, 'teks', (x, y) => (x.text !== y.text ? 'Ubah teks' : 'Ubah gaya teks'));
   if (texts) return texts;
   const stickers = layersChange(a.stickers, b.stickers, 'elemen', (x, y) => (x.sticker !== y.sticker ? 'Ganti gambar elemen' : null));
