@@ -35,8 +35,11 @@ export function MoneyInput({ value, onChange, className, placeholder }: { value:
   );
 }
 
-/** A text box that saves when it loses focus (or Enter), not on every key: one undo-free write per edit. */
-export function LazyInput({ value, onCommit, className, placeholder, email, plain }: { value: string; onCommit: (v: string) => void; className?: string; placeholder?: string; email?: boolean; plain?: boolean }) {
+/**
+ * A text box that saves when it loses focus (or Enter), not on every key: one undo-free write per edit.
+ * `live`: every key goes to `onCommit` (for a draft kept until Simpan, so its bar shows as you type — and goes when typed back).
+ */
+export function LazyInput({ value, onCommit, className, placeholder, email, plain, live }: { value: string; onCommit: (v: string) => void; className?: string; placeholder?: string; email?: boolean; plain?: boolean; live?: boolean }) {
   const [v, setV] = useState(value);
   useEffect(() => setV(value), [value]);
   return (
@@ -44,8 +47,8 @@ export function LazyInput({ value, onCommit, className, placeholder, email, plai
       {...(email ? { type: 'email', ...PLAIN } : plain ? PLAIN : {})}
       value={v}
       placeholder={placeholder}
-      onChange={(e) => setV(e.target.value)}
-      onBlur={() => v !== value && onCommit(v)}
+      onChange={(e) => (setV(e.target.value), live && onCommit(e.target.value))}
+      onBlur={() => (live ? v !== value && setV(value) : v !== value && onCommit(v))}
       onKeyDown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
       className={className ?? inputCls}
     />
@@ -57,7 +60,7 @@ export function LazyInput({ value, onCommit, className, placeholder, email, plai
  * left or on Enter and kept within min…max; a unit ("menit", "%") inside it.
  * An emptied box goes back to what it was.
  */
-export function NumberInput({ value, onCommit, min = 0, max = Number.MAX_SAFE_INTEGER, unit, className }: { value: number; onCommit: (n: number) => void; min?: number; max?: number; unit?: string; className?: string }) {
+export function NumberInput({ value, onCommit, min = 0, max = Number.MAX_SAFE_INTEGER, unit, className, live }: { value: number; onCommit: (n: number) => void; min?: number; max?: number; unit?: string; className?: string; live?: boolean }) {
   const [v, setV] = useState(String(value));
   useEffect(() => setV(String(value)), [value]);
   const commit = () => {
@@ -71,7 +74,12 @@ export function NumberInput({ value, onCommit, min = 0, max = Number.MAX_SAFE_IN
       <input
         inputMode="numeric"
         value={v}
-        onChange={(e) => setV(e.target.value.replace(/\D/g, ''))}
+        onChange={(e) => {
+          const digits = e.target.value.replace(/\D/g, '');
+          setV(digits);
+          // Live: a number in range goes to the draft as typed; the rest waits for the box to be left.
+          if (live && digits && Number(digits) >= min && Number(digits) <= max && Number(digits) !== value) onCommit(Number(digits));
+        }}
         onFocus={(e) => e.currentTarget.select()}
         onBlur={commit}
         onKeyDown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
@@ -85,11 +93,20 @@ export function NumberInput({ value, onCommit, min = 0, max = Number.MAX_SAFE_IN
 /** Minutes, at least 15. */
 export const MinutesInput = ({ value, onCommit }: { value: number; onCommit: (minutes: number) => void }) => <NumberInput value={value} onCommit={onCommit} min={15} unit={t('menit')} />;
 
-/** A longer text that saves when it loses focus. */
-export function TextArea({ value, onCommit, rows = 3, placeholder }: { value: string; onCommit: (v: string) => void; rows?: number; placeholder?: string }) {
+/** A longer text that saves when it loses focus (`live`: on every key, as LazyInput). */
+export function TextArea({ value, onCommit, rows = 3, placeholder, live }: { value: string; onCommit: (v: string) => void; rows?: number; placeholder?: string; live?: boolean }) {
   const [v, setV] = useState(value);
   useEffect(() => setV(value), [value]);
-  return <textarea value={v} rows={rows} placeholder={placeholder} onChange={(e) => setV(e.target.value)} onBlur={() => v !== value && onCommit(v)} className={cx(inputCls, 'h-auto resize-y py-2')} />;
+  return (
+    <textarea
+      value={v}
+      rows={rows}
+      placeholder={placeholder}
+      onChange={(e) => (setV(e.target.value), live && onCommit(e.target.value))}
+      onBlur={() => !live && v !== value && onCommit(v)}
+      className={cx(inputCls, 'h-auto resize-y py-2')}
+    />
+  );
 }
 
 /** What is open, oldest first; Escape closes only the last (a dialog over the booking drawer, not the drawer under it). */

@@ -35,8 +35,13 @@ export function Settings({ sections }: { sections?: ReactNode }) {
   const saveDraft = () => {
     update((d) => {
       // Only the settings changed here: a counter moved meanwhile by an invoice stays as it is.
-      const changed = Object.fromEntries(Object.entries(draft.settings).filter(([k, v]) => JSON.stringify(v) !== JSON.stringify(base.settings[k as keyof BisnisSettings])));
-      const columns = draft.columns;
+      // Typed as it goes (spaces and all): tidied here.
+      const changed = Object.fromEntries(
+        Object.entries(draft.settings)
+          .filter(([k, v]) => JSON.stringify(v) !== JSON.stringify(base.settings[k as keyof BisnisSettings]))
+          .map(([k, v]) => [k, k === 'invoicePrefix' || k === 'receiptPrefix' ? String(v).trim() : v]),
+      );
+      const columns = draft.columns.map((c) => ({ ...c, name: c.name.trim() }));
       // Bookings of a column taken away go to the first column left.
       const ids = new Set(columns.map((c) => c.id));
       // A stage added here gets a message template to start from.
@@ -105,7 +110,7 @@ export function Settings({ sections }: { sections?: ReactNode }) {
                   <button key={color} type="button" onClick={() => setCol(c.id, { color })} aria-label={color} className={cx('size-4 rounded-full', c.color === color ? 'ring-2 ring-fg ring-offset-1 ring-offset-panel' : '')} style={{ background: color }} />
                 ))}
               </span>
-              <LazyInput value={c.name} onCommit={(name) => name.trim() && setCol(c.id, { name: name.trim() })} className={cx(inputCls, 'h-8 flex-1')} />
+              <LazyInput live value={c.name} onCommit={(name) => name.trim() && setCol(c.id, { name })} className={cx(inputCls, 'h-8 flex-1')} />
               <div className="flex shrink-0 items-center gap-1.5 text-[11px] text-muted" title={t('Booking di kolom ini dianggap sudah dikirim: tidak ada pengingat kirim hasil.')}>
                 {t('Selesai')}
                 <Switch label={t('Selesai')} checked={!!c.done} onChange={(done) => setCol(c.id, { done })} />
@@ -130,7 +135,7 @@ export function Settings({ sections }: { sections?: ReactNode }) {
         <section className="flex flex-col gap-3">
           <SectionTitle>{t('Jadwal')}</SectionTitle>
           <Field label={t('Jeda antar jadwal')} hint={t('Waktu perjalanan dan persiapan. Dua jadwal yang lebih dekat dari ini ditandai bentrok.')} className="max-w-60">
-            <NumberInput value={draft.settings.bufferMin} onCommit={(bufferMin) => setSettings({ bufferMin })} max={600} unit={t('menit')} />
+            <NumberInput live value={draft.settings.bufferMin} onCommit={(bufferMin) => setSettings({ bufferMin })} max={600} unit={t('menit')} />
           </Field>
         </section>
 
@@ -171,29 +176,29 @@ export function Settings({ sections }: { sections?: ReactNode }) {
           <SectionTitle>{t('Invoice & pembayaran')}</SectionTitle>
           <div className="grid grid-cols-2 gap-3">
             <Field label={t('Awalan nomor invoice')} hint={t('Nomor berikutnya: {no}', { no: `${draft.settings.invoicePrefix || 'INV'}-${today().slice(0, 4)}${today().slice(5, 7)}-${String(draft.settings.nextInvoice).padStart(3, '0')}` })}>
-              <LazyInput value={draft.settings.invoicePrefix} onCommit={(invoicePrefix) => setSettings({ invoicePrefix: invoicePrefix.trim().toUpperCase() })} />
+              <LazyInput live value={draft.settings.invoicePrefix} onCommit={(invoicePrefix) => setSettings({ invoicePrefix: invoicePrefix.toUpperCase() })} />
             </Field>
             <Field label={t('Urutan berikutnya')}>
-              <NumberInput value={draft.settings.nextInvoice} onCommit={(nextInvoice) => setSettings({ nextInvoice })} min={1} />
+              <NumberInput live value={draft.settings.nextInvoice} onCommit={(nextInvoice) => setSettings({ nextInvoice })} min={1} />
             </Field>
             <Field label={t('Awalan nomor kuitansi')} hint={t('Nomor berikutnya: {no}', { no: `${draft.settings.receiptPrefix || 'KWT'}-${today().slice(0, 4)}${today().slice(5, 7)}-${String(draft.settings.nextReceipt).padStart(3, '0')}` })}>
-              <LazyInput value={draft.settings.receiptPrefix} onCommit={(receiptPrefix) => setSettings({ receiptPrefix: receiptPrefix.trim().toUpperCase() })} />
+              <LazyInput live value={draft.settings.receiptPrefix} onCommit={(receiptPrefix) => setSettings({ receiptPrefix: receiptPrefix.toUpperCase() })} />
             </Field>
             <Field label={t('Urutan kuitansi berikutnya')}>
-              <NumberInput value={draft.settings.nextReceipt} onCommit={(nextReceipt) => setSettings({ nextReceipt })} min={1} />
+              <NumberInput live value={draft.settings.nextReceipt} onCommit={(nextReceipt) => setSettings({ nextReceipt })} min={1} />
             </Field>
             <Field label={t('DP minimal (% dari total)')} hint={t('Untuk isian {dp_minimal} di pesan konfirmasi.')}>
-              <NumberInput value={draft.settings.minDpPercent} onCommit={(minDpPercent) => setSettings({ minDpPercent })} max={100} unit="%" />
+              <NumberInput live value={draft.settings.minDpPercent} onCommit={(minDpPercent) => setSettings({ minDpPercent })} max={100} unit="%" />
             </Field>
           </div>
           <Field label={t('Kontak studio (di bawah nama studio pada invoice)')}>
-            <TextArea value={draft.settings.studioContact} onCommit={(studioContact) => setSettings({ studioContact })} rows={3} placeholder={t('Alamat\n0812-xxxx-xxxx · @namastudio')} />
+            <TextArea live value={draft.settings.studioContact} onCommit={(studioContact) => setSettings({ studioContact })} rows={3} placeholder={t('Alamat\n0812-xxxx-xxxx · @namastudio')} />
           </Field>
           <Field label={t('Rekening pembayaran')} hint={t('Muncul di invoice dan pesan WhatsApp ({rekening}).')}>
-            <TextArea value={draft.settings.paymentInfo} onCommit={(paymentInfo) => setSettings({ paymentInfo })} rows={3} placeholder={t('BCA 1234567890 a.n. Nama Studio')} />
+            <TextArea live value={draft.settings.paymentInfo} onCommit={(paymentInfo) => setSettings({ paymentInfo })} rows={3} placeholder={t('BCA 1234567890 a.n. Nama Studio')} />
           </Field>
           <Field label={t('Syarat & ketentuan')}>
-            <TextArea value={draft.settings.terms} onCommit={(terms) => setSettings({ terms })} rows={4} />
+            <TextArea live value={draft.settings.terms} onCommit={(terms) => setSettings({ terms })} rows={4} />
           </Field>
         </section>
         <section className="flex flex-col gap-3">
@@ -209,7 +214,7 @@ export function Settings({ sections }: { sections?: ReactNode }) {
           </div>
           <div className="flex items-center justify-between gap-3 rounded-xl bg-panel px-3 py-2.5 text-[13px]">
             {t('Pelunasan, mulai berapa hari sebelum jatuh tempo')}
-            <NumberInput value={draft.settings.remindDueDays} onCommit={(remindDueDays) => setSettings({ remindDueDays })} max={60} unit={t('hari')} className="w-28" />
+            <NumberInput live value={draft.settings.remindDueDays} onCommit={(remindDueDays) => setSettings({ remindDueDays })} max={60} unit={t('hari')} className="w-28" />
           </div>
         </section>
         <BackupSection />
