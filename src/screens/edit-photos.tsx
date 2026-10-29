@@ -11,6 +11,7 @@ import {
   ClipboardPaste,
   Copy,
   Crop,
+  SlidersHorizontal,
   Download,
   Eraser,
   FileUp,
@@ -22,7 +23,7 @@ import {
   Search,
   MoreHorizontal,
   Undo2,
-  Circle,
+  CircleDashed,
   ChevronDown,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -54,14 +55,14 @@ import { api, thumbUrl, type PhotoEntry } from '../lib/api';
 import { num } from '../lib/format';
 import { t } from '../lib/i18n';
 import { previewUrl } from '../kreasi/canvas';
-import { NO_ADJUST, type EditMask, type PhotoAdjust } from '../kreasi/engine/document';
+import { NO_ADJUST, maskActive, type EditMask, type PhotoAdjust } from '../kreasi/engine/document';
 import { CropPanel, autoAngle, autoUpright, cropFor, ratioValue } from '../edit/crop-panel';
 import { HealLayer, HealPanel } from '../edit/heal';
 import { LensBlurPanel } from '../edit/lens-blur-panel';
 import { LensPanel } from '../edit/lens-panel';
 import { Library } from '../edit/library';
 import { MaskLayer, MaskList, MaskPanel, loadSubjects, useMasking, type BrushSettings, type MaskCreate } from '../edit/masking';
-import { NO_GEOMETRY, frameSize, type EditSettings, type Geometry } from '../edit/geometry';
+import { NO_GEOMETRY, frameSize, hasGeometry, type EditSettings, type Geometry } from '../edit/geometry';
 import { autoAdjust, neutralBalance } from '../kreasi/engine/develop';
 import { loadLocalImage } from '../kreasi/kit';
 import { useApp, type Screen } from '../store';
@@ -307,6 +308,13 @@ function Editor({ back, ids, start }: { back: Screen; ids?: number[]; start?: nu
     setSelMask(last?.id ?? null);
     setSelPart(null);
     setMaskCreate(last ? null : 'new');
+  };
+  const adjustOnly = ({ geometry: _g, heal: _h, masks: _m, ...rest }: EditSettings): PhotoAdjust => rest;
+  /** Back to the sliders: whatever tool is open closes (Lightroom's Edit button). */
+  const closeTools = () => {
+    if (cropping) closeCrop();
+    setHealing(false);
+    setMasking(false);
   };
   // Subjects found earlier come back from this browser before the photo is drawn.
   useEffect(() => {
@@ -624,6 +632,34 @@ function Editor({ back, ids, start }: { back: Screen; ids?: number[]; start?: nu
         </main>
 
         <aside className="w-[300px] shrink-0 overflow-y-auto border-l border-line-soft px-4 py-3">
+          {/* Lightroom's top of the panel: the histogram and the tool strip stay put while a tool is open below them. */}
+          <HistogramView h={hist} root={root} photoId={photo?.id} />
+          <span className="truncate pt-1 text-[11px] text-faint">{photo?.camera ?? ''}</span>
+          {/* The tool strip: the open one lit (Edit when none), a dot under each one used on this photo; the open one again closes it. */}
+          <div className="my-3 flex items-start justify-around rounded-lg border border-line-soft bg-panel-2 px-1 pt-1.5 pb-1">
+            {(
+              [
+                [SlidersHorizontal, t('Edit'), '', !cropping && !healing && !masking, isEdited(adjustOnly(a)), closeTools],
+                [Crop, t('Crop & luruskan'), 'R', cropping, hasGeometry(a.geometry), () => (cropping ? closeCrop() : openCrop())],
+                [Eraser, t('Hapus objek'), 'Q', healing, !!a.heal?.length, () => (healing ? setHealing(false) : openHealing())],
+                [CircleDashed, t('Masking'), 'M', masking, !!a.masks?.some(maskActive), () => (masking ? setMasking(false) : openMasking())],
+              ] as const
+            ).map(([Icon, label, key, on, used, click]) => (
+              <button
+                key={label}
+                type="button"
+                onClick={click}
+                disabled={!photo}
+                title={key ? `${label} (${key})` : label}
+                aria-label={label}
+                aria-pressed={on}
+                className={cx('flex w-12 flex-col items-center gap-1 rounded-md pt-1.5 pb-1 disabled:opacity-40', on ? 'text-fg' : 'text-faint hover:text-fg')}
+              >
+                <Icon size={18} strokeWidth={on ? 2.25 : 1.75} />
+                <span className={cx('size-1 rounded-full', used ? (on ? 'bg-gold' : 'bg-faint') : 'bg-transparent')} />
+              </button>
+            ))}
+          </div>
           {healing && photo ? (
             <HealPanel root={root} photoId={photo.id} a={a} faces={photo.faces ?? []} size={healSize} onSize={setHealSize} onLive={live} onDone={done} onClose={() => setHealing(false)} />
           ) : masking && photo ? (
@@ -649,31 +685,6 @@ function Editor({ back, ids, start }: { back: Screen; ids?: number[]; start?: nu
             />
           ) : (
           <>
-          <HistogramView h={hist} root={root} photoId={photo?.id} />
-          <span className="truncate pt-1 text-[11px] text-faint">{photo?.camera ?? ''}</span>
-          {/* Lightroom's tool strip: icons in a row, the one open lit. */}
-          <div className="my-3 flex items-center justify-around border-y border-line-soft py-1.5">
-            {(
-              [
-                [Crop, t('Crop & luruskan'), 'R', cropping, openCrop],
-                [Eraser, t('Hapus objek'), 'Q', healing, openHealing],
-                [Circle, t('Masking'), 'M', masking, openMasking],
-              ] as const
-            ).map(([Icon, label, key, on, open]) => (
-              <button
-                key={key}
-                type="button"
-                onClick={open}
-                disabled={!photo}
-                title={`${label} (${key})`}
-                aria-label={label}
-                aria-pressed={on}
-                className={cx('flex h-8 w-12 items-center justify-center rounded-md disabled:opacity-40', on ? 'bg-gold/15 text-gold-text' : 'text-muted hover:bg-raised hover:text-fg')}
-              >
-                <Icon size={17} />
-              </button>
-            ))}
-          </div>
           <Section title={t('Basic')} group="dasar" a={a} open={open.basic} onToggle={() => toggle('basic')} onLive={live} onDone={done} reset={BASIC_RESET}>
             <BasicPanel a={a} onLive={live} onDone={done} picking={picking} onPick={() => setPicking((v) => !v)} onAuto={auto} />
           </Section>
