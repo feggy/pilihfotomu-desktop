@@ -67,7 +67,8 @@ pub fn build_in<R: Runtime>(app: &AppHandle<R>, en: bool) -> tauri::Result<Menu<
         .item(&PredefinedMenuItem::hide_others(app, Some(l("Sembunyikan yang lain", "Hide Others")))?)
         .item(&PredefinedMenuItem::show_all(app, Some(l("Tampilkan semua", "Show All")))?)
         .separator()
-        .item(&PredefinedMenuItem::quit(app, Some(l("Keluar dari pilihfotomu", "Quit pilihfotomu")))?)
+        // Not the system's Quit: the UI saves an open Buat konten design first (`quit_app`).
+        .item(&item("quit", l("Keluar dari pilihfotomu", "Quit pilihfotomu"), Some("CmdOrCtrl+Q"))?)
         .build()?;
 
     let file = SubmenuBuilder::new(app, "File")
@@ -115,4 +116,12 @@ pub fn build_in<R: Runtime>(app: &AppHandle<R>, en: bool) -> tauri::Result<Menu<
 
 pub fn on_event<R: Runtime>(app: &AppHandle<R>, id: &str) {
     let _ = app.emit("menu", id.to_string());
+    if id == "quit" {
+        // The UI quits once its design is saved; should it not answer, quit anyway.
+        let app = app.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_secs(3));
+            app.exit(0);
+        });
+    }
 }

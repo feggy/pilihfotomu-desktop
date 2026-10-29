@@ -906,6 +906,12 @@ fn load_asset(app: AppHandle, id: String) -> CmdResult<tauri::ipc::Response> {
     Ok(tauri::ipc::Response::new(bytes))
 }
 
+/// Quits, once the UI has saved what it had open (the menu's Quit).
+#[tauri::command]
+fn quit_app(app: AppHandle) {
+    app.exit(0);
+}
+
 /// Pictures brought in from the computer (asset ids starting `unggah-`),
 /// newest first: "Gambar saya", to use again in any design.
 #[tauri::command]
@@ -1108,6 +1114,7 @@ pub fn run() {
             save_asset,
             load_asset,
             list_uploads,
+            quit_app,
             delete_upload,
             thumbnails,
             resolve_client_picks,

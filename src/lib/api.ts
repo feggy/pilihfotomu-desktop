@@ -342,6 +342,7 @@ export const api = {
   loadAsset: (id: string) => invoke<ArrayBuffer>('load_asset', { id }),
   /** "Gambar saya": uploaded pictures' asset ids, newest first. */
   listUploads: () => invoke<string[]>('list_uploads'),
+  quitApp: () => invoke<void>('quit_app'),
   deleteUpload: (id: string) => invoke<void>('delete_upload', { id }),
   /** Files dragged in from Finder, added to `root`'s photos with new ids. */
   addFiles: (root: string, paths: string[]) => invoke<Photo[]>('add_files', { root, paths }),

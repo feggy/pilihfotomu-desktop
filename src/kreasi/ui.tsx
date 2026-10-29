@@ -121,3 +121,41 @@ export function PhotoThumb({ photo, ...img }: { photo: SourcePhoto } & ImgHTMLAt
     />
   );
 }
+
+/**
+ * Leaving a design that was worked on: keep it under Lanjutkan desain, or
+ * throw it away. Closing the window or quitting keeps it without asking.
+ */
+export function LeaveDialog({ onSave, onDiscard, onCancel }: { onSave: () => void; onDiscard: () => void; onCancel: () => void }) {
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onCancel();
+      if (e.key === 'Enter') onSave();
+    };
+    window.addEventListener('keydown', key);
+    return () => window.removeEventListener('keydown', key);
+  });
+  return (
+    <div className="fixed inset-x-0 top-10 bottom-0 z-50 flex items-center justify-center bg-black/70 p-4" onMouseDown={onCancel}>
+      <div role="dialog" aria-label={t('Simpan desain ini?')} onMouseDown={(e) => e.stopPropagation()} className="flex w-[400px] max-w-full flex-col gap-4 rounded-[18px] border border-line bg-panel p-6 shadow-2xl">
+        <div className="flex flex-col gap-1.5">
+          <h2 className="text-lg font-semibold">{t('Simpan desain ini?')}</h2>
+          <p className="text-[13px] text-muted">{t('Disimpan di Lanjutkan desain, bisa dibuka lagi kapan saja. Kalau dihapus, desain ini hilang.')}</p>
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <button type="button" onClick={onDiscard} className="h-9 rounded-[10px] px-3 text-[13px] font-medium text-reject hover:bg-reject/10">
+            {t('Hapus desain')}
+          </button>
+          <span className="flex gap-2">
+            <button type="button" onClick={onCancel} className="h-9 rounded-[10px] px-3 text-[13px] font-medium text-muted hover:text-fg">
+              {t('Batal')}
+            </button>
+            <button type="button" onClick={onSave} className="h-9 rounded-[10px] bg-gold-gradient px-4 text-[13px] font-semibold text-white">
+              {t('Simpan')}
+            </button>
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}

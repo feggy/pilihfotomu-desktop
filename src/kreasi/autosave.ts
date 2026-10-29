@@ -3,6 +3,7 @@
  * once on the way back or out of Buat konten.
  */
 
+import { api } from '../lib/api';
 import { saveDraft } from './drafts';
 import { saveHistory } from './history';
 import { useKreasi } from './store';
@@ -20,9 +21,7 @@ export function saveNow(): Promise<void> {
   if (pending != null) clearTimeout(pending);
   pending = null;
   const s = useKreasi.getState();
-  if (!s.doc || !s.template || !s.draftId) return Promise.resolve();
-  const touched = s.past.length > 0 || s.future.length > 0 || s.doc.slots.some((x) => x?.file.fileId.startsWith('foto-'));
-  if (!touched) return Promise.resolve();
+  if (!s.doc || !s.template || !s.draftId || !worthSaving()) return Promise.resolve();
   const history = saveHistory(s.past, s.doc, s.future);
   return saveDraft({ id: s.draftId, name: s.name, templateId: s.template.id, templateName: s.template.name, doc: s.doc, source: s.source, history }).then(
     (at) => {
@@ -39,3 +38,20 @@ export function saveSoon() {
 }
 
 export const savePending = () => pending != null;
+
+/** The open design has been worked on (an edit, or a photo in it): leaving it asks, and it is kept as a draft. */
+export function worthSaving(): boolean {
+  const s = useKreasi.getState();
+  return !!s.doc && (s.past.length > 0 || s.future.length > 0 || s.doc.slots.some((x) => x?.file.fileId.startsWith('foto-')));
+}
+
+/** The open design thrown away: its draft (if one was saved) deleted, back to the start. */
+export async function discardDesign() {
+  if (pending != null) clearTimeout(pending);
+  pending = null;
+  const id = useKreasi.getState().draftId;
+  useKreasi.getState().reset();
+  if (id) await api.deleteDraft(id).catch(() => {});
+  // The list on the start screen is read again.
+  useKreasi.getState().setSavedAt(Date.now());
+}

@@ -1,8 +1,10 @@
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { TriangleAlert, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
+import { saveNow } from './kreasi/autosave';
 import { KreasiScreen } from './kreasi/screen';
 import { ClientPicks } from './screens/client-picks';
 import { EditPhotos } from './screens/edit-photos';
@@ -14,6 +16,7 @@ import { Settings } from './screens/settings';
 import { Setup } from './screens/setup';
 import { TermsGate } from './components/legal';
 import { isMac } from './components/title-bar';
+import { api } from './lib/api';
 import { lang, syncNativeLang, t, tRust, useLang } from './lib/i18n';
 import { useApp, type Screen } from './store';
 
@@ -92,9 +95,22 @@ export function App() {
     return () => window.removeEventListener('keydown', onKey, true);
   }, []);
 
+  // Closing the window (its button, ⌘W): a design being made is saved first, then the window goes.
+  useEffect(() => {
+    const off = getCurrentWindow().onCloseRequested(() => saveNow());
+    return () => {
+      off.then((f) => f());
+    };
+  }, []);
+
   // Native menu bar items (src-tauri/src/menu.rs).
   useEffect(() => {
     const off = listen<string>('menu', ({ payload }) => {
+      // Quit: a Buat konten design being made is kept under Lanjutkan desain first, without asking.
+      if (payload === 'quit') {
+        saveNow().finally(() => api.quitApp());
+        return;
+      }
       const { screen: current, session: open, go: goTo } = useApp.getState();
       if (payload === 'undo' || payload === 'redo') {
         if (isTyping(document.activeElement)) document.execCommand(payload);

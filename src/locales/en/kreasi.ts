@@ -455,4 +455,7 @@ export default {
   'Tambah slide di awal': 'Add a slide at the start',
   'Tambah slide di akhir': 'Add a slide at the end',
   'Tambah slide di antara {a} dan {b}': 'Add a slide between {a} and {b}',
+  'Simpan desain ini?': 'Keep this design?',
+  'Disimpan di Lanjutkan desain, bisa dibuka lagi kapan saja. Kalau dihapus, desain ini hilang.': 'It is kept under Continue a design, to open again any time. If deleted, this design is gone.',
+  'Hapus desain': 'Delete design',
 } as Record<string, string | [string, string]>;

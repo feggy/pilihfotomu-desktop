@@ -9,11 +9,11 @@ import { t, tj } from '../lib/i18n';
 import { useApp } from '../store';
 import { DocCanvas, useBox, useDocImages } from './canvas';
 import { slotShapes, formatLabel } from './kit';
-import { saveNow } from './autosave';
+import { discardDesign, saveNow, worthSaving } from './autosave';
 import { SourceChooser, SourceMenu } from './source-picker';
 import { filesSource, folderSource, savedSessionSource, sessionSource, useSourceThumbs } from './sources';
 import { fits, placed, ranked, useKreasi, type SourcePhoto } from './store';
-import { PhotoThumb, SHAPE_LABEL, ShapeIcon, Steps } from './ui';
+import { LeaveDialog, PhotoThumb, SHAPE_LABEL, ShapeIcon, Steps } from './ui';
 
 type Filter = 'pick' | 'five' | 'all';
 
@@ -24,6 +24,8 @@ export function Fill() {
   const fail = useApp((s) => s.fail);
   const [filter, setFilter] = useState<Filter>('all');
   const [onlyFit, setOnlyFit] = useState(false);
+  // Back: photos already placed ask whether to keep the design or throw it away.
+  const [leaving, setLeaving] = useState(false);
   const [stageRef, stage] = useBox<HTMLDivElement>();
   const gridRef = useRef<HTMLDivElement>(null);
 
@@ -109,7 +111,7 @@ export function Fill() {
       <section className="flex min-w-0 flex-1 flex-col gap-4 px-6 pt-6 lg:px-10">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3.5">
-            <button type="button" onClick={() => (saveNow(), setStep('galeri'))} aria-label={t('Kembali')} className="text-muted hover:text-fg">
+            <button type="button" onClick={() => (worthSaving() ? setLeaving(true) : (saveNow(), setStep('galeri')))} aria-label={t('Kembali')} className="text-muted hover:text-fg">
               <ArrowLeft size={18} />
             </button>
             <div className="flex flex-col gap-0.5">
@@ -279,6 +281,13 @@ export function Fill() {
           {t('Lanjut ke edit')} <ArrowRight size={16} />
         </button>
       </aside>
+      {leaving && (
+        <LeaveDialog
+          onSave={() => (setLeaving(false), saveNow(), setStep('galeri'))}
+          onDiscard={() => (setLeaving(false), discardDesign())}
+          onCancel={() => setLeaving(false)}
+        />
+      )}
     </div>
   );
 }
