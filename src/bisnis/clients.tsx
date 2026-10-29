@@ -56,7 +56,7 @@ export function Clients({ onOpen, onNew, onMessage }: { onOpen: (b: Booking) => 
           <Search size={14} className="text-faint" />
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('Cari nama atau nomor…')} className="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-faint" />
         </label>
-        <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
+        <div className="-mx-1 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-1 py-1">
           {rows.map((r) => (
             <button
               key={r.client.id}

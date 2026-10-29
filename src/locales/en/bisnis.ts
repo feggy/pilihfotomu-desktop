@@ -313,4 +313,23 @@ export default {
   'Jadwal 7 hari ke depan': 'Next 7 days',
   'Belum ada pemotretan minggu ini.': 'No shoots this week.',
   'Bulan ini': 'This month',
+
+  // Booking list and detail
+  'Tutup (Esc)': 'Close (Esc)',
+  'Edit': 'Edit',
+  'Edit booking': 'Edit booking',
+  'Simpan pembayaran': 'Save payment',
+  'jatuh tempo {d}': 'due {d}',
+  'Belum ada jadwal.': 'No session yet.',
+  'Bentrok dengan {n} jadwal lain': 'Clashes with {n} other sessions',
+  'Hasil dikirim paling lambat {d}': 'Photos delivered by {d}',
+  'Daftar': 'List',
+  'Belum ada booking': 'No bookings yet',
+  'Booking yang kamu catat muncul di sini, bisa dicari dan diurutkan.': 'The bookings you record show up here, searchable and sortable.',
+  'Cari klien, paket, lokasi…': 'Search client, package, location…',
+  'Yang masih berjalan': 'Still in progress',
+  'Semua tahap': 'All stages',
+  'Semua pembayaran': 'All payments',
+  'Tahap': 'Stage',
+  'Tidak ada booking yang cocok.': 'No matching bookings.',
 } as Record<string, string | [string, string]>;

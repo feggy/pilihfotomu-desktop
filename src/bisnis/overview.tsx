@@ -5,8 +5,8 @@
  * stages with how many bookings stand in each.
  */
 
-import { ArrowRight, CalendarClock, CalendarPlus, ChevronRight, CircleCheck, MessageCircle, Send, Wallet } from 'lucide-react';
-import { useMemo, useState, type ReactNode } from 'react';
+import { ArrowRight, CalendarClock, CalendarPlus, ChevronRight, CircleCheck, MessageCircle, Send, Wallet, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { cx } from '../components/ui';
 import { t } from '../lib/i18n';
@@ -29,10 +29,13 @@ type Task = { booking: Booking; why: string; tone: 'urgent' | 'soon' | 'info'; a
 
 export function Overview({
   onOpen,
+  onEdit,
   onMessage,
   onStage,
 }: {
   onOpen: (b: Booking) => void;
+  /** The booking's form, for what only it holds (a session to add). */
+  onEdit: (b: Booking) => void;
   onMessage: (bookingId: string, template: string) => void;
   /** A stage picked: show its bookings (on the board). */
   onStage: (columnId: string) => void;
@@ -40,6 +43,19 @@ export function Overview({
   const data = useBisnis((s) => s.data)!;
   const update = useBisnis((s) => s.update);
   const [stage, setStage] = useState<string | null>(null);
+  // A stage's list closes on a click outside the stages, or Escape.
+  const stagesRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!stage) return;
+    const down = (e: MouseEvent) => !stagesRef.current?.contains(e.target as Node) && setStage(null);
+    const key = (e: KeyboardEvent) => e.key === 'Escape' && setStage(null);
+    window.addEventListener('mousedown', down);
+    window.addEventListener('keydown', key);
+    return () => {
+      window.removeEventListener('mousedown', down);
+      window.removeEventListener('keydown', key);
+    };
+  }, [stage]);
   const now = new Date();
   const today = dayKey(now);
   const move = (b: Booking, to: Column) => update((d) => moveBooking(d, b.id, to.id, null));
@@ -96,7 +112,7 @@ export function Overview({
         continue;
       }
       if (pay !== 'belum' && !sessions.length) {
-        out.push({ booking: b, why: t('Sudah bayar, jadwal belum diatur'), tone: 'soon', order: 3, acts: [{ label: t('Atur jadwal'), icon: <CalendarPlus size={13} />, run: () => onOpen(b), primary: true }] });
+        out.push({ booking: b, why: t('Sudah bayar, jadwal belum diatur'), tone: 'soon', order: 3, acts: [{ label: t('Atur jadwal'), icon: <CalendarPlus size={13} />, run: () => onEdit(b), primary: true }] });
         continue;
       }
       if (upcoming && owed > 0 && parseLocal(upcoming.start).getTime() - now.getTime() < 7 * DAY && !b.dueDate) {
@@ -237,9 +253,16 @@ export function Overview({
           </section>
         </div>
         {/* Stages: how many bookings stand where; one picked lists them, each a click from the next stage. */}
-        <section className="flex flex-col gap-3 rounded-2xl bg-panel p-4 lg:col-span-2">
-          <h2 className="text-[13px] font-semibold">{t('Alur booking')}</h2>
-          <div className="flex items-stretch gap-1 overflow-x-auto">
+        <section ref={stagesRef} className="flex flex-col gap-3 rounded-2xl bg-panel p-4 lg:col-span-2">
+          <h2 className="flex items-center justify-between text-[13px] font-semibold">
+            {t('Alur booking')}
+            {stage && (
+              <button type="button" onClick={() => setStage(null)} aria-label={t('Tutup')} title={t('Tutup (Esc)')} className="rounded-md p-1 text-faint hover:bg-raised hover:text-fg">
+                <X size={14} />
+              </button>
+            )}
+          </h2>
+          <div className="-m-1 flex items-stretch gap-1 overflow-x-auto p-1">
             {data.columns.map((c, i) => {
               const n = data.bookings.filter((b) => b.columnId === c.id).length;
               return (

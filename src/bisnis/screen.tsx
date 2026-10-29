@@ -3,17 +3,19 @@
  * calendar, packages and the rest — tabs over one set of data, kept offline.
  */
 
-import { ArrowLeft, CalendarDays, FileText, KanbanSquare, MessageCircle, Package as PackageIcon, Plus, Settings2, TriangleAlert, Users, Wallet, Sparkles, SlidersHorizontal, LayoutTemplate, ShieldAlert, LayoutDashboard } from 'lucide-react';
+import { ArrowLeft, CalendarDays, FileText, KanbanSquare, MessageCircle, Package as PackageIcon, Plus, Settings2, TriangleAlert, Users, Wallet, Sparkles, SlidersHorizontal, LayoutTemplate, ShieldAlert, LayoutDashboard, List, ListChecks } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 
 import { TitleBar } from '../components/title-bar';
-import { cx } from '../components/ui';
+import { Segmented, cx } from '../components/ui';
 import { t } from '../lib/i18n';
 import { useKreasi } from '../kreasi/store';
 import { useApp } from '../store';
 import { clientOf } from './model';
 import { lastBackupAt } from './backup';
 import { Board } from './board';
+import { BookingsList } from './bookings-list';
+import { BookingDetail } from './booking-detail';
 import { BookingEditor, newBooking, type BookingAction } from './booking-editor';
 import { Calendar } from './calendar';
 import { Clients } from './clients';
@@ -29,11 +31,11 @@ import { useBisnis } from './store';
 import type { Booking } from './types';
 import { btnPrimary } from './ui';
 
-export type BisnisTab = 'ringkasan' | 'board' | 'kalender' | 'klien' | 'paket' | 'pesan' | 'keuangan' | 'pengaturan';
+export type BisnisTab = 'ringkasan' | 'booking' | 'kalender' | 'klien' | 'paket' | 'pesan' | 'keuangan' | 'pengaturan';
 
 const TABS: { id: BisnisTab; label: string; icon: typeof KanbanSquare }[] = [
   { id: 'ringkasan', label: 'Ringkasan', icon: LayoutDashboard },
-  { id: 'board', label: 'Board', icon: KanbanSquare },
+  { id: 'booking', label: 'Booking', icon: ListChecks },
   { id: 'kalender', label: 'Kalender', icon: CalendarDays },
   { id: 'klien', label: 'Klien', icon: Users },
   { id: 'paket', label: 'Paket', icon: PackageIcon },
@@ -47,7 +49,12 @@ export function BisnisScreen({ open }: { open?: string }) {
   const go = useApp((s) => s.go);
   const { data, error, load } = useBisnis();
   const [tab, setTab] = useState<BisnisTab>('ringkasan');
+  // Booking as a table or as the board: two tools over the same bookings.
+  const [view, setView] = useState<'daftar' | 'board'>('daftar');
   const [editing, setEditing] = useState<Booking | null>(null);
+  // A booking opened from a list: its detail first; Edit opens the form over it.
+  const [viewing, setViewing] = useState<string | null>(null);
+  const view_ = (b: Booking) => setViewing(b.id);
   const [invoice, setInvoice] = useState<string | null>(null);
   // Buat konten for this booking: its client's name and first shoot day fill the templates.
   const openKreasi = (bookingId: string) => {
@@ -69,26 +76,43 @@ export function BisnisScreen({ open }: { open?: string }) {
   useEffect(() => {
     load().then(() => {
       const b = open && useBisnis.getState().data?.bookings.find((x) => x.id === open);
-      if (b) setEditing(b);
+      if (b) setViewing(b.id);
     });
   }, [load, open]);
 
   let body: ReactNode = null;
   if (data) {
-    if (tab === 'ringkasan') body = <Overview onOpen={setEditing} onMessage={(bookingId, template) => setMessage({ bookingId, template })} onStage={() => setTab('board')} />;
-    else if (tab === 'board') body = <Board onOpen={setEditing} onNew={(col) => setEditing(newBooking(data, col))} />;
-    else if (tab === 'kalender') body = <Calendar onOpen={setEditing} onNewOn={(day) => setEditing(newBooking(data, data.columns[0]?.id ?? '', day))} />;
+    if (tab === 'ringkasan') body = <Overview onOpen={view_} onEdit={setEditing} onMessage={(bookingId, template) => setMessage({ bookingId, template })} onStage={() => (setTab('booking'), setView('board'))} />;
+    else if (tab === 'booking')
+      body = (
+        <>
+          <div className="flex shrink-0 items-center gap-3 px-6 pt-4 lg:px-8">
+            <span className="w-52">
+              <Segmented
+                value={view}
+                onChange={setView}
+                options={[
+                  { value: 'daftar', label: <><List size={14} /> {t('Daftar')}</> },
+                  { value: 'board', label: <><KanbanSquare size={14} /> {t('Board')}</> },
+                ]}
+              />
+            </span>
+          </div>
+          {view === 'daftar' ? <BookingsList onOpen={view_} /> : <Board onOpen={view_} onNew={(col) => setEditing(newBooking(data, col))} />}
+        </>
+      );
+    else if (tab === 'kalender') body = <Calendar onOpen={view_} onNewOn={(day) => setEditing(newBooking(data, data.columns[0]?.id ?? '', day))} />;
     else if (tab === 'klien')
       body = (
         <Clients
-          onOpen={setEditing}
+          onOpen={view_}
           onNew={(clientId) => setEditing({ ...newBooking(data, data.columns[0]?.id ?? ''), clientId })}
           onMessage={(c, bookingId) => setMessage({ bookingId, phone: c.phone, name: c.name })}
         />
       );
     else if (tab === 'paket') body = <Packages />;
     else if (tab === 'pesan') body = <MessagesTab />;
-    else if (tab === 'keuangan') body = <Finance onOpen={setEditing} />;
+    else if (tab === 'keuangan') body = <Finance onOpen={view_} />;
     else body = <Settings />;
   }
 
@@ -113,7 +137,7 @@ export function BisnisScreen({ open }: { open?: string }) {
           ))}
         </nav>
         <span className="ml-auto flex items-center gap-2">
-          {data && <ReminderBell onOpen={setEditing} />}
+          {data && <ReminderBell onOpen={view_} />}
           {data && (
             <button type="button" onClick={() => setEditing(newBooking(data, data.columns[0]?.id ?? ''))} className={btnPrimary}>
               <Plus size={15} /> {t('Booking')}
@@ -128,6 +152,7 @@ export function BisnisScreen({ open }: { open?: string }) {
       )}
       {data && tab !== 'pengaturan' && <BackupNotice onSetUp={() => setTab('pengaturan')} />}
       {body}
+      {viewing && <BookingDetail bookingId={viewing} onClose={() => setViewing(null)} onEdit={() => setEditing(data?.bookings.find((b) => b.id === viewing) ?? null)} actions={actions} />}
       {editing && <BookingEditor key={editing.id} initial={editing} onClose={() => setEditing(null)} actions={actions} />}
       {invoice && <InvoiceDialog bookingId={invoice} onClose={() => setInvoice(null)} />}
       {message && <SendDialog {...message} onClose={() => setMessage(null)} />}
