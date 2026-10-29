@@ -678,12 +678,19 @@ function CropBox({
   const lo = 0.5 - 0.5 / cover;
   const hi = 0.5 + 0.5 / cover;
   const put = (c: Crop) => onCrop(cropFromView(c, cover));
-  const [hoverOut, setHoverOut] = useState(false);
+  /** Outside the crop, the corner the pointer is nearest (0 top left, then clockwise): the turning cursor bends round it. */
+  const [hoverOut, setHoverOut] = useState<number | null>(null);
   const inside = (e: { clientX: number; clientY: number }) => {
     const r = box.current!.getBoundingClientRect();
     const x = (e.clientX - r.left) / r.width;
     const y = (e.clientY - r.top) / r.height;
     return x >= crop.x && x <= crop.x + crop.w && y >= crop.y && y <= crop.y + crop.h;
+  };
+  const quarter = (e: { clientX: number; clientY: number }) => {
+    const r = box.current!.getBoundingClientRect();
+    const right = (e.clientX - r.left) / r.width >= crop.x + crop.w / 2;
+    const below = (e.clientY - r.top) / r.height >= crop.y + crop.h / 2;
+    return below ? (right ? 2 : 3) : right ? 1 : 0;
   };
   /** Outside the crop: the photo turns round the crop's middle with the pointer. */
   const turn = (e: React.PointerEvent) => {
@@ -785,9 +792,9 @@ function CropBox({
     <div
       className="absolute -inset-16"
       onPointerDown={turn}
-      onPointerMove={(e) => setHoverOut(!inside(e))}
-      onPointerLeave={() => setHoverOut(false)}
-      style={{ cursor: hoverOut || dragging === 'turn' ? ROTATE_CURSOR : undefined }}
+      onPointerMove={(e) => setHoverOut(inside(e) && dragging !== 'turn' ? null : quarter(e))}
+      onPointerLeave={() => setHoverOut(null)}
+      style={{ cursor: hoverOut != null ? ROTATE_CURSORS[hoverOut] : undefined }}
     >
     <div ref={box} className="pointer-events-none absolute inset-16">
       {/* The photo outside the crop dimmed, as Lightroom does; the ground around the photo keeps its own color in either theme. */}
@@ -851,9 +858,13 @@ function CropBox({
 
 /** Lightroom's turning cursor (outside the crop): one quarter arc with a solid arrowhead at each end, black edged in white. */
 const ROTATE_ARC = '<path d="M6 16.5A11 11 0 0 1 16.5 6" fill="none" stroke-width="2"/><path d="M2.5 15h7l-3.5 5z M15 2.5v7l5-3.5z"/>';
-const ROTATE_CURSOR = `url("data:image/svg+xml,${encodeURIComponent(
-  `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><g stroke="white" stroke-width="3" stroke-linejoin="round" fill="white">${ROTATE_ARC.replace('stroke-width="2"', 'stroke-width="4"')}</g><g stroke="black" fill="black" stroke-linejoin="round">${ROTATE_ARC}</g></svg>`,
-)}") 11 11, alias`;
+/** The cursor for each corner: drawn for the top left, turned a quarter at a time clockwise. */
+const ROTATE_CURSORS = [0, 1, 2, 3].map(
+  (k) =>
+    `url("data:image/svg+xml,${encodeURIComponent(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><g transform="rotate(${k * 90} 12 12)"><g stroke="white" stroke-width="3" stroke-linejoin="round" fill="white">${ROTATE_ARC.replace('stroke-width="2"', 'stroke-width="4"')}</g><g stroke="black" fill="black" stroke-linejoin="round">${ROTATE_ARC}</g></g></svg>`,
+    )}") 12 12, alias`,
+);
 
 function histogramOf(c: HTMLCanvasElement): Histogram | null {
   const s = document.createElement('canvas');
