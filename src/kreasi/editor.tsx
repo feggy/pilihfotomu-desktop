@@ -10,6 +10,7 @@ import {
   AlignStartHorizontal,
   AlignStartVertical,
   ArrowLeft,
+  ArrowLeftRight,
   Bold,
   Check,
   Crop,
@@ -17,13 +18,14 @@ import {
   Copy,
   Download,
   FlipHorizontal,
+  History,
   Images,
   Info,
   BookmarkPlus,
   Italic,
   Layers,
+  Loader2,
   Minus,
-  Package,
   PaintBucket,
   Paintbrush,
   Pencil,
@@ -39,13 +41,12 @@ import {
   Trash2,
   Type,
   Undo2,
-  UserRound,
+  Wand2,
   X,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { cx } from '../components/ui';
-import { thumbUrl } from '../lib/api';
+import { Switch, cx } from '../components/ui';
 import { fixed } from '../lib/format';
 import { t, tRust } from '../lib/i18n';
 import { useApp } from '../store';
@@ -70,12 +71,12 @@ import {
   type Edit,
 } from './actions';
 import { DocCanvas, sameSel, useBox, useDocImages, type Box, type Multi } from './canvas';
-import { ADJUST_PRESETS, NO_ADJUST, emptyPhotoFile, formatRatio, isFreeLayout, isImageSticker, isLayerLocked, isPlaceholder, layerKeys, newId, patchLayerMeta, photoLayerKey, templateOf, type CutoutMode, type LayerMove, type CollageDoc, type PhotoAdjust, type PhotoMask, type StickerLayer, type TextLayer } from './engine/document';
+import { ADJUST_PRESETS, NO_ADJUST, PHOTOS_LAYER, behindKeys, stickerLayerKey, emptyPhotoFile, formatRatio, isFreeLayout, stopsOf, withStops, type Gradient, type GradientStopDef, isImageSticker, isLayerLocked, isPlaceholder, layerKeys, newId, patchLayerMeta, photoLayerKey, templateOf, type CutoutMode, type LayerMove, type CollageDoc, type PhotoAdjust, type PhotoMask, type StickerLayer, type TextLayer } from './engine/document';
 import { FONT_CATEGORIES, FONTS } from './engine/font-catalog';
 import { itemBounds } from './engine/bounds';
-import { cutOutPhoto, trimCutout } from './engine/cutout';
+import { cutOutImage, cutOutPhoto, imageCutOrder, trimCutout, type ImageCutMethod } from './engine/cutout';
 import { cellLayouts, frameOf, type Selection } from './engine/render';
-import { assetIdOf, saveCutout } from './assets';
+import { assetIdOf, assetImage, isCutout, saveCutout } from './assets';
 import { useBrand } from './brand';
 import { BrandPanel } from './brand-panel';
 import { CutoutRefine } from './cutout-refine';
@@ -83,11 +84,12 @@ import { ExportDialog } from './export';
 import { CATEGORIES, EMPTY_PICTURE, fontFamilies, formatLabel, isPicturePlace, photoIdOf, photoSticker, saveMyTemplate, slotShapes, type TemplateCategory } from './kit';
 import { PhotosPanel } from './photos-panel';
 import { addDropped } from './sources';
-import { BackgroundPanel, ElementsPanel, LayersPanel, TextPanel, elementName } from './panels';
+import { BackgroundPanel, ElementsPanel, HistoryPanel, LayersPanel, TextPanel, elementName } from './panels';
 import { facePan, placed, ranked, useKreasi, type SourcePhoto } from './store';
-import { SHAPE_LABEL, ShapeIcon, Steps } from './ui';
+import { saveNow } from './autosave';
+import { PhotoThumb, SHAPE_LABEL, ShapeIcon, Steps } from './ui';
 
-type Panel = 'lapisan' | 'foto' | 'teks' | 'elemen' | 'latar' | 'brand';
+type Panel = 'lapisan' | 'foto' | 'teks' | 'elemen' | 'latar' | 'brand' | 'riwayat';
 const RAIL: { id: Panel; icon: typeof Layers; label: string }[] = [
   { id: 'lapisan', icon: Layers, label: 'Lapisan' },
   { id: 'foto', icon: Images, label: 'Foto##latar' },
@@ -95,6 +97,7 @@ const RAIL: { id: Panel; icon: typeof Layers; label: string }[] = [
   { id: 'elemen', icon: Shapes, label: 'Elemen' },
   { id: 'latar', icon: PaintBucket, label: 'Latar' },
   { id: 'brand', icon: Stamp, label: 'Brand' },
+  { id: 'riwayat', icon: History, label: 'Riwayat' },
 ];
 
 /** What ⌘C / ⌘X copied, for ⌘V here or in another design; each paste steps a little further. */
@@ -117,7 +120,7 @@ export function Editor() {
   const [replacing, setReplacing] = useState<number | null>(null);
   // A background-image place (by its sticker id) being given a photo.
   const [picturing, setPicturing] = useState<string | null>(null);
-  // "Atur ukuran" (⌘T, double-click): the photo place whose whole picture is out to drag and resize.
+  // "Atur foto" (⌘T, double-click): the photo place whose whole picture is out to drag and resize.
   const [cropping, setCropping] = useState<number | null>(null);
   // The layer row under the pointer: outlined on the canvas as if hovered there.
   const [layerHover, setLayerHover] = useState<Selection>(null);
@@ -338,6 +341,14 @@ export function Editor() {
     const id = s ? photoIdOf(s.file) : null;
     return id != null ? (source?.photos.find((p) => p.id === id) ?? null) : null;
   };
+  /** `s` to an edge or the middle of its slide (the one its centre is on). */
+  const toCanvas =
+    (s: NonNullable<Selection>, to: Align): Edit =>
+    (d) => {
+      const [b] = boundsOf(d, [s]);
+      const i = Math.min(d.slides - 1, Math.max(0, Math.floor(((b!.l + b!.r) / 2) * d.slides)));
+      return alignMany([s], [b!], to, { l: i / d.slides, r: (i + 1) / d.slides, t: 0, b: 1 })(d);
+    };
   const added = (a: { edit: Edit; id: string }) => {
     edit(a.edit);
     // The new thing is picked; its kind is whatever list it landed in.
@@ -377,7 +388,36 @@ export function Editor() {
   }, [notice]);
   /** The cut-out element being touched up with the brush. */
   const [refining, setRefining] = useState<string | null>(null);
-  const cutOut = async (i: number, mode: CutoutMode) => {
+  /**
+   * Hapus latar, on a photo or on a picture element: every way is tried (the
+   * models; for a picture, a plain color round a logo too), the likeliest
+   * shown first and the others coming in as they finish, to pick from in the
+   * panel. The results, per element, while it shows one of them.
+   */
+  const [cutSets, setCutSets] = useState<Record<string, CutSet>>({});
+  const cuttingElement = Object.entries(cutSets).find(([, c]) => !c.shown)?.[0] ?? null;
+  const patchCutSet = (id: string, fn: (c: CutSet) => CutSet) => setCutSets((all) => (all[id] ? { ...all, [id]: fn(all[id]!) } : all));
+  /** A way's result, or none when it keeps nothing (or fails). */
+  const variantOf = async (make: () => Promise<{ canvas: HTMLCanvasElement; original: HTMLCanvasElement; scale?: number }>): Promise<CutVariant> => {
+    try {
+      const { canvas, original, scale = 1 } = await make();
+      const kept = trimCutout(canvas);
+      return kept ? { status: 'ok', canvas, original, kept, scale, preview: thumbOf(kept.canvas), print: printOf(canvas) } : { status: 'none' };
+    } catch {
+      return { status: 'none' };
+    }
+  };
+  /** Result `method` as element `id`'s picture: kept once as a file, placed where it sat. */
+  const applyCut = async (id: string, set: CutSet, method: ImageCutMethod) => {
+    const v = set.variants[method];
+    if (v?.status !== 'ok' || !useKreasi.getState().doc?.stickers.some((x) => x.id === id)) return;
+    const sticker = set.saved[method] ?? (await saveCutout(v.kept.canvas, v.original, v.canvas));
+    edit(patchSticker(id, { sticker, ...set.place(v) }));
+    patchCutSet(id, (c) => ({ ...c, shown: method, saved: { ...c.saved, [method]: sticker } }));
+  };
+
+  /** Hapus latar on photo place `i`: the subject becomes a new element on top, the photo is hidden. */
+  const cutOut = async (i: number) => {
     const slot = doc.slots[i];
     const img = slot && images.get(slot.file.fileId);
     if (!slot || !img || cutting != null) return;
@@ -386,39 +426,103 @@ export function Editor() {
       const fr = frameOf(doc, 1080 * doc.slides);
       const l = cellLayouts(templateOf(doc), fr, doc.style, doc.slots)[i];
       if (!l) return;
-      const { canvas, scale } = await cutOutPhoto(img, l.photo, slot, mode, () => {});
       // The photo uncut, the same size: what the brush brings back.
       const original = (await cutOutPhoto(img, l.photo, slot, null, () => {})).canvas;
-      const kept = trimCutout(canvas);
-      if (!kept) {
-        useApp.getState().fail(mode === 'potret' ? t('Tidak ada orang yang ditemukan di foto ini. Coba “Benda”.') : t('Tidak ada subjek yang jelas di foto ini. Coba “Orang”.'));
-        return;
-      }
-      const sticker = await saveCutout(kept.canvas, original, canvas);
       // Its centre, turned with the place around the place's centre.
-      const px = l.photo.x + (kept.x + kept.w / 2) / scale, py = l.photo.y + (kept.y + kept.h / 2) / scale;
-      const rx = l.rect.x + l.rect.w / 2, ry = l.rect.y + l.rect.h / 2;
-      const c = Math.cos(l.rotate), sn = Math.sin(l.rotate);
-      const cx = rx + (px - rx) * c - (py - ry) * sn, cy = ry + (px - rx) * sn + (py - ry) * c;
-      const id = newId();
-      edit((d) => {
-        const withElement = {
-          ...d,
-          stickers: [
-            ...d.stickers,
-            { id, sticker, x: cx / fr.width, y: cy / fr.height, size: kept.w / scale / fr.unit, rotate: (l.rotate * 180) / Math.PI, color: '#ffffff', ratio: kept.h / kept.w },
-          ],
-        };
-        return isFreeLayout(d)
-          ? patchLayerMeta(withElement, photoLayerKey(d.freeCells[i]?.id ?? ''), { hidden: true })
-          : { ...withElement, slots: d.slots.map((s, j) => (j === i && s ? { ...s, file: emptyPhotoFile(i + 1) } : s)) };
-      });
-      select({ kind: 'sticker', id });
-      setNotice({ text: t('Subjeknya ditambahkan sebagai elemen baru di atas, dan foto aslinya disembunyikan. ⌘Z mengembalikan foto.'), refine: id });
+      const place = (v: OkVariant) => {
+        const px = l.photo.x + (v.kept.x + v.kept.w / 2) / v.scale, py = l.photo.y + (v.kept.y + v.kept.h / 2) / v.scale;
+        const rx = l.rect.x + l.rect.w / 2, ry = l.rect.y + l.rect.h / 2;
+        const c = Math.cos(l.rotate), sn = Math.sin(l.rotate);
+        const cx = rx + (px - rx) * c - (py - ry) * sn, cy = ry + (px - rx) * sn + (py - ry) * c;
+        return { x: cx / fr.width, y: cy / fr.height, size: v.kept.w / v.scale / fr.unit, rotate: (l.rotate * 180) / Math.PI, ratio: v.kept.h / v.kept.w };
+      };
+      const order: ImageCutMethod[] = ['potret', 'objek'];
+      let set: CutSet = { order, shown: null, saved: {}, place, variants: Object.fromEntries(order.map((m) => [m, { status: 'busy' }])) };
+      let id: string | null = null;
+      for (const method of order) {
+        const v = await variantOf(async () => ({ ...(await cutOutPhoto(img, l.photo, slot, method as CutoutMode, () => {})), original }));
+        set = { ...set, variants: { ...set.variants, [method]: v } };
+        if (id) {
+          patchCutSet(id, (c) => ({ ...c, variants: { ...c.variants, [method]: v } }));
+          continue;
+        }
+        if (v.status !== 'ok') continue;
+        // The first result: a new element over the photo, which is hidden.
+        const sticker = await saveCutout(v.kept.canvas, v.original, v.canvas);
+        const newEl = newId();
+        id = newEl;
+        edit((d) => {
+          // Just above the photo it came from, not on top of everything: texts and elements over the photo stay over it.
+          const key = stickerLayerKey(newEl);
+          const keys = layerKeys(d);
+          const at = isFreeLayout(d) ? keys.indexOf(photoLayerKey(d.freeCells[i]?.id ?? '')) : keys.reduce((a, k, j) => (behindKeys(d).has(k) || k === PHOTOS_LAYER ? j : a), -1);
+          const withElement = {
+            ...d,
+            stickers: [...d.stickers, { id: newEl, sticker, color: '#ffffff', ...place(v) }],
+            layerOrder: [...keys.slice(0, at + 1), key, ...keys.slice(at + 1)],
+          };
+          return isFreeLayout(d)
+            ? patchLayerMeta(withElement, photoLayerKey(d.freeCells[i]?.id ?? ''), { hidden: true })
+            : { ...withElement, slots: d.slots.map((s, j) => (j === i && s ? { ...s, file: emptyPhotoFile(i + 1) } : s)) };
+        });
+        set = { ...set, shown: method, saved: { [method]: sticker } };
+        setCutSets((all) => ({ ...all, [newEl]: set }));
+        select({ kind: 'sticker', id: newEl });
+        setNotice({ text: t('Subjeknya jadi elemen baru di atas, fotonya disembunyikan. Kalau belum pas, pilih hasil lain di panel kanan. ⌘Z mengembalikan foto.'), refine: newEl });
+        setCutting(null);
+      }
+      if (!id) useApp.getState().fail(t('Tidak ada subjek yang bisa dipisahkan dari foto ini.'));
     } catch (e) {
       useApp.getState().fail(tRust(e instanceof Error ? e.message : String(e)));
     } finally {
       setCutting(null);
+    }
+  };
+
+  /** Hapus latar on a picture element (an upload): the same element, its picture now the subject alone, where it was. */
+  const cutOutElement = async (id: string) => {
+    const st = doc.stickers.find((x) => x.id === id);
+    const from = st && assetIdOf(st.sticker);
+    if (!st || !from || cuttingElement) return;
+    try {
+      const img = await assetImage(from);
+      const order = imageCutOrder(img);
+      const base = { x: st.x, y: st.y, size: st.size };
+      // Where the kept part sat in the picture, turned and mirrored as the element is now.
+      const place = (v: OkVariant) => {
+        const now = useKreasi.getState().doc?.stickers.find((x) => x.id === id) ?? st;
+        const f = frameOf(doc, 1000 * doc.slides);
+        const perPx = (base.size * f.unit) / v.canvas.width;
+        const dx = (v.kept.x + v.kept.w / 2 - v.canvas.width / 2) * perPx * (now.flip ? -1 : 1);
+        const dy = (v.kept.y + v.kept.h / 2 - v.canvas.height / 2) * perPx;
+        const a = (now.rotate * Math.PI) / 180;
+        return {
+          size: (base.size * v.kept.w) / v.canvas.width,
+          x: base.x + (dx * Math.cos(a) - dy * Math.sin(a)) / f.width,
+          y: base.y + (dx * Math.sin(a) + dy * Math.cos(a)) / f.height,
+          ratio: v.kept.h / v.kept.w,
+        };
+      };
+      let set: CutSet = { order, shown: null, saved: {}, place, variants: Object.fromEntries(order.map((m) => [m, { status: 'busy' }])) };
+      setCutSets((all) => ({ ...all, [id]: set }));
+      for (const method of order) {
+        const v = await variantOf(() => cutOutImage(img, method));
+        set = { ...set, variants: { ...set.variants, [method]: v } };
+        patchCutSet(id, (c) => ({ ...c, variants: { ...c.variants, [method]: v } }));
+        // The first that keeps something goes on the canvas at once.
+        if (!set.shown && v.status === 'ok') {
+          set = { ...set, shown: method };
+          await applyCut(id, set, method);
+          setNotice({ text: t('Latarnya dihapus. Kalau belum pas, pilih hasil lain di panel kanan.'), refine: id });
+        }
+      }
+      if (!set.shown) {
+        setCutSets(({ [id]: _, ...rest }) => rest);
+        useApp.getState().fail(t('Tidak ada subjek yang bisa dipisahkan dari gambar ini.'));
+      }
+    } catch (e) {
+      setCutSets(({ [id]: _, ...rest }) => rest);
+      useApp.getState().fail(tRust(e instanceof Error ? e.message : String(e)));
     }
   };
 
@@ -458,6 +562,13 @@ export function Editor() {
   }, []);
   const selText = selection?.kind === 'text' ? doc.texts.find((x) => x.id === selection.id) : undefined;
   const selSticker = selection?.kind === 'sticker' ? doc.stickers.find((x) => x.id === selection.id) : undefined;
+  // One movable thing picked: to the middle or an edge of the canvas.
+  const alignable = !!selection && movableIn(doc, selection) && !isLayerLocked(doc, keyOf(selection, doc) ?? '');
+  const alignRow = alignable ? (
+    <Section title={t('Ratakan ke kanvas')}>
+      <AlignButtons onAlign={(to) => edit(toCanvas(selection!, to))} />
+    </Section>
+  ) : null;
 
   /** The quick bar over the selection: the few things done most. */
   const quickBar = (box: Box) => {
@@ -487,6 +598,7 @@ export function Editor() {
         }),
       );
       items.push(btn(<Trash2 size={13} />, t('Hapus'), () => (edit(removeMany(multi)), setMulti([])), true));
+      items.push(btn(<X size={13} />, t('Batal pilih'), () => pickMany([])));
     } else
     if (selection?.kind === 'text') {
       items.push(btn(<Pencil size={13} />, t('Ubah teks'), () => setEditingText(selection.id)));
@@ -507,7 +619,9 @@ export function Editor() {
         items.push(btn(<Check size={13} />, t('Selesai'), () => setCropping(null)));
       } else {
         items.push(btn(<Replace size={13} />, p ? t('Ganti') : t('Pilih foto##isi'), () => setReplacing(i)));
-        if (p) items.push(btn(<Crop size={13} />, t('Atur ukuran'), () => setCropping(i)));
+        // A free frame moves when dragged: its photo is moved and zoomed here. In a
+        // template, dragging the photo already moves it (and Zoom is in the panel).
+        if (p && free) items.push(btn(<Crop size={13} />, t('Atur foto'), () => setCropping(i)));
         if (free) {
           // A frame of its own: copied and deleted like any element.
           items.push(btn(<Copy size={13} />, t('Duplikat'), copy));
@@ -534,7 +648,7 @@ export function Editor() {
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-line-soft px-5">
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          <button type="button" onClick={() => setStep(useKreasi.getState().resumed || free ? 'galeri' : 'isi')} title={t('Kembali')} className="text-muted hover:text-fg">
+          <button type="button" onClick={() => (commit(), saveNow(), setStep(useKreasi.getState().resumed || free ? 'galeri' : 'isi'))} title={t('Kembali')} className="text-muted hover:text-fg">
             <ArrowLeft size={18} />
           </button>
           <NameField value={name} onChange={setName} />
@@ -610,9 +724,10 @@ export function Editor() {
             />
           )}
           {panel === 'teks' && <TextPanel onAdd={added} />}
-          {panel === 'elemen' && <ElementsPanel onAdd={added} />}
+          {panel === 'elemen' && <ElementsPanel onAdd={added} edit={edit} />}
           {panel === 'latar' && <BackgroundPanel doc={doc} images={images} edit={edit} />}
           {panel === 'brand' && <BrandPanel doc={doc} edit={edit} onAdd={added} />}
+          {panel === 'riwayat' && <HistoryPanel past={past} doc={doc} future={future} onJump={(i) => (select(null), useKreasi.getState().jump(i))} />}
         </aside>
 
         <div className="relative flex min-w-0 flex-1 flex-col bg-[#08100d]">
@@ -720,34 +835,41 @@ export function Editor() {
             <MultiInspector
               count={multi.length}
               onAlign={(to) => edit(alignMany(multi, boundsOf(doc, multi), to))}
+              onAlignCanvas={(to) => edit(multi.reduce<Edit>((fn, m) => (d) => toCanvas(m, to)(fn(d)), (d) => d))}
               onDuplicate={() => {
                 const dup = duplicateMany(multi, doc);
                 edit(dup.edit);
                 setMulti(dup.selection);
               }}
               onDelete={() => (edit(removeMany(multi)), setMulti([]))}
+              onDeselect={() => pickMany([])}
             />
           ) : selText ? (
-            <TextInspector key={selText.id} layer={selText} doc={doc} onChange={(p) => edit(patchText(selText.id, p))} onLive={(p) => live(patchText(selText.id, p))} onCommit={commit} />
+            <TextInspector key={selText.id} layer={selText} doc={doc} align={alignRow} onChange={(p) => edit(patchText(selText.id, p))} onLive={(p) => live(patchText(selText.id, p))} onCommit={commit} />
           ) : selSticker ? (
             <StickerInspector
               layer={selSticker}
+              align={alignRow}
               onChange={(p) => edit(patchSticker(selSticker.id, p))}
               onLive={(p) => live(patchSticker(selSticker.id, p))}
               onCommit={commit}
               onPicture={() => setPicturing(selSticker.id)}
               onRefine={() => setRefining(selSticker.id)}
+              onCutOut={() => cutOutElement(selSticker.id)}
+              cutSet={cutSets[selSticker.id] && (!cutSets[selSticker.id]!.shown || Object.values(cutSets[selSticker.id]!.saved).includes(selSticker.sticker)) ? cutSets[selSticker.id] : undefined}
+              onPickCut={(m) => applyCut(selSticker.id, cutSets[selSticker.id]!, m)}
             />
           ) : selection?.kind === 'cell' ? (
             <PhotoInspector
               index={selection.index}
+              align={alignRow}
               doc={doc}
               photo={photoOf(selection.index)}
               onChange={(p, l) => setSlot(selection.index, p, l)}
               onCommit={commit}
               onReplace={() => setReplacing(selection.index)}
               onDoc={edit}
-              onCutOut={(mode) => cutOut(selection.index, mode)}
+              onCutOut={() => cutOut(selection.index)}
               cutting={cutting === selection.index}
             />
           ) : (
@@ -849,31 +971,34 @@ const sameAdjust = (a: PhotoAdjust | undefined, b: PhotoAdjust) => JSON.stringif
  * feed or carousel reads as one set.
  */
 function PhotoLook({
-  slot,
+  adjust,
+  title = 'Warna foto',
   onChange,
   onCommit,
-  onDoc,
+  onAll,
 }: {
-  slot: NonNullable<CollageDoc['slots'][number]>;
-  onChange: (p: Partial<NonNullable<CollageDoc['slots'][number]>>, liveOnly?: boolean) => void;
+  adjust: PhotoAdjust | undefined;
+  title?: string;
+  /** `live`: a slider on its way, made one undo step by `onCommit`. */
+  onChange: (adjust: PhotoAdjust, live?: boolean) => void;
   onCommit: () => void;
-  onDoc: (fn: Edit) => void;
+  /** "Samakan ke semua foto", where there are photos to match. */
+  onAll?: () => void;
 }) {
-  const a = slot.adjust ?? NO_ADJUST;
-  const set = (patch: Partial<PhotoAdjust>) => onChange({ adjust: { ...a, ...patch } }, true);
+  const a = adjust ?? NO_ADJUST;
+  const set = (patch: Partial<PhotoAdjust>) => onChange({ ...a, ...patch }, true);
   const signed = (v: number) => (v > 0 ? `+${v}` : String(v));
-  const others = (d: CollageDoc) => d.slots.filter((s) => s && s !== slot).length;
   return (
-    <Section title={t('Warna foto')}>
+    <Section title={t(title)}>
       <div className="grid grid-cols-3 gap-1.5">
         {ADJUST_PRESETS.map((p) => (
           <button
             key={p.id}
             type="button"
-            onClick={() => onChange({ adjust: p.adjust })}
+            onClick={() => onChange(p.adjust)}
             className={cx(
               'h-7 truncate rounded-lg px-1.5 text-[11px]',
-              sameAdjust(slot.adjust, p.adjust) ? 'bg-raised font-semibold text-fg ring-1 ring-gold' : 'bg-panel-2 text-muted hover:text-fg',
+              sameAdjust(adjust, p.adjust) ? 'bg-raised font-semibold text-fg ring-1 ring-gold' : 'bg-panel-2 text-muted hover:text-fg',
             )}
           >
             {t(p.name)}
@@ -884,9 +1009,11 @@ function PhotoLook({
       <Slider label={t('Kontras')} value={a.contrast} min={-100} max={100} step={1} show={signed(a.contrast)} onChange={(contrast) => set({ contrast })} onDone={onCommit} />
       <Slider label={t('Saturasi')} value={a.saturation} min={-100} max={100} step={1} show={signed(a.saturation)} onChange={(saturation) => set({ saturation })} onDone={onCommit} />
       <Slider label={t('Suhu')} value={a.warmth} min={-100} max={100} step={1} show={signed(a.warmth)} onChange={(warmth) => set({ warmth })} onDone={onCommit} />
-      <Btn onClick={() => onDoc((d) => (others(d) ? { ...d, slots: d.slots.map((s) => (s ? { ...s, adjust: slot.adjust } : s)) } : d))}>
-        <Copy size={13} /> {t('Samakan ke semua foto')}
-      </Btn>
+      {onAll && (
+        <Btn onClick={onAll}>
+          <Copy size={13} /> {t('Samakan ke semua foto')}
+        </Btn>
+      )}
     </Section>
   );
 }
@@ -901,16 +1028,19 @@ function PhotoInspector({
   onDoc,
   onCutOut,
   cutting,
+  align,
 }: {
   index: number;
   doc: CollageDoc;
   photo: SourcePhoto | null;
+  /** "Ratakan ke kanvas": a free layout's frame only. */
+  align: React.ReactNode;
   onChange: (p: Partial<NonNullable<CollageDoc['slots'][number]>>, liveOnly?: boolean) => void;
   onCommit: () => void;
   onReplace: () => void;
   /** A change to the whole design (the free layout's frame style). */
   onDoc: (fn: Edit) => void;
-  onCutOut: (mode: CutoutMode) => void;
+  onCutOut: () => void;
   cutting: boolean;
 }) {
   const slot = doc.slots[index];
@@ -927,10 +1057,11 @@ function PhotoInspector({
           </span>
         )}
       </div>
+      {align}
       <Section title={t('Foto##latar')}>
         {photo ? (
           <div className="flex items-center gap-2.5">
-            {photo.thumb && <img src={thumbUrl(photo.thumb)} alt="" className="h-12 w-[68px] rounded-md object-cover" />}
+            <PhotoThumb photo={photo} className="h-12 w-[68px] rounded-md object-cover" />
             <div className="flex min-w-0 flex-col">
               <span className="truncate text-xs font-medium">{photo.name}</span>
               {photo.rating ? <span className="text-[11px] text-faint">★{photo.rating}</span> : null}
@@ -967,20 +1098,20 @@ function PhotoInspector({
       )}
       {photo && slot && (
         <Section title={t('Hapus latar')}>
-          <div className="flex gap-2">
-            <Btn onClick={() => onCutOut('potret')} disabled={cutting}>
-              <UserRound size={13} /> {t('Orang')}
-            </Btn>
-            <Btn onClick={() => onCutOut('objek')} disabled={cutting}>
-              <Package size={13} /> {t('Benda')}
-            </Btn>
-          </div>
-          <p className="text-[11px] text-faint">
-            {cutting ? t('Memisahkan subjek…') : t('Subjeknya jadi elemen di tempat yang sama, latarnya hilang. Diproses di komputer ini.')}
-          </p>
+          <Btn onClick={onCutOut} disabled={cutting}>
+            <Wand2 size={13} /> {cutting ? t('Memisahkan subjek…') : t('Hapus latar')}
+          </Btn>
+          <p className="text-[11px] text-faint">{t('Subjeknya jadi elemen di tempat yang sama, latarnya hilang. Kalau belum pas, ada pilihan hasil lain. Diproses di komputer ini.')}</p>
         </Section>
       )}
-      {photo && slot && <PhotoLook slot={slot} onChange={onChange} onCommit={onCommit} onDoc={onDoc} />}
+      {photo && slot && (
+        <PhotoLook
+          adjust={slot.adjust}
+          onChange={(adjust, live) => onChange({ adjust }, live)}
+          onCommit={onCommit}
+          onAll={() => onDoc((d) => (d.slots.some((s) => s && s !== slot) ? { ...d, slots: d.slots.map((s) => (s ? { ...s, adjust: slot.adjust } : s)) } : d))}
+        />
+      )}
       {free && slot && (
         <Section title={t('Bentuk##bingkai')}>
           <div className="flex flex-wrap gap-1.5">
@@ -1162,8 +1293,8 @@ function boundsOf(d: CollageDoc, list: Multi) {
   });
 }
 
-/** The right panel with several things picked: line them up, copy or delete them together. */
-function MultiInspector({ count, onAlign, onDuplicate, onDelete }: { count: number; onAlign: (to: Align) => void; onDuplicate: () => void; onDelete: () => void }) {
+/** Left, centre, right, top, middle, bottom: six small buttons. */
+function AlignButtons({ onAlign }: { onAlign: (to: Align) => void }) {
   const aligns: [Align, typeof AlignStartVertical, string][] = [
     ['kiri', AlignStartVertical, 'Rata kiri'],
     ['tengah', AlignCenterVertical, 'Rata tengah'],
@@ -1173,23 +1304,53 @@ function MultiInspector({ count, onAlign, onDuplicate, onDelete }: { count: numb
     ['bawah', AlignEndHorizontal, 'Rata bawah'],
   ];
   return (
+    <div className="grid grid-cols-6 gap-1">
+      {aligns.map(([id, Icon, label]) => (
+        <button
+          key={id}
+          type="button"
+          title={t(label)}
+          aria-label={t(label)}
+          onClick={() => onAlign(id)}
+          className="flex h-8 items-center justify-center rounded-lg border border-line bg-panel-2 text-muted hover:bg-raised hover:text-fg"
+        >
+          <Icon size={15} />
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** The right panel with several things picked: line them up, copy or delete them together. */
+function MultiInspector({
+  count,
+  onAlign,
+  onAlignCanvas,
+  onDuplicate,
+  onDelete,
+  onDeselect,
+}: {
+  count: number;
+  onAlign: (to: Align) => void;
+  /** Each one on its own to the canvas (its slide), not to the others. */
+  onAlignCanvas: (to: Align) => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+  onDeselect: () => void;
+}) {
+  return (
     <>
-      <span className="text-[15px] font-semibold">{t('{count} item dipilih', { count })}</span>
+      <div className="flex items-center justify-between">
+        <span className="text-[15px] font-semibold">{t('{count} item dipilih', { count })}</span>
+        <button type="button" onClick={onDeselect} title="Esc" className="flex items-center gap-1 text-xs text-faint hover:text-fg">
+          <X size={13} /> {t('Batal pilih')}
+        </button>
+      </div>
       <Section title={t('Ratakan')}>
-        <div className="grid grid-cols-6 gap-1">
-          {aligns.map(([id, Icon, label]) => (
-            <button
-              key={id}
-              type="button"
-              title={t(label)}
-              aria-label={t(label)}
-              onClick={() => onAlign(id)}
-              className="flex h-8 items-center justify-center rounded-lg border border-line bg-panel-2 text-muted hover:bg-raised hover:text-fg"
-            >
-              <Icon size={15} />
-            </button>
-          ))}
-        </div>
+        <AlignButtons onAlign={onAlign} />
+      </Section>
+      <Section title={t('Ratakan ke kanvas')}>
+        <AlignButtons onAlign={onAlignCanvas} />
       </Section>
       <Section title={t('Lainnya')}>
         <div className="flex gap-2">
@@ -1239,10 +1400,26 @@ function Swatches({ doc, value, onPick }: { doc: CollageDoc; value: string; onPi
   );
 }
 
-function TextInspector({ layer, doc, onChange, onLive, onCommit }: { layer: TextLayer; doc: CollageDoc; onChange: (p: Partial<TextLayer>) => void; onLive: (p: Partial<TextLayer>) => void; onCommit: () => void }) {
+function TextInspector({
+  layer,
+  doc,
+  align,
+  onChange,
+  onLive,
+  onCommit,
+}: {
+  layer: TextLayer;
+  doc: CollageDoc;
+  /** "Ratakan ke kanvas", when it can move. */
+  align: React.ReactNode;
+  onChange: (p: Partial<TextLayer>) => void;
+  onLive: (p: Partial<TextLayer>) => void;
+  onCommit: () => void;
+}) {
   return (
     <>
       <span className="text-[15px] font-semibold">{t('Teks')}</span>
+      {align}
       <Section title={t('Isi')}>
         <textarea
           value={layer.text}
@@ -1285,15 +1462,283 @@ function TextInspector({ layer, doc, onChange, onLive, onCommit }: { layer: Text
   );
 }
 
+const GRADIENT_TYPES: { id: Gradient['type']; label: string }[] = [
+  { id: 'linear', label: 'Lurus' },
+  { id: 'radial', label: 'Melingkar' },
+  { id: 'reflected', label: 'Cermin' },
+  { id: 'conic', label: 'Putar##gradasi' },
+];
+
+/** `#rrggbb` at `alpha`, for CSS. */
+const rgba = (hex: string, alpha: number) => {
+  const n = parseInt(hex.slice(1, 7), 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+};
+
+/**
+ * A gradient's colors: the fade drawn as a bar with a dot per color. A dot
+ * picked gets its color, how solid it is and where it sits; colors can be
+ * added, removed and the whole fade turned round. Then its kind and direction.
+ */
+function GradientSection({
+  doc,
+  gradient,
+  onChange,
+  onLive,
+  onCommit,
+}: {
+  doc: CollageDoc;
+  gradient: Gradient;
+  onChange: (g: Gradient) => void;
+  onLive: (g: Gradient) => void;
+  onCommit: () => void;
+}) {
+  const stops = stopsOf(gradient);
+  const [picked, setPicked] = useState(0);
+  const at = Math.min(picked, stops.length - 1);
+  const stop = stops[at]!;
+  const withStop = (patch: Partial<GradientStopDef>) => withStops(gradient, stops.map((x, i) => (i === at ? { ...x, ...patch } : x)));
+  const bar = `linear-gradient(90deg, ${stops.map((x) => `${rgba(x.color, x.alpha)} ${Math.round(x.at * 100)}%`).join(', ')})`;
+  /** A new color at `pos` (0–1), the fade's own color there, picked. */
+  const addAt = (pos: number) => {
+    const after = stops.findIndex((x) => x.at > pos);
+    const near = stops[after < 0 ? stops.length - 1 : Math.max(0, after - 1)]!;
+    const g = withStops(gradient, [...stops, { ...near, at: pos }]);
+    onChange(g);
+    setPicked(stopsOf(g).findIndex((x) => x.at === pos && x.color === near.color));
+  };
+  // A dot dragged along the bar moves its color; a click on the bar adds one there.
+  const track = useRef<HTMLDivElement>(null);
+  // The colors as they were when the drag began, and which one moves: passing another must not swap them.
+  const dragging = useRef<{ i: number; from: GradientStopDef[] } | null>(null);
+  const posOf = (e: React.PointerEvent) => {
+    const r = track.current!.getBoundingClientRect();
+    return Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+  };
+  const iconBtn = (label: string, icon: React.ReactNode, onClick: () => void, disabled = false) => (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={label}
+      aria-label={label}
+      className="flex size-7 items-center justify-center rounded-md text-muted hover:bg-raised hover:text-fg disabled:opacity-35 disabled:hover:bg-transparent"
+    >
+      {icon}
+    </button>
+  );
+  const angled = gradient.type !== 'radial';
+  return (
+    <Section title={t('Gradasi')}>
+      {/* Inset so the dots at either end sit whole inside the panel. */}
+      <div className="px-2">
+        <div
+          ref={track}
+          onPointerDown={(e) => e.target === e.currentTarget && addAt(Math.round(posOf(e) * 100) / 100)}
+          title={t('Klik untuk menambah warna, seret titik untuk menggeser')}
+          className="relative h-7 cursor-copy rounded-md bg-[repeating-conic-gradient(#2a3a33_0_25%,#1a2622_0_50%)] bg-[length:10px_10px] ring-1 ring-line"
+        >
+          <div className="pointer-events-none absolute inset-0 rounded-md" style={{ background: bar }} />
+          {stops.map((x, i) => (
+            <button
+              key={i}
+              type="button"
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                e.currentTarget.setPointerCapture(e.pointerId);
+                setPicked(i);
+                dragging.current = { i, from: stops };
+              }}
+              onPointerMove={(e) => {
+                const d = dragging.current;
+                if (!d) return;
+                const moved = { ...d.from[d.i]!, at: Math.round(posOf(e) * 100) / 100 };
+                const g = withStops(gradient, d.from.map((y, j) => (j === d.i ? moved : y)));
+                onLive(g);
+                setPicked(stopsOf(g).findIndex((y) => y.at === moved.at && y.color === moved.color));
+              }}
+              onPointerUp={() => {
+                if (dragging.current == null) return;
+                dragging.current = null;
+                onCommit();
+              }}
+              aria-label={t('Warna {n}', { n: i + 1 })}
+              className={cx(
+                'absolute top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize rounded-full border-2 shadow',
+                i === at ? 'border-fg ring-2 ring-gold' : 'border-white/80',
+              )}
+              style={{ left: `${x.at * 100}%`, background: x.color }}
+            />
+          ))}
+        </div>
+      </div>
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-muted">{t('Warna {n}', { n: at + 1 })}</span>
+        <span className="flex gap-0.5">
+          {iconBtn(t('Tambah warna'), <Plus size={14} />, () => {
+            // Half-way to the next color (or the one before, from the last).
+            const other = stops[at < stops.length - 1 ? at + 1 : at - 1]!;
+            addAt(Math.round(((stop.at + other.at) / 2) * 100) / 100);
+          })}
+          {iconBtn(
+            stops.length <= 2 ? t('Gradasi butuh paling sedikit 2 warna') : t('Hapus warna'),
+            <Trash2 size={14} />,
+            () => (onChange(withStops(gradient, stops.filter((_, i) => i !== at))), setPicked(Math.max(0, at - 1))),
+            stops.length <= 2,
+          )}
+          {iconBtn(t('Balik urutan warna'), <ArrowLeftRight size={14} />, () => (
+            onChange(withStops(gradient, stops.map((x) => ({ ...x, at: 1 - x.at })))), setPicked(stops.length - 1 - at)
+          ))}
+        </span>
+      </div>
+      <Swatches doc={doc} value={stop.color} onPick={(color) => onChange(withStop({ color }))} />
+      <Slider label={t('Kepekatan')} value={stop.alpha} min={0} max={1} step={0.01} show={`${Math.round(stop.alpha * 100)}%`} onChange={(alpha) => onLive(withStop({ alpha }))} onDone={onCommit} />
+      <Slider label={t('Posisi')} value={stop.at} min={0} max={1} step={0.01} show={`${Math.round(stop.at * 100)}%`} onChange={(v) => onLive(withStop({ at: v }))} onDone={onCommit} />
+      <div className="grid grid-cols-4 gap-1">
+        {GRADIENT_TYPES.map((x) => (
+          <button
+            key={x.id}
+            type="button"
+            onClick={() => onChange({ ...gradient, type: x.id })}
+            className={cx('h-8 rounded-lg text-[11px] font-medium', gradient.type === x.id ? 'bg-raised text-fg ring-1 ring-gold' : 'bg-panel-2 text-muted hover:text-fg')}
+          >
+            {t(x.label)}
+          </button>
+        ))}
+      </div>
+      {angled && (
+        <Slider
+          label={t('Arah')}
+          value={gradient.angle}
+          min={0}
+          max={360}
+          step={1}
+          show={`${Math.round(gradient.angle)}°`}
+          // A line drawn on the canvas would win over the angle: the slider takes over.
+          onChange={(angle) => onLive({ ...gradient, angle, line: undefined })}
+          onDone={onCommit}
+        />
+      )}
+    </Section>
+  );
+}
+
+type OkVariant = {
+  status: 'ok';
+  canvas: HTMLCanvasElement;
+  original: HTMLCanvasElement;
+  kept: { canvas: HTMLCanvasElement; x: number; y: number; w: number; h: number };
+  /** Pixels of `canvas` per canvas pixel at 1080 a slide (a photo's cut-out); 1 for a picture element. */
+  scale: number;
+  preview: string;
+  /** What it keeps, coarsely: two results alike are offered once. */
+  print: Uint8Array;
+};
+type CutVariant = { status: 'busy' } | { status: 'none' } | OkVariant;
+
+/** One element's Hapus latar: every way's result, the one shown, and where a result sits on the canvas. */
+type CutSet = {
+  place: (v: OkVariant) => Partial<StickerLayer>;
+  order: ImageCutMethod[];
+  shown: ImageCutMethod | null;
+  variants: Partial<Record<ImageCutMethod, CutVariant>>;
+  /** The results already kept as element pictures, so switching back costs nothing. */
+  saved: Partial<Record<ImageCutMethod, string>>;
+};
+
+/** A result's see-through-ness on a 32 × 32 grid, uncut size: to tell results apart. */
+function printOf(c: HTMLCanvasElement) {
+  const g = document.createElement('canvas');
+  g.width = g.height = 32;
+  const ctx = g.getContext('2d', { willReadFrequently: true })!;
+  ctx.drawImage(c, 0, 0, 32, 32);
+  const d = ctx.getImageData(0, 0, 32, 32).data;
+  return Uint8Array.from({ length: 1024 }, (_, i) => d[i * 4 + 3]!);
+}
+
+/** Two results that keep the same thing, near enough (under 2% apart). */
+const alike = (a: Uint8Array, b: Uint8Array) => a.reduce((sum, v, i) => sum + Math.abs(v - b[i]!), 0) / (255 * a.length) < 0.02;
+
+/** A small picture of a result, for the choices. */
+function thumbOf(c: HTMLCanvasElement) {
+  const k = Math.min(1, 160 / Math.max(c.width, c.height));
+  const t = document.createElement('canvas');
+  t.width = Math.max(1, Math.round(c.width * k));
+  t.height = Math.max(1, Math.round(c.height * k));
+  t.getContext('2d')!.drawImage(c, 0, 0, t.width, t.height);
+  return t.toDataURL('image/png');
+}
+
+/**
+ * The results worth offering: finished ones only (one still being made never
+ * shows, so nothing appears and then vanishes), and none that came out like
+ * an earlier one (the one on the canvas always stays).
+ */
+function shownOrder(set: CutSet): ImageCutMethod[] {
+  const out: ImageCutMethod[] = [];
+  for (const m of set.order) {
+    const v = set.variants[m];
+    if (v?.status !== 'ok') continue;
+    const twin = m !== set.shown && out.some((o) => {
+      const w = set.variants[o];
+      return w?.status === 'ok' && alike(w.print, v.print);
+    });
+    if (!twin) out.push(m);
+  }
+  return out;
+}
+
+/** Every way's result side by side: the one on the canvas marked, a click puts another there. */
+function CutChoices({ set, onPick }: { set: CutSet; onPick: (m: ImageCutMethod) => void }) {
+  const ways = shownOrder(set);
+  // Every way came out the same: nothing to choose, so no choice is offered.
+  if (ways.length < 2) return null;
+  return (
+    <Section title={t('Hapus latar')}>
+      <span className="text-xs text-muted">{t('Pilih hasil yang paling pas:')}</span>
+      <div className="grid grid-cols-2 gap-2">
+        {/* Numbered, not named by how they were made: the photographer judges the picture, not the method. */}
+        {ways.map((m, i) => {
+          const v = set.variants[m];
+          const on = set.shown === m;
+          return (
+            <button
+              key={m}
+              type="button"
+              onClick={() => onPick(m)}
+              className={cx('flex flex-col gap-1.5 rounded-lg p-1.5 text-left', on ? 'bg-gold/[0.08] ring-2 ring-gold' : 'ring-1 ring-line-soft hover:ring-gold/70')}
+            >
+              <span className="flex aspect-[4/3] items-center justify-center rounded-md bg-[repeating-conic-gradient(#2a3a33_0_25%,#1a2622_0_50%)] bg-[length:10px_10px] p-1.5">
+                {v?.status === 'ok' && <img src={v.preview} alt="" className="max-h-full max-w-full object-contain" />}
+              </span>
+              <span className={cx('text-[11px]', on ? 'font-semibold text-fg' : 'text-muted')}>{t('Hasil {n}', { n: i + 1 })}</span>
+            </button>
+          );
+        })}
+      </div>
+    </Section>
+  );
+}
+
 function StickerInspector({
   layer,
+  align,
   onChange,
   onLive,
   onCommit,
   onPicture,
   onRefine,
+  onCutOut,
+  cutSet,
+  onPickCut,
 }: {
   layer: StickerLayer;
+  align: React.ReactNode;
+  /** A picture element: Hapus latar on it. */
+  onCutOut: () => void;
+  /** Its Hapus latar results this session (one shown, the others to pick), while it shows one of them. */
+  cutSet?: CutSet;
+  onPickCut: (m: ImageCutMethod) => void;
   onChange: (p: Partial<StickerLayer>) => void;
   onLive: (p: Partial<StickerLayer>) => void;
   onCommit: () => void;
@@ -1302,13 +1747,26 @@ function StickerInspector({
   onRefine: () => void;
 }) {
   const doc = useKreasi((s) => s.doc)!;
-  const cut = assetIdOf(layer.sticker) != null;
+  const cut = isCutout(layer.sticker);
   const name = cut ? t('Potongan foto') : elementName(layer);
   const picture = isPicturePlace(layer);
   const empty = isPlaceholder(layer.sticker);
+  // A picture of its own (an upload or a cut-out), not a built-in sticker or a background place.
+  const image = isImageSticker(layer.sticker) && !picture && assetIdOf(layer.sticker) != null;
+  const shadow = layer.shadow;
+  const line = layer.imageOutline;
   return (
     <>
       <span className="text-[15px] font-semibold">{name}</span>
+      {align}
+      {image && !cut && (!cutSet || !cutSet.shown) && (
+        <Section title={t('Hapus latar')}>
+          <Btn onClick={onCutOut} disabled={!!cutSet}>
+            {cutSet ? <Loader2 size={13} className="animate-spin" /> : <Wand2 size={13} />} {cutSet ? t('Memisahkan subjek…') : t('Hapus latar')}
+          </Btn>
+          <p className="text-[11px] text-faint">{t('Logo, benda, atau orang: caranya dipilih sendiri dari gambarnya. Diproses di komputer ini.')}</p>
+        </Section>
+      )}
       {picture && (
         <Section title={t('Foto##latar')}>
           <p className="text-xs text-muted">
@@ -1320,17 +1778,57 @@ function StickerInspector({
           {!empty && <Btn onClick={() => onChange({ sticker: EMPTY_PICTURE })}>{t('Kosongkan')}</Btn>}
         </Section>
       )}
+      {cutSet && <CutChoices set={cutSet} onPick={onPickCut} />}
       {cut && (
-        <Section title={t('Hapus latar')}>
-          <p className="text-xs text-muted">{t('Potongan dari foto. Hapus sisa latar atau kembalikan bagian yang hilang dengan kuas.')}</p>
+        <Section title={cutSet && shownOrder(cutSet).length > 1 ? t('Rapikan') : t('Hapus latar')}>
+          <p className="text-xs text-muted">{t('Hapus sisa latar atau kembalikan bagian yang hilang dengan kuas.')}</p>
           <Btn onClick={onRefine}>
             <Paintbrush size={13} /> {t('Rapikan potongan')}
           </Btn>
         </Section>
       )}
+      {layer.gradient && (
+        <GradientSection
+          doc={doc}
+          gradient={layer.gradient}
+          onChange={(gradient) => onChange({ gradient })}
+          onLive={(gradient) => onLive({ gradient })}
+          onCommit={onCommit}
+        />
+      )}
       {!layer.gradient && !picture && !isImageSticker(layer.sticker) && (
         <Section title={t('Warna')}>
           <Swatches doc={doc} value={layer.color} onPick={(color) => onChange({ color })} />
+        </Section>
+      )}
+      {image && <PhotoLook adjust={layer.adjust} title="Warna gambar" onChange={(adjust, live) => (live ? onLive({ adjust }) : onChange({ adjust }))} onCommit={onCommit} />}
+      {image && (
+        <Section title={t('Garis tepi')}>
+          <label className="flex items-center justify-between text-xs text-muted">
+            {t('Garis mengikuti bentuknya')}
+            <Switch label={t('Garis tepi')} checked={!!line} onChange={(on) => onChange({ imageOutline: on ? { width: 0.008, color: '#ffffff' } : undefined })} />
+          </label>
+          {line && (
+            <>
+              <Slider label={t('Tebal')} value={line.width} min={0.002} max={0.03} step={0.001} show={`${Math.round(line.width * 1000) / 10}%`} onChange={(width) => onLive({ imageOutline: { ...line, width } })} onDone={onCommit} />
+              <Swatches doc={doc} value={line.color} onPick={(color) => onChange({ imageOutline: { ...line, color } })} />
+            </>
+          )}
+        </Section>
+      )}
+      {image && (
+        <Section title={t('Bayangan')}>
+          <label className="flex items-center justify-between text-xs text-muted">
+            {t('Bayangan lembut di bawahnya')}
+            <Switch label={t('Bayangan')} checked={!!shadow} onChange={(on) => onChange({ shadow: on ? { color: '#000000', alpha: 0.4, blur: 0.03, x: 0, y: 0.012 } : undefined })} />
+          </label>
+          {shadow && (
+            <>
+              <Slider label={t('Kepekatan')} value={shadow.alpha} min={0.05} max={1} step={0.01} show={`${Math.round(shadow.alpha * 100)}%`} onChange={(alpha) => onLive({ shadow: { ...shadow, alpha } })} onDone={onCommit} />
+              <Slider label={t('Kelembutan')} value={shadow.blur} min={0} max={0.1} step={0.002} show={`${Math.round(shadow.blur * 1000) / 10}`} onChange={(blur) => onLive({ shadow: { ...shadow, blur } })} onDone={onCommit} />
+              <Slider label={t('Jarak')} value={shadow.y} min={0} max={0.06} step={0.001} show={`${Math.round(shadow.y * 1000) / 10}`} onChange={(y) => onLive({ shadow: { ...shadow, y } })} onDone={onCommit} />
+            </>
+          )}
         </Section>
       )}
       <Section title={t('Ukuran & posisi')}>
@@ -1468,7 +1966,7 @@ function ReplaceDialog({ title, onPick, onClose, onPickMore }: { title: string; 
         <div className="grid min-h-0 grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-2.5 overflow-y-auto p-1">
           {photos.map((p) => (
             <button key={p.id} type="button" onClick={() => (onPick(p), onClose())} title={p.name} className="aspect-[3/2] overflow-hidden rounded-lg bg-raised hover:ring-2 hover:ring-gold">
-              {p.thumb && <img src={thumbUrl(p.thumb)} alt="" loading="lazy" className="size-full object-cover" />}
+              <PhotoThumb photo={p} loading="lazy" className="size-full object-cover" />
             </button>
           ))}
           {!photos.length && <p className="col-span-full py-10 text-center text-sm text-faint">{t('Belum ada foto di sumber ini.')}</p>}

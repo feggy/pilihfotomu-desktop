@@ -62,6 +62,12 @@ export const FORMATS: Record<
   foto: { label: 'Sesuai foto', hint: 'Bingkai mengikuti ukuran foto', ratio: 1 },
 };
 
+/** A slide's width in the exported file: 1080 px for Instagram, 300 dpi for a print size. */
+export const slidePixels = (doc: Pick<CollageDoc, 'format'>) => {
+  const inches = FORMATS[doc.format].printInches;
+  return inches ? Math.round(inches * 300) : 1080;
+};
+
 /** Height ÷ width of one slide: the format's, or the photo's own for a design started from one. */
 export const formatRatio = (d: Pick<CollageDoc, 'format'> & { photoRatio?: number }) =>
   d.format === 'foto' ? (d.photoRatio ?? 1) : FORMATS[d.format].ratio;

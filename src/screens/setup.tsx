@@ -67,7 +67,7 @@ export function Setup({ folder, mode: start = 'ai' }: { folder: FolderInfo; mode
       <TitleBar />
       <main className="flex flex-1 flex-col items-center gap-6 overflow-y-auto px-6 pt-8 pb-10 xl:flex-row xl:items-start xl:justify-center xl:gap-8 xl:px-10 xl:pt-12">
         <div className="flex w-full max-w-[744px] flex-col gap-6">
-          <button type="button" onClick={() => go({ name: 'home' })} className="flex items-center gap-2 self-start text-muted hover:text-fg">
+          <button type="button" onClick={() => go({ name: 'pilih' })} className="flex items-center gap-2 self-start text-muted hover:text-fg">
             <ArrowLeft size={16} /> {t('Kembali')}
           </button>
 

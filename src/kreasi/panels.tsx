@@ -1,16 +1,20 @@
 /**
- * The editor's left panels: Lapisan, Teks, Elemen, Latar. Previews of
+ * The editor's left panels: Lapisan, Teks, Elemen, Latar, Riwayat. Previews of
  * presets and elements are drawn by the engine itself, so what is shown is
  * exactly what lands on the canvas.
  */
 
-import { ArrowDown, ArrowUp, ChevronDown, Eye, EyeOff, Image as ImageIcon, Lock, Search, Shapes, Type, Unlock } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronDown, Eye, EyeOff, Image as ImageIcon, ImagePlus, Lock, Search, Shapes, Trash2, Type, Unlock } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { cx } from '../components/ui';
+import { api } from '../lib/api';
+import { useApp } from '../store';
 import { t } from '../lib/i18n';
-import { addGradient, addPreset, addShape, addSticker, addText, order, toggleMeta, type Edit } from './actions';
-import { assetIdOf } from './assets';
+import { addGradient, addImage, addPreset, addShape, addSticker, addText, order, toggleMeta, type Edit } from './actions';
+import { assetIdOf, assetImage, assetSticker, deleteUploadFile, isUpload, saveUpload } from './assets';
+import { listDrafts, saveDraft, type Draft } from './drafts';
+import { useKreasi } from './store';
 import { useBrand } from './brand';
 import {
   FREE_LAYOUT_ID,
@@ -30,6 +34,7 @@ import { SHAPES, shapeById } from './engine/shapes';
 import { STICKER_CATEGORIES, STICKERS, stickerById } from './engine/stickers';
 import { PRESET_CATEGORIES, TEXT_PRESETS } from './engine/text-presets';
 import { GENERATED_PRESETS } from './engine/text-presets-generated';
+import { stepOf } from './history';
 import { isPicturePlace } from './kit';
 import { itemPreviewOf, previewOf } from './preview';
 
@@ -181,6 +186,49 @@ export function LayersPanel({
   );
 }
 
+/**
+ * Riwayat: every undo step of the design, newest on top; a click goes back
+ * (or forward again) to that state. Steps undone stay until something new is done.
+ */
+export function HistoryPanel({ past, doc, future, onJump }: { past: CollageDoc[]; doc: CollageDoc; future: CollageDoc[]; onJump: (i: number) => void }) {
+  const all = [...past, doc, ...future];
+  const now = past.length;
+  const listRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    listRef.current?.querySelector('[data-on]')?.scrollIntoView({ block: 'nearest' });
+  }, [now]);
+  return (
+    <div ref={listRef} className="flex flex-col gap-0.5">
+      <Title>{t('Riwayat')}</Title>
+      {all
+        .map((d, i) => {
+          const step = stepOf(d);
+          const on = i === now;
+          return (
+            <button
+              key={i}
+              type="button"
+              data-on={on || undefined}
+              onClick={() => onJump(i)}
+              className={cx(
+                'flex h-9 shrink-0 items-center gap-2 rounded-lg px-2 text-left',
+                on ? 'bg-raised ring-1 ring-gold' : 'hover:bg-panel-2',
+                i > now && 'opacity-45',
+              )}
+            >
+              <span className={cx('min-w-0 flex-1 truncate text-xs', on ? 'font-semibold text-fg' : 'text-muted')}>
+                {t(step?.label ?? (i === 0 ? 'Awal' : 'Ubah desain'))}
+              </span>
+              {step && <span className="shrink-0 text-[10px] text-faint tabular-nums">{new Date(step.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>}
+            </button>
+          );
+        })
+        .reverse()}
+      <p className="mt-2 text-[11px] text-faint">{t('Klik langkah untuk kembali ke saat itu. Riwayat ikut tersimpan bersama draf.')}</p>
+    </div>
+  );
+}
+
 /** A sticker's, shape's or gradient's name in the current language. */
 export const elementLabel = (name: string) => t(`${name}##elemen`);
 
@@ -189,6 +237,7 @@ export function elementName(st: { sticker: string; gradient?: unknown } | undefi
   if (!st) return t('Elemen');
   if (st.gradient) return t('Gradasi##lapisan');
   if (isPicturePlace(st)) return t('Gambar latar');
+  if (isUpload(st.sticker)) return t('Gambar');
   if (assetIdOf(st.sticker) != null) return t('Potongan foto');
   const name = stickerById(st.sticker)?.name ?? shapeById(st.sticker)?.name;
   return name ? elementLabel(name) : t('Elemen');
@@ -256,7 +305,145 @@ export function TextPanel({ onAdd }: { onAdd: (a: { edit: Edit; id: string }) =>
 
 // ── Elemen ─────────────────────────────────────────────────────
 
-export function ElementsPanel({ onAdd }: { onAdd: (a: { edit: Edit; id: string }) => void }) {
+/**
+ * "Unggah gambar": a picture from this computer as an element, see-through
+ * parts kept; under it "Gambar saya", every picture uploaded before, to use again.
+ */
+function UploadButton({ onAdd, edit }: { onAdd: (a: { edit: Edit; id: string }) => void; edit: (fn: Edit) => void }) {
+  const input = useRef<HTMLInputElement>(null);
+  // Deleting asks first, saying how many other designs use the picture too.
+  const [asking, setAsking] = useState<{ id: string; others: Draft[] } | null>(null);
+  const ask = async (id: string) => {
+    const open = useKreasi.getState().draftId;
+    const sticker = assetSticker(id);
+    const others = (await listDrafts()).filter((d) => d.id !== open && d.doc.stickers.some((x) => x.sticker === sticker));
+    setAsking({ id, others });
+  };
+  const remove = async () => {
+    if (!asking) return;
+    const sticker = assetSticker(asking.id);
+    const without = (d: CollageDoc): CollageDoc => (d.stickers.some((x) => x.sticker === sticker) ? { ...d, stickers: d.stickers.filter((x) => x.sticker !== sticker) } : d);
+    try {
+      // Out of this design and every other one first, so none is left with an empty element.
+      edit(without);
+      await Promise.all(
+        asking.others.map((d) => saveDraft({ id: d.id, name: d.name, templateId: d.templateId, templateName: d.templateName, doc: without(d.doc), source: d.source, history: d.history })),
+      );
+      await deleteUploadFile(asking.id);
+      setMine((list) => list.filter((x) => x !== asking.id));
+    } catch (e) {
+      useApp.getState().fail(e);
+    } finally {
+      setAsking(null);
+    }
+  };
+  const [busy, setBusy] = useState(false);
+  const [mine, setMine] = useState<string[]>([]);
+  const reload = () => api.listUploads().then(setMine, () => setMine([]));
+  useEffect(() => {
+    reload();
+  }, []);
+  const take = async (files: FileList | null) => {
+    const file = files?.[0];
+    if (!file) return;
+    setBusy(true);
+    try {
+      const { sticker, ratio } = await saveUpload(file);
+      onAdd(addImage(sticker, ratio));
+      reload();
+    } catch (e) {
+      useApp.getState().fail(e);
+    } finally {
+      setBusy(false);
+      if (input.current) input.current.value = '';
+    }
+  };
+  const reuse = async (id: string) => {
+    try {
+      const img = await assetImage(id);
+      onAdd(addImage(assetSticker(id), img.naturalHeight / Math.max(1, img.naturalWidth)));
+    } catch (e) {
+      useApp.getState().fail(e);
+    }
+  };
+  return (
+    <>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => input.current?.click()}
+        className="flex h-11 items-center justify-center gap-2 rounded-lg border-[1.5px] border-dashed border-line text-xs font-medium text-muted hover:border-gold hover:text-fg disabled:opacity-60"
+      >
+        <ImagePlus size={15} className="text-gold-text" /> {busy ? t('Memuat…') : t('Unggah gambar')}
+      </button>
+      <span className="-mt-1 text-[11px] text-faint">{t('Logo atau PNG transparan, juga JPEG dan WebP.')}</span>
+      <input ref={input} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(e) => take(e.target.files)} />
+      {mine.length > 0 && (
+        <>
+          <Title>{t('Gambar saya')}</Title>
+          <div className="grid grid-cols-3 gap-1.5">
+            {mine.map((id) => (
+              <div key={id} className="group relative">
+                <button
+                  type="button"
+                  onClick={() => reuse(id)}
+                  className={cx(
+                    'flex aspect-square w-full items-center justify-center rounded-md bg-[repeating-conic-gradient(#2a3a33_0_25%,#1a2622_0_50%)] bg-[length:10px_10px] p-1.5 hover:ring-gold',
+                    asking?.id === id ? 'ring-2 ring-reject' : 'ring-1 ring-line-soft',
+                  )}
+                >
+                  <AssetThumb id={id} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => ask(id)}
+                  title={t('Hapus dari Gambar saya')}
+                  aria-label={t('Hapus dari Gambar saya')}
+                  className="absolute top-1 right-1 hidden size-6 items-center justify-center rounded-md bg-bg/85 text-faint group-hover:flex hover:text-reject"
+                >
+                  <Trash2 size={12} />
+                </button>
+              </div>
+            ))}
+          </div>
+          {asking && (
+            <div className="flex flex-col gap-2 rounded-lg border border-reject/60 bg-reject/[0.06] p-2.5">
+              <span className="text-xs font-semibold">{t('Hapus gambar ini?')}</span>
+              <span className="text-[11px] text-muted">
+                {asking.others.length
+                  ? t('Gambar ini juga dihapus dari kanvas ini dan dari {count} desain lain yang memakainya. Tidak bisa dibatalkan.', { n: asking.others.length, count: asking.others.length })
+                  : t('Gambar ini juga dihapus dari kanvas ini kalau sedang dipakai. Tidak bisa dibatalkan.')}
+              </span>
+              <span className="flex justify-end gap-1.5">
+                <button type="button" onClick={() => setAsking(null)} className="h-7 rounded-md px-2.5 text-xs font-medium text-muted hover:text-fg">
+                  {t('Batal')}
+                </button>
+                <button type="button" onClick={remove} className="flex h-7 items-center gap-1 rounded-md bg-reject px-2.5 text-xs font-semibold text-bg">
+                  <Trash2 size={12} /> {t('Hapus')}
+                </button>
+              </span>
+            </div>
+          )}
+        </>
+      )}
+    </>
+  );
+}
+
+/** An uploaded picture, small (each read once, then cached). */
+function AssetThumb({ id }: { id: string }) {
+  const [src, setSrc] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    assetImage(id).then((img) => alive && setSrc(img.src), () => {});
+    return () => {
+      alive = false;
+    };
+  }, [id]);
+  return src ? <img src={src} alt="" draggable={false} className="max-h-full max-w-full object-contain" /> : null;
+}
+
+export function ElementsPanel({ onAdd, edit }: { onAdd: (a: { edit: Edit; id: string }) => void; edit: (fn: Edit) => void }) {
   const [q, setQ] = useState('');
   const query = q.trim().toLowerCase();
   // Found by its name in either language.
@@ -269,6 +456,7 @@ export function ElementsPanel({ onAdd }: { onAdd: (a: { edit: Edit; id: string }
         <Search size={13} className="text-faint" />
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('Cari elemen…')} className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-faint" />
       </label>
+      {!query && <UploadButton onAdd={onAdd} edit={edit} />}
       {!query && (
         <>
           <Title>{t('Gradasi')}</Title>

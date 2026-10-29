@@ -1,11 +1,13 @@
 import { Check, RectangleHorizontal, RectangleVertical, Square } from 'lucide-react';
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState, type ImgHTMLAttributes } from 'react';
 
 import { cx } from '../components/ui';
+import { api, thumbUrl } from '../lib/api';
 import { t } from '../lib/i18n';
 import type { CollageDoc } from './engine/document';
 import type { Shape } from './kit';
 import { previewOf } from './preview';
+import { useKreasi, type SourcePhoto } from './store';
 
 const STEPS = ['Pilih template', 'Isi foto', 'Edit & ekspor'];
 
@@ -38,7 +40,8 @@ export function Steps({ at, onGo, noPhotos }: { at: 1 | 2 | 3; onGo?: (step: 1 |
                 {done ? <Check size={12} strokeWidth={3} /> : shown}
               </span>
               <span className={cx('text-[13px]', current ? 'font-semibold text-fg' : done ? 'font-medium text-muted' : 'font-medium text-faint')}>
-                {t(label)}
+                {/* A design from an empty canvas starts with its size, not a template. */}
+                {t(noPhotos && n === 1 ? 'Pilih kanvas' : label)}
               </span>
             </button>
           </Fragment>
@@ -95,3 +98,26 @@ export const ShapeIcon = ({ shape, size = 15, className }: { shape: Shape; size?
   const I = shape === 'landscape' ? RectangleHorizontal : shape === 'portrait' ? RectangleVertical : Square;
   return <I size={size} className={className} />;
 };
+
+/**
+ * A source photo's thumbnail. One whose cache file is gone (the cache was
+ * cleared) is made again once and loaded afresh; nothing if that fails too.
+ */
+export function PhotoThumb({ photo, ...img }: { photo: SourcePhoto } & ImgHTMLAttributes<HTMLImageElement>) {
+  const root = useKreasi((s) => s.source?.root);
+  // 0: first try; a time: made again; -1: gave up.
+  const [v, setV] = useState(0);
+  if (!photo.thumb || v < 0) return null;
+  const src = thumbUrl(photo.thumb);
+  return (
+    <img
+      alt=""
+      {...img}
+      src={v ? `${src}?v=${v}` : src}
+      onError={() => {
+        if (v || !root) return setV(-1);
+        api.thumbnails(root, [photo.id]).then((got) => setV(got[photo.id] ? Date.now() : -1), () => setV(-1));
+      }}
+    />
+  );
+}

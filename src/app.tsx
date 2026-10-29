@@ -7,7 +7,7 @@ import { KreasiScreen } from './kreasi/screen';
 import { ClientPicks } from './screens/client-picks';
 import { EditPhotos } from './screens/edit-photos';
 import { Compare } from './screens/compare';
-import { chooseFolder, Home } from './screens/home';
+import { chooseFolder, Home, PilihStart } from './screens/home';
 import { ProgressScreen } from './screens/progress';
 import { Review } from './screens/review';
 import { Settings } from './screens/settings';
@@ -47,10 +47,11 @@ export function App() {
     syncNativeLang();
   }, [langPref]);
 
-  // Dropping a folder anywhere on the home screen opens it.
+  // Dropping a folder anywhere on the home screen, or Pilih foto's, opens it.
   useEffect(() => {
     const off = getCurrentWebview().onDragDropEvent((e) => {
-      if (useApp.getState().screen.name !== 'home') return;
+      const at = useApp.getState().screen.name;
+      if (at !== 'home' && at !== 'pilih') return;
       if (e.payload.type === 'enter' || e.payload.type === 'over') setDragging(true);
       else if (e.payload.type === 'leave') setDragging(false);
       else if (e.payload.type === 'drop') {
@@ -146,6 +147,8 @@ export function App() {
       <KreasiScreen back={screen.back} />
     ) : screen.name === 'edit' ? (
       <EditPhotos key={screen.ids ? 'editor' : 'library'} back={screen.back} ids={screen.ids} start={screen.start} />
+    ) : screen.name === 'pilih' ? (
+      <PilihStart dragging={dragging} />
     ) : screen.name === 'settings' ? (
       <Settings key={screen.section ?? 'license'} back={screen.back} initial={screen.section} />
     ) : (

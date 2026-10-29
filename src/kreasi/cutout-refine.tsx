@@ -2,10 +2,11 @@
  * Rapikan potongan: touching up a Hapus latar cut-out with a brush. "Hapus"
  * takes away what the model kept by mistake; "Kembalikan" paints the photo
  * back where it cut too much. Works on the cut-out at the size of the
- * photo's place (its `-penuh` file), so even a lost arm comes back.
+ * photo's place (its `-penuh` file), so even a lost arm comes back. Zooms in
+ * for the fine edges: ⌘ + scroll or a pinch, scroll or Space + drag to move.
  */
 
-import { Eraser, Paintbrush, RotateCcw, Undo2, X } from 'lucide-react';
+import { Eraser, Maximize, Paintbrush, RotateCcw, Undo2, X, ZoomIn, ZoomOut } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 import { Button, Segmented, cx } from '../components/ui';
@@ -20,6 +21,7 @@ type Tool = 'hapus' | 'kembalikan';
 /** Largest the picture is shown in the dialog (CSS px). */
 const VIEW = { w: 640, h: 520 };
 const UNDO = 30;
+const MAX_ZOOM = 8;
 
 const canvasOf = (img: CanvasImageSource & { width: number; height: number }) => {
   const c = document.createElement('canvas');
@@ -54,6 +56,10 @@ export function CutoutRefine({
   const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
   const [steps, setSteps] = useState(0);
   const [saving, setSaving] = useState(false);
+  /** Zoom and where the zoomed picture sits in the view (CSS px). */
+  const [cam, setCam] = useState({ z: 1, x: 0, y: 0 });
+  const [space, setSpace] = useState(false);
+  const pan = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -73,17 +79,32 @@ export function CutoutRefine({
   const W = work.current?.width ?? 1;
   const H = work.current?.height ?? 1;
   const k = Math.min(VIEW.w / W, VIEW.h / H, 1);
+  const vw = W * k;
+  const vh = H * k;
+  /** Image px to view px. */
+  const s = k * cam.z;
+
+  /** `cam` kept zoomed in at most MAX_ZOOM and with the picture filling the view. */
+  const within = (z: number, x: number, y: number) => {
+    z = Math.min(MAX_ZOOM, Math.max(1, z));
+    return { z, x: Math.min(0, Math.max(vw - vw * z, x)), y: Math.min(0, Math.max(vh - vh * z, y)) };
+  };
+  /** Zooms by `f`, the view point (px, py) staying put. */
+  const zoomBy = (f: number, px = vw / 2, py = vh / 2) =>
+    setCam((c) => {
+      const z = Math.min(MAX_ZOOM, Math.max(1, c.z * f));
+      return within(z, px - ((px - c.x) * z) / c.z, py - ((py - c.y) * z) / c.z);
+    });
 
   /** Draws the view: the photo faintly under, the cut-out on top. */
   const paint = () => {
     const c = view.current;
     if (!c || !work.current || !original.current) return;
     const dpr = window.devicePixelRatio || 1;
-    c.width = Math.round(W * k * dpr);
-    c.height = Math.round(H * k * dpr);
+    c.width = Math.round(vw * dpr);
+    c.height = Math.round(vh * dpr);
     const ctx = c.getContext('2d')!;
-    ctx.setTransform(k * dpr, 0, 0, k * dpr, 0, 0);
-    ctx.clearRect(0, 0, W, H);
+    ctx.setTransform(s * dpr, 0, 0, s * dpr, cam.x * dpr, cam.y * dpr);
     if (showPhoto) {
       ctx.globalAlpha = 0.25;
       ctx.drawImage(original.current, 0, 0);
@@ -91,7 +112,7 @@ export function CutoutRefine({
     }
     ctx.drawImage(work.current, 0, 0);
   };
-  useEffect(paint, [ready, showPhoto, steps, k]);
+  useEffect(paint, [ready, showPhoto, steps, k, cam]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -101,21 +122,52 @@ export function CutoutRefine({
         e.stopPropagation();
         back();
       }
+      const zoom = e.metaKey || e.ctrlKey ? { '=': 1.5, '+': 1.5, '-': 1 / 1.5, '0': 0 }[e.key] : undefined;
+      if (zoom != null) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (zoom) zoomBy(zoom);
+        else setCam({ z: 1, x: 0, y: 0 });
+      }
+      // Space held: drag to move the zoomed picture.
+      if (e.code === 'Space' && !(e.target instanceof HTMLInputElement && e.target.type !== 'range' && e.target.type !== 'checkbox')) {
+        e.preventDefault();
+        setSpace(true);
+      }
     };
+    const onKeyUp = (e: KeyboardEvent) => e.code === 'Space' && setSpace(false);
     window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
+    window.addEventListener('keyup', onKeyUp, true);
+    return () => {
+      window.removeEventListener('keydown', onKey, true);
+      window.removeEventListener('keyup', onKeyUp, true);
+    };
+  });
+
+  // ⌘ + scroll or a pinch zooms at the pointer; scrolling moves. Not passive, to keep the page still.
+  useEffect(() => {
+    const c = view.current;
+    if (!c) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const r = c.getBoundingClientRect();
+      if (e.ctrlKey || e.metaKey) zoomBy(Math.exp(-e.deltaY * 0.01), e.clientX - r.left, e.clientY - r.top);
+      else setCam((v) => within(v.z, v.x - e.deltaX, v.y - e.deltaY));
+    };
+    c.addEventListener('wheel', onWheel, { passive: false });
+    return () => c.removeEventListener('wheel', onWheel);
   });
 
   const toImage = (e: React.PointerEvent) => {
     const r = view.current!.getBoundingClientRect();
-    return { x: (e.clientX - r.left) / k, y: (e.clientY - r.top) / k };
+    return { x: (e.clientX - r.left - cam.x) / s, y: (e.clientY - r.top - cam.y) / s };
   };
 
   /** One brush stroke from `a` to `b` (image px). */
   const stroke = (a: { x: number; y: number }, b: { x: number; y: number }) => {
     const w = work.current!;
     const ctx = w.getContext('2d')!;
-    const r = size / k / 2;
+    const r = size / s / 2;
     const line = (c: CanvasRenderingContext2D) => {
       c.lineCap = 'round';
       c.lineJoin = 'round';
@@ -152,6 +204,10 @@ export function CutoutRefine({
   const down = (e: React.PointerEvent) => {
     if (ready !== 'ok') return;
     (e.target as Element).setPointerCapture(e.pointerId);
+    if (space || e.button === 1) {
+      pan.current = { x: e.clientX, y: e.clientY };
+      return;
+    }
     undo.current = [...undo.current, work.current!.getContext('2d')!.getImageData(0, 0, W, H)].slice(-UNDO);
     const p = toImage(e);
     last.current = p;
@@ -159,14 +215,23 @@ export function CutoutRefine({
     setSteps((n) => n + 1);
   };
   const move = (e: React.PointerEvent) => {
+    if (pan.current) {
+      const dx = e.clientX - pan.current.x;
+      const dy = e.clientY - pan.current.y;
+      pan.current = { x: e.clientX, y: e.clientY };
+      setCam((v) => within(v.z, v.x + dx, v.y + dy));
+      return;
+    }
+    const r = view.current!.getBoundingClientRect();
+    setCursor({ x: e.clientX - r.left, y: e.clientY - r.top });
     const p = toImage(e);
-    setCursor({ x: p.x * k, y: p.y * k });
     if (!last.current) return;
     stroke(last.current, p);
     last.current = p;
     paint();
   };
   const up = () => {
+    if (pan.current) return void (pan.current = null);
     last.current = null;
     setSteps((n) => n + 1);
   };
@@ -267,7 +332,7 @@ export function CutoutRefine({
             </div>
             <div
               className="relative self-center overflow-hidden rounded-lg bg-[repeating-conic-gradient(#2a3a33_0_25%,#1a2622_0_50%)] bg-[length:16px_16px]"
-              style={{ width: W * k, height: H * k }}
+              style={{ width: vw, height: vh }}
             >
               {ready === 'loading' && <span className="absolute inset-0 flex items-center justify-center text-xs text-faint">{t('Memuat…')}</span>}
               <canvas
@@ -276,15 +341,24 @@ export function CutoutRefine({
                 onPointerMove={move}
                 onPointerUp={up}
                 onPointerLeave={() => setCursor(null)}
-                className="block cursor-none touch-none"
-                style={{ width: W * k, height: H * k }}
+                className={cx('block touch-none', space ? 'cursor-grab' : 'cursor-none')}
+                style={{ width: vw, height: vh }}
               />
-              {cursor && (
+              {cursor && !space && (
                 <span
                   className={cx('pointer-events-none absolute rounded-full border-2', tool === 'hapus' ? 'border-reject' : 'border-pick')}
                   style={{ left: cursor.x - size / 2, top: cursor.y - size / 2, width: size, height: size }}
                 />
               )}
+            </div>
+            <div className="flex items-center gap-1.5 text-xs text-faint">
+              <Button variant="plain" icon={ZoomOut} onClick={() => zoomBy(1 / 1.5)} disabled={cam.z <= 1} aria-label={t('Perkecil')} />
+              <span className="w-11 text-center tabular-nums text-muted">{Math.round(cam.z * 100)}%</span>
+              <Button variant="plain" icon={ZoomIn} onClick={() => zoomBy(1.5)} disabled={cam.z >= MAX_ZOOM} aria-label={t('Perbesar')} />
+              <Button variant="plain" icon={Maximize} onClick={() => setCam({ z: 1, x: 0, y: 0 })} disabled={cam.z === 1}>
+                {t('Pas layar')}
+              </Button>
+              <span className="ml-2">{t('⌘ + scroll atau cubit: zoom · scroll atau Spasi + seret: geser')}</span>
             </div>
             {error && <p className="text-xs text-reject">{error}</p>}
             <div className="flex justify-end gap-2.5">

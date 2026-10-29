@@ -9,6 +9,7 @@ import { useBrand } from './brand';
 import { emptyPhotoFile, formatRatio, newId, slotsFor, templateOf, withSlot, type CollageDoc, type Slot } from './engine/document';
 import { newDraftId } from './drafts';
 import { photoFile, slotShapes, shapeOf, templateDoc, type Shape, type Template } from './kit';
+import { record, loadHistory, setStep as setHistoryStep, type SavedHistory } from './history';
 import { personalize, type ClientInfo } from './personalize';
 
 /** A photo the design can use: from the open session, or a folder scanned for this. */
@@ -66,8 +67,8 @@ interface KreasiState {
   setStep: (step: Step) => void;
   setClient: (c: Partial<ClientInfo>) => void;
   choose: (t: Template) => void;
-  /** Opens a saved draft where it was left: in the editor. */
-  openDraft: (d: { id: string; name: string; doc: CollageDoc; source: Source | null; savedAt: number }, t: Template) => void;
+  /** Opens a saved draft where it was left: in the editor, its undo history with it. */
+  openDraft: (d: { id: string; name: string; doc: CollageDoc; source: Source | null; savedAt: number; history?: SavedHistory }, t: Template) => void;
   setName: (name: string) => void;
   setSavedAt: (at: number) => void;
   setSource: (s: Source | null) => void;
@@ -89,6 +90,8 @@ interface KreasiState {
   commit: () => void;
   undo: () => void;
   redo: () => void;
+  /** Riwayat: back (or forward) to state `i` of past, now and future in order. */
+  jump: (i: number) => void;
   reset: () => void;
 }
 
@@ -184,21 +187,28 @@ export const useKreasi = create<KreasiState>((set, get) => ({
   setStep: (step) => set({ step }),
   setClient: (c) => set(({ client }) => ({ client: { ...client, ...c } })),
   choose: (template) =>
-    set(({ client }) => ({
-      template,
-      doc: personalize(structuredClone(templateDoc(template)), { ...client, applied: undefined }, useBrand.getState().studio),
-      client: { ...client, applied: client.name.trim() },
-      active: 0,
-      past: [],
-      future: [],
-      step: 'isi',
-      resumed: false,
-      draftId: newDraftId(),
-      name: template.name,
-      savedAt: null,
-    })),
-  openDraft: (d, template) =>
-    set({ template, doc: d.doc, source: d.source, draftId: d.id, name: d.name, savedAt: d.savedAt, active: 0, past: [], future: [], step: 'edit', resumed: true }),
+    set(({ client }) => {
+      const doc = personalize(structuredClone(templateDoc(template)), { ...client, applied: undefined }, useBrand.getState().studio);
+      setHistoryStep(doc, { label: 'Template', at: Date.now() });
+      return {
+        template,
+        doc,
+        client: { ...client, applied: client.name.trim() },
+        active: 0,
+        past: [],
+        future: [],
+        step: 'isi',
+        resumed: false,
+        draftId: newDraftId(),
+        name: template.name,
+        savedAt: null,
+      };
+    }),
+  openDraft: (d, template) => {
+    // A draft from before history was saved: just its design.
+    const h = loadHistory(d.history) ?? { past: [], doc: d.doc, future: [] };
+    set({ template, ...h, gesture: null, source: d.source, draftId: d.id, name: d.name, savedAt: d.savedAt, active: 0, step: 'edit', resumed: true });
+  },
   setName: (name) => set({ name }),
   setSavedAt: (savedAt) => set({ savedAt }),
   // A new session brings its shoot date; the name is the photographer's to type.
@@ -272,15 +282,21 @@ export const useKreasi = create<KreasiState>((set, get) => ({
       if (!doc) return {};
       const next = fn(doc);
       if (next === doc) return {};
+      record(doc, next);
       return { doc: next, past: [...past, doc].slice(-HISTORY), future: [] };
     }),
   live: (fn) => set(({ doc, gesture }) => (doc ? { doc: fn(doc), gesture: gesture ?? doc } : {})),
   commit: () =>
-    set(({ gesture, past }) => (gesture ? { gesture: null, past: [...past, gesture].slice(-HISTORY), future: [] } : {})),
+    set(({ gesture, past, doc }) => {
+      if (!gesture) return {};
+      if (doc) record(gesture, doc);
+      return { gesture: null, past: [...past, gesture].slice(-HISTORY), future: [] };
+    }),
   // A change still in progress (typing in a box that went away without a
   // blur, say) is closed first, so undo takes back exactly that.
   undo: () =>
     set(({ doc, past: done, future, gesture }) => {
+      if (gesture && doc && gesture !== doc) record(gesture, doc);
       const past = gesture && gesture !== doc ? [...done, gesture] : done;
       const prev = past[past.length - 1];
       return prev && doc ? { doc: prev, past: past.slice(0, -1), future: [doc, ...(gesture && gesture !== doc ? [] : future)], gesture: null } : { gesture: null };
@@ -288,9 +304,17 @@ export const useKreasi = create<KreasiState>((set, get) => ({
   redo: () =>
     set(({ doc, past, future, gesture }) => {
       // Something changed since the undo: there is nothing to redo any more.
-      if (gesture && gesture !== doc) return { gesture: null, past: [...past, gesture].slice(-HISTORY), future: [] };
+      if (gesture && doc && gesture !== doc) return (record(gesture, doc), { gesture: null, past: [...past, gesture].slice(-HISTORY), future: [] });
       const next = future[0];
       return next && doc ? { doc: next, past: [...past, doc], future: future.slice(1), gesture: null } : { gesture: null };
     }),
+  jump: (i) => {
+    get().commit();
+    set(({ doc, past, future }) => {
+      const all = doc ? [...past, doc, ...future] : [];
+      const to = all[i];
+      return to ? { doc: to, past: all.slice(0, i), future: all.slice(i + 1) } : {};
+    });
+  },
   reset: () => set({ step: 'galeri', template: null, doc: null, active: 0, resumed: false, past: [], future: [], draftId: null, name: '', savedAt: null }),
 }));

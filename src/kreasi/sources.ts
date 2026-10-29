@@ -1,12 +1,12 @@
 /**
- * Where Buat konten's photos come from: the open session, photos picked one
- * by one, or any folder — for Isi foto and for the editor's Foto panel.
+ * Where Buat konten's photos come from: the open session or another one saved
+ * in the app, photos picked one by one, or any folder — for Isi foto and for the editor's Foto panel.
  */
 
 import { open } from '@tauri-apps/plugin-dialog';
 import { useEffect } from 'react';
 
-import { api, type Photo } from '../lib/api';
+import { api, type Photo, type Session } from '../lib/api';
 import { num } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useApp } from '../store';
@@ -19,7 +19,15 @@ import { useKreasi, type Source, type SourcePhoto } from './store';
  */
 export function sessionSource(): Source | null {
   const s = useApp.getState().session;
-  if (!s) return null;
+  return s ? sessionSourceOf(s) : null;
+}
+
+/** Any saved session as a photo source, read without opening it. */
+export async function savedSessionSource(id: string): Promise<Source> {
+  return sessionSourceOf(await api.readSession(id));
+}
+
+function sessionSourceOf(s: Session): Source {
   const picks = s.photos.filter((p) => p.status === 'pick');
   const times = s.photos.map((p) => p.takenAt).filter((x): x is number => x != null);
   return {

@@ -9,9 +9,11 @@ import { t, tj } from '../lib/i18n';
 import { useApp } from '../store';
 import { DocCanvas, useBox, useDocImages } from './canvas';
 import { slotShapes, formatLabel } from './kit';
-import { filesSource, folderSource, sessionSource, useSourceThumbs } from './sources';
+import { saveNow } from './autosave';
+import { SourceChooser, SourceMenu } from './source-picker';
+import { filesSource, folderSource, savedSessionSource, sessionSource, useSourceThumbs } from './sources';
 import { fits, placed, ranked, useKreasi, type SourcePhoto } from './store';
-import { SHAPE_LABEL, ShapeIcon, Steps } from './ui';
+import { PhotoThumb, SHAPE_LABEL, ShapeIcon, Steps } from './ui';
 
 type Filter = 'pick' | 'five' | 'all';
 
@@ -20,8 +22,8 @@ export function Fill() {
   const { doc, template, source, active } = useKreasi();
   const { setStep, setSource, setRatios, setActive, place, autoFill } = useKreasi.getState();
   const fail = useApp((s) => s.fail);
-  const [filter, setFilter] = useState<Filter>('pick');
-  const [onlyFit, setOnlyFit] = useState(true);
+  const [filter, setFilter] = useState<Filter>('all');
+  const [onlyFit, setOnlyFit] = useState(false);
   const [stageRef, stage] = useBox<HTMLDivElement>();
   const gridRef = useRef<HTMLDivElement>(null);
 
@@ -70,14 +72,12 @@ export function Fill() {
   const want = shapes[active]?.shape ?? 'square';
   const isSession = !!source?.photos.some((p) => p.status);
 
-  const photos = useMemo(() => {
-    if (!source) return [];
-    const list = ranked(source.photos).filter(
-      (p) =>
-        (!isSession || filter === 'all' || (filter === 'pick' ? p.status === 'pick' : p.rating === 5)) &&
-        (!onlyFit || fits(p, want)),
-    );
-    return list;
+  // Photos of the filter; the place's shape first, or every shape when none has it.
+  const { photos, noFit } = useMemo(() => {
+    if (!source) return { photos: [], noFit: false };
+    const all = ranked(source.photos).filter((p) => !isSession || filter === 'all' || (filter === 'pick' ? p.status === 'pick' : p.rating === 5));
+    const fitting = onlyFit ? all.filter((p) => fits(p, want)) : all;
+    return fitting.length || !all.length ? { photos: fitting, noFit: false } : { photos: all, noFit: true };
   }, [source, filter, onlyFit, want, isSession]);
 
   const counts = useMemo(() => {
@@ -91,9 +91,9 @@ export function Fill() {
   const allDone = done === filled.length;
   const slotOf = new Map(filled.flatMap((id, i) => (id != null ? [[id, i] as const] : [])));
 
-  const changeSource = async (how: 'files' | 'folder') => {
+  const changeSource = async (how: 'files' | 'folder' | { session: string }) => {
     try {
-      const s = await (how === 'files' ? filesSource() : folderSource());
+      const s = await (how === 'files' ? filesSource() : how === 'folder' ? folderSource() : savedSessionSource(how.session));
       if (s) {
         setSource(s);
         setFilter('all');
@@ -102,13 +102,14 @@ export function Fill() {
       fail(e);
     }
   };
+  const sourceActions = { onFiles: () => changeSource('files'), onFolder: () => changeSource('folder'), onSession: (id: string) => changeSource({ session: id }) };
 
   return (
     <div className="flex min-h-0 flex-1">
       <section className="flex min-w-0 flex-1 flex-col gap-4 px-6 pt-6 lg:px-10">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3.5">
-            <button type="button" onClick={() => setStep('galeri')} aria-label={t('Kembali')} className="text-muted hover:text-fg">
+            <button type="button" onClick={() => (saveNow(), setStep('galeri'))} aria-label={t('Kembali')} className="text-muted hover:text-fg">
               <ArrowLeft size={18} />
             </button>
             <div className="flex flex-col gap-0.5">
@@ -135,27 +136,7 @@ export function Fill() {
 
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
-            {source && (
-              <span className="flex h-[34px] max-w-56 items-center gap-2 rounded-[10px] border border-line-soft bg-panel px-3 text-xs font-medium">
-                <Images size={14} className="shrink-0 text-gold-text" /> <span className="truncate">{source.name}</span>
-              </span>
-            )}
-            <button
-              type="button"
-              onClick={() => changeSource('files')}
-              className="flex h-[34px] items-center gap-2 rounded-[10px] border border-line bg-panel px-3 text-xs font-medium hover:border-faint"
-            >
-              <ImagePlus size={14} className="text-gold-text" /> {source ? t('Pilih foto lain') : t('Pilih foto##isi')}
-            </button>
-            <button
-              type="button"
-              onClick={() => changeSource('folder')}
-              title={t('Pilih folder foto')}
-              aria-label={t('Pilih folder foto')}
-              className="flex size-[34px] items-center justify-center rounded-[10px] border border-line bg-panel text-muted hover:border-faint hover:text-fg"
-            >
-              <Folder size={14} />
-            </button>
+            {source && <SourceMenu source={source} {...sourceActions} />}
             {isSession && (
               <div className="flex gap-1 rounded-[10px] bg-panel p-[3px]">
                 {(
@@ -180,7 +161,7 @@ export function Fill() {
               </div>
             )}
           </div>
-          <label className="flex items-center gap-2 text-xs text-muted">
+          <label className={cx('flex items-center gap-2 text-xs text-muted', !source && 'invisible')}>
             {t('Hanya yang pas untuk slot')}
             <Switch label={t('Hanya yang pas untuk slot')} checked={onlyFit} onChange={setOnlyFit} />
           </label>
@@ -189,29 +170,19 @@ export function Fill() {
         {/* Room on every side for the selected photo's ring, which the scroll area would clip. */}
         <div ref={gridRef} className="-mx-1 -mt-1 min-h-0 flex-1 overflow-y-auto px-1 pt-1 pb-8">
           {!source ? (
-            <div className="flex flex-col items-center gap-3 py-20 text-center text-sm text-muted">
-              <ImagePlus size={28} className="text-faint" />
-              {t('Pilih foto untuk template ini — RAW atau JPG, boleh beberapa sekaligus.')}
-              <button
-                type="button"
-                onClick={() => changeSource('files')}
-                className="flex items-center gap-2 rounded-[10px] bg-gold-gradient px-4 py-2 text-[13px] font-semibold text-white"
-              >
-                <ImagePlus size={15} /> {t('Pilih foto##isi')}
-              </button>
-              <button type="button" onClick={() => changeSource('folder')} className="text-xs font-medium text-gold-text hover:underline">
-                {t('atau pilih satu folder')}
-              </button>
-            </div>
+            <SourceChooser {...sourceActions} />
           ) : photos.length === 0 ? (
-            <Empty
-              want={want}
-              onShowAll={() => setOnlyFit(false)}
-              onAll={isSession && filter !== 'all' ? () => setFilter('all') : undefined}
-              onTemplate={() => setStep('galeri')}
-            />
+            <Empty onAll={isSession && filter !== 'all' ? () => setFilter('all') : undefined} onFiles={sourceActions.onFiles} onTemplate={() => setStep('galeri')} />
           ) : (
-            <PhotoGrid scroller={gridRef} photos={photos} render={(p) => <PhotoTile key={p.id} photo={p} slot={slotOf.get(p.id)} onClick={() => place(active, p)} onSeen={seen} />} />
+            <>
+              {noFit && (
+                <p className="mb-3 flex items-center gap-2 text-xs text-muted">
+                  <ShapeIcon shape={want} size={13} />
+                  {t('Tidak ada foto {shape} di sini, jadi semua bentuk ditampilkan. Fotonya dipotong otomatis supaya pas.', { shape: t(SHAPE_LABEL[want]).toLowerCase() })}
+                </p>
+              )}
+              <PhotoGrid scroller={gridRef} photos={photos} render={(p) => <PhotoTile key={p.id} photo={p} slot={slotOf.get(p.id)} onClick={() => place(active, p)} onSeen={seen} />} />
+            </>
           )}
         </div>
       </section>
@@ -256,7 +227,7 @@ export function Fill() {
                 )}
               >
                 {p?.thumb ? (
-                  <img src={thumbUrl(p.thumb)} alt="" className="h-[34px] w-12 rounded object-cover" />
+                  <PhotoThumb photo={p} className="h-[34px] w-12 rounded object-cover" />
                 ) : (
                   <span className={cx('flex h-[34px] w-12 items-center justify-center rounded text-xs font-bold', on ? 'bg-gold/20 text-gold-text' : 'bg-raised text-faint')}>
                     {i + 1}
@@ -368,9 +339,8 @@ function PhotoTile({
       className={cx('relative aspect-[3/2] w-full overflow-hidden rounded-lg bg-raised', slot != null ? 'ring-2 ring-gold' : 'hover:ring-1 hover:ring-line')}
     >
       {p.thumb ? (
-        <img
-          src={thumbUrl(p.thumb)}
-          alt=""
+        <PhotoThumb
+          photo={p}
           loading="lazy"
           onLoad={(e) => p.ratio == null && onSeen(p.id, e.currentTarget)}
           className="size-full object-cover"
@@ -394,18 +364,8 @@ function PhotoTile({
   );
 }
 
-/** Layar 17d: nothing in this source has the shape the place needs. */
-function Empty({
-  want,
-  onShowAll,
-  onAll,
-  onTemplate,
-}: {
-  want: 'portrait' | 'landscape' | 'square';
-  onShowAll: () => void;
-  onAll?: () => void;
-  onTemplate: () => void;
-}) {
+/** Layar 17d: nothing to show from this source (no Dipilih photos yet, say). */
+function Empty({ onAll, onFiles, onTemplate }: { onAll?: () => void; onFiles: () => void; onTemplate: () => void }) {
   const row = (icon: React.ReactNode, title: string, sub: string, onClick: () => void, gold = false) => (
     <button
       type="button"
@@ -422,15 +382,15 @@ function Empty({
   return (
     <div className="flex flex-col items-center gap-4 py-14 text-center">
       <span className="flex size-[72px] items-center justify-center rounded-[20px] bg-panel-2 text-faint">
-        <ShapeIcon shape={want} size={30} />
+        <Images size={30} />
       </span>
       <div className="flex flex-col gap-1.5">
-        <span className="text-lg font-semibold">{t('Tidak ada foto {shape} di sini', { shape: t(SHAPE_LABEL[want]).toLowerCase() })}</span>
-        <span className="text-[13px] text-muted">{t('Tempat ini butuh bentuk itu. Pilih salah satu:')}</span>
+        <span className="text-lg font-semibold">{t('Belum ada foto di sini')}</span>
+        <span className="text-[13px] text-muted">{t('Pilih salah satu:')}</span>
       </div>
       <div className="flex w-[420px] max-w-full flex-col gap-2">
-        {row(<ImagePlus size={16} className="text-gold-text" />, t('Tampilkan semua bentuk'), t('Dipotong otomatis supaya pas di tempatnya'), onShowAll, true)}
-        {onAll && row(<Folder size={16} className="text-muted" />, t('Cari di Semua'), t('Termasuk foto Cek dan Lewati'), onAll)}
+        {onAll && row(<Folder size={16} className="text-gold-text" />, t('Cari di Semua'), t('Termasuk foto Cek dan Lewati'), onAll, true)}
+        {row(<ImagePlus size={16} className={onAll ? 'text-muted' : 'text-gold-text'} />, t('Pilih foto dari komputer'), t('RAW atau JPEG, boleh beberapa sekaligus'), onFiles, !onAll)}
         {row(<ArrowLeft size={16} className="text-muted" />, t('Ganti template'), t('Cari template dengan tempat foto lain'), onTemplate)}
       </div>
     </div>

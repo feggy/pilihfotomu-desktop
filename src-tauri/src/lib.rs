@@ -185,6 +185,21 @@ fn open_session(app: AppHandle, state: State<'_, AppState>, id: String) -> CmdRe
     Ok(s)
 }
 
+/// A saved session read for its photos (Buat konten's source), leaving the
+/// open session as it is.
+#[tauri::command]
+fn read_session(app: AppHandle, id: String) -> CmdResult<Session> {
+    let mut s = session::load(&sessions_dir(&app)?, &id).ok_or("Sesi tidak ditemukan.")?;
+    if !s.root.is_dir() {
+        return Err(format!(
+            "Folder “{}” tidak ditemukan. Kalau ada di drive eksternal, sambungkan dulu drivenya lalu coba lagi.",
+            s.root.display()
+        ));
+    }
+    s.upgrade();
+    Ok(s)
+}
+
 /// Thumbnails of a saved session made again where their cache files are gone;
 /// nothing to do while its folder is unreachable.
 #[tauri::command]
@@ -891,6 +906,36 @@ fn load_asset(app: AppHandle, id: String) -> CmdResult<tauri::ipc::Response> {
     Ok(tauri::ipc::Response::new(bytes))
 }
 
+/// Pictures brought in from the computer (asset ids starting `unggah-`),
+/// newest first: "Gambar saya", to use again in any design.
+#[tauri::command]
+fn list_uploads(app: AppHandle) -> CmdResult<Vec<String>> {
+    let Ok(entries) = std::fs::read_dir(drafts_dir(&app, None)?.join("assets")) else { return Ok(vec![]) };
+    let mut found: Vec<(std::time::SystemTime, String)> = entries
+        .filter_map(|e| e.ok())
+        .filter_map(|e| {
+            let name = e.file_name().into_string().ok()?;
+            let id = name.strip_suffix(".png")?.to_string();
+            let when = e.metadata().ok()?.modified().ok()?;
+            id.starts_with("unggah-").then_some((when, id))
+        })
+        .collect();
+    found.sort_by_key(|f| std::cmp::Reverse(f.0));
+    Ok(found.into_iter().map(|(_, id)| id).collect())
+}
+
+/// Takes a picture out of "Gambar saya" for good: its file, uploads only.
+#[tauri::command]
+fn delete_upload(app: AppHandle, id: String) -> CmdResult<()> {
+    if !id.starts_with("unggah-") {
+        return Err("Hanya gambar unggahan yang bisa dihapus.".into());
+    }
+    match std::fs::remove_file(asset_path(&app, &id)?) {
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e.to_string()),
+        _ => Ok(()),
+    }
+}
+
 /// Saves a Buat konten design (JSON made by the UI) as `<app data>/kreasi/<id>.json`.
 #[tauri::command]
 fn save_draft(app: AppHandle, id: String, json: String, shelf: Option<String>) -> CmdResult<()> {
@@ -1025,6 +1070,7 @@ pub fn run() {
             reread_faces,
             list_sessions,
             open_session,
+            read_session,
             restore_thumbs,
             delete_session,
             relink_session,
@@ -1061,6 +1107,8 @@ pub fn run() {
             cutout_mask,
             save_asset,
             load_asset,
+            list_uploads,
+            delete_upload,
             thumbnails,
             resolve_client_picks,
             export_xmp,

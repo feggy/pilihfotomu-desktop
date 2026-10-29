@@ -1,3 +1,4 @@
+import { cleanEdges } from './edges';
 import { shownAdjust, type CutoutMode, type Slot } from './document';
 import { developed } from './develop';
 import { colorFiltered } from './filter-fallback';
@@ -138,11 +139,123 @@ export async function cutOutPhoto(
   drawPlaced(ctx, shown, img, photo, slot);
   drawAdjustOverlays(ctx, { x: 0, y: 0, w: photo.w, h: photo.h }, adjust, Boolean(dev));
   if (mask) {
+    const src = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
     // The mask, smoothly stretched over the photo and placed the same way, keeps the subject.
     ctx.globalCompositeOperation = 'destination-in';
     drawPlaced(ctx, mask, img, photo, slot);
+    defringe(canvas, src);
   }
   return { canvas, scale };
+}
+
+/**
+ * Ways to take a picture element's background away. `warna`: the plain color
+ * around it, from the edges in (a logo on white); `warna-semua`: that color
+ * everywhere, holes in letters too; `objek` / `potret`: the models.
+ */
+export type ImageCutMethod = 'warna' | 'warna-semua' | 'objek' | 'potret';
+
+const sheetOf = (img: HTMLImageElement) => {
+  const c = document.createElement('canvas');
+  c.width = img.naturalWidth;
+  c.height = img.naturalHeight;
+  c.getContext('2d', { willReadFrequently: true })!.drawImage(img, 0, 0);
+  return c;
+};
+
+/** The color all round the picture's edge, when it is one plain color (a logo, an icon); else null. */
+function plainEdge(data: Uint8ClampedArray, w: number, h: number): [number, number, number] | null {
+  const edge: number[] = [];
+  const step = Math.max(1, Math.floor((w + h) / 400));
+  for (let x = 0; x < w; x += step) edge.push(x, (h - 1) * w + x);
+  for (let y = 0; y < h; y += step) edge.push(y * w, y * w + w - 1);
+  const solid = edge.filter((i) => data[i * 4 + 3]! > 200);
+  // Mostly see-through already: nothing plain to take away.
+  if (solid.length < edge.length * 0.5) return null;
+  const mid = (k: number) => solid.map((i) => data[i * 4 + k]!).sort((p, q) => p - q)[solid.length >> 1]!;
+  const bg: [number, number, number] = [mid(0), mid(1), mid(2)];
+  const near = solid.filter((i) => dist(data, i, bg) < 30).length;
+  return near >= solid.length * 0.9 ? bg : null;
+}
+
+const dist = (d: Uint8ClampedArray, i: number, c: [number, number, number]) => Math.hypot(d[i * 4]! - c[0], d[i * 4 + 1]! - c[1], d[i * 4 + 2]! - c[2]);
+
+/** The order to try: the plain-color ways first for a picture on a plain color, the models first otherwise. */
+export function imageCutOrder(img: HTMLImageElement): ImageCutMethod[] {
+  const k = Math.min(1, 256 / Math.max(img.naturalWidth, img.naturalHeight));
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(img.naturalWidth * k));
+  c.height = Math.max(1, Math.round(img.naturalHeight * k));
+  const ctx = c.getContext('2d', { willReadFrequently: true })!;
+  ctx.drawImage(img, 0, 0, c.width, c.height);
+  const plain = plainEdge(ctx.getImageData(0, 0, c.width, c.height).data, c.width, c.height);
+  return plain ? ['warna', 'warna-semua', 'objek', 'potret'] : ['potret', 'objek', 'warna', 'warna-semua'];
+}
+
+/**
+ * The plain background color taken away: from the edges in, through every
+ * pixel of it (or, `everywhere`, every such pixel at all); then the edge
+ * pixels, part logo part background, split so no rim of it is left.
+ */
+function removeColor(img: HTMLImageElement, everywhere: boolean): HTMLCanvasElement {
+  const canvas = sheetOf(img);
+  const { width: w, height: h } = canvas;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
+  const pixels = ctx.getImageData(0, 0, w, h);
+  const d = pixels.data;
+  const src = d.slice();
+  const bg = plainEdge(d, w, h) ?? [d[0]!, d[1]!, d[2]!];
+  const NEAR = 34;
+  const gone = new Uint8Array(w * h);
+  if (everywhere) {
+    for (let i = 0; i < w * h; i++) if (dist(d, i, bg) < NEAR) gone[i] = 1;
+  } else {
+    const stack: number[] = [];
+    const push = (i: number) => {
+      if (gone[i] || dist(d, i, bg) >= NEAR) return;
+      gone[i] = 1;
+      stack.push(i);
+    };
+    for (let x = 0; x < w; x++) (push(x), push((h - 1) * w + x));
+    for (let y = 0; y < h; y++) (push(y * w), push(y * w + w - 1));
+    while (stack.length) {
+      const i = stack.pop()!;
+      const x = i % w;
+      if (x > 0) push(i - 1);
+      if (x < w - 1) push(i + 1);
+      if (i >= w) push(i - w);
+      if (i < w * (h - 1)) push(i + w);
+    }
+  }
+  for (let i = 0; i < w * h; i++) if (gone[i]) d[i * 4 + 3] = 0;
+  cleanEdges(pixels, src, { bg });
+  ctx.putImageData(pixels, 0, 0);
+  return canvas;
+}
+
+/** A model's cut-out with its edge cleaned: the mask tightened, the old background taken out of the rim. */
+function defringe(canvas: HTMLCanvasElement, src: Uint8ClampedArray) {
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
+  const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  cleanEdges(pixels, src, { choke: true });
+  ctx.putImageData(pixels, 0, 0);
+}
+
+/**
+ * A whole picture element (an upload) with its background taken away by
+ * `method`: the subject kept at the picture's own size, and the picture as it
+ * was, for the brush. Parts already see-through stay so.
+ */
+export async function cutOutImage(img: HTMLImageElement, method: ImageCutMethod): Promise<{ canvas: HTMLCanvasElement; original: HTMLCanvasElement }> {
+  if (method === 'warna' || method === 'warna-semua') return { canvas: removeColor(img, method === 'warna-semua'), original: sheetOf(img) };
+  const mask = await (await masker(method))(img);
+  const original = sheetOf(img);
+  const canvas = sheetOf(img);
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
+  ctx.globalCompositeOperation = 'destination-in';
+  ctx.drawImage(mask, 0, 0, canvas.width, canvas.height);
+  defringe(canvas, original.getContext('2d', { willReadFrequently: true })!.getImageData(0, 0, canvas.width, canvas.height).data);
+  return { canvas, original };
 }
 
 /**

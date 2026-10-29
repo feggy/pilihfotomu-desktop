@@ -4,6 +4,8 @@ import { api, type FolderInfo, type Options, type Progress, type Reason, type Se
 
 export type Screen =
   | { name: 'home' }
+  /** Pilih foto, before a folder: a new one, or a session to carry on with. */
+  | { name: 'pilih' }
   /** A chosen folder: cull it with AI, or (`mode: 'pesan'`) find the photos a client's message names. */
   | { name: 'setup'; folder: FolderInfo; mode?: 'ai' | 'pesan' }
   | { name: 'progress' }

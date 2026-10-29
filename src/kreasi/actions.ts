@@ -110,6 +110,18 @@ export function addSticker(def: StickerDef): { edit: Edit; id: string } {
   };
 }
 
+/** A picture brought in from this computer, in the middle of the first slide; a tall one narrower. */
+export function addImage(sticker: string, ratio: number): { edit: Edit; id: string } {
+  const id = newId();
+  return {
+    id,
+    edit: (d) => ({
+      ...d,
+      stickers: [...d.stickers, { id, sticker, x: firstSlideMiddle(d), y: 0.5, size: Math.min(0.4, 0.5 / ratio) / d.slides, rotate: 0, color: '#ffffff', ratio }],
+    }),
+  };
+}
+
 /**
  * A gradient band (dark at the bottom behind a caption, say), as the web adds
  * it: a plain box over the whole slide width, put just above the photos so
@@ -332,15 +344,17 @@ export const nudgeMany =
 
 export type Align = 'kiri' | 'tengah' | 'kanan' | 'atas' | 'tengah-v' | 'bawah';
 
+type Box = { l: number; r: number; t: number; b: number };
+
 /**
- * Lines the picked things up on the box around all of them. `bounds` is each
- * one's box on the canvas, as 0–1 of its width and height.
+ * Lines the picked things up on `box`, or else on the box around all of
+ * them. `bounds` is each one's box on the canvas, as 0–1 of its width and height.
  */
 export const alignMany =
-  (list: Picked[], bounds: { l: number; r: number; t: number; b: number }[], to: Align): Edit =>
+  (list: Picked[], bounds: Box[], to: Align, box?: Box): Edit =>
   (d) => {
-    const L = Math.min(...bounds.map((b) => b.l)), R = Math.max(...bounds.map((b) => b.r));
-    const T = Math.min(...bounds.map((b) => b.t)), B = Math.max(...bounds.map((b) => b.b));
+    const L = box?.l ?? Math.min(...bounds.map((b) => b.l)), R = box?.r ?? Math.max(...bounds.map((b) => b.r));
+    const T = box?.t ?? Math.min(...bounds.map((b) => b.t)), B = box?.b ?? Math.max(...bounds.map((b) => b.b));
     const shift = (b: (typeof bounds)[number]) =>
       to === 'kiri'
         ? [L - b.l, 0]

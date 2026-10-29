@@ -267,6 +267,8 @@ export const api = {
   },
   listSessions: () => invoke<SessionSummary[]>('list_sessions'),
   openSession: (id: string) => invoke<Session>('open_session', { id }),
+  /** A saved session's photos, without making it the open one. */
+  readSession: (id: string) => invoke<Session>('read_session', { id }),
   /** Edit foto from a folder: its session if it has one, else a new one for editing only. */
   openForEdit: (root: string) => invoke<Session>('open_for_edit', { root }),
   /** Remakes a session's thumbnails whose cache files are gone; how many. */
@@ -338,6 +340,9 @@ export const api = {
   /** A Buat konten picture element (PNG), kept under `<app data>/kreasi/assets/`. */
   saveAsset: (id: string, png: Uint8Array) => invoke<void>('save_asset', png, { headers: { id } }),
   loadAsset: (id: string) => invoke<ArrayBuffer>('load_asset', { id }),
+  /** "Gambar saya": uploaded pictures' asset ids, newest first. */
+  listUploads: () => invoke<string[]>('list_uploads'),
+  deleteUpload: (id: string) => invoke<void>('delete_upload', { id }),
   /** Files dragged in from Finder, added to `root`'s photos with new ids. */
   addFiles: (root: string, paths: string[]) => invoke<Photo[]>('add_files', { root, paths }),
   thumbnails: (root: string, ids: number[]) =>

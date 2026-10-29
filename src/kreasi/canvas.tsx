@@ -10,6 +10,7 @@ import {
   isLayerLocked,
   layerKeys,
   photoLayerKey,
+  slidePixels,
   slotsFor,
   stickerLayerKey,
   templateOf,
@@ -132,9 +133,9 @@ export interface CanvasHandlers {
   onCloneDrag?: (list: Multi) => Multi;
   /** Free layout: a photo from the list dropped on empty canvas, at (x, y) as 0–1 of it. */
   onDropNew?: (photoId: number, x: number, y: number) => void;
-  /** Double-click on a photo: "Atur ukuran" for it. */
+  /** Double-click on a photo: "Atur foto" for it. */
   onCropCell?: (index: number) => void;
-  /** Leaves "Atur ukuran" (a click outside the photo). */
+  /** Leaves "Atur foto" (a click outside the photo). */
   onEndCrop?: () => void;
 }
 
@@ -255,7 +256,7 @@ export function DocCanvas({
   overlay?: (box: Box) => React.ReactNode;
   /** Shows where Instagram covers or crops the post (`engine/instagram.ts`). */
   safe?: boolean;
-  /** "Atur ukuran": this photo place shows its whole picture, to drag and resize inside the place. */
+  /** "Atur foto": this photo place shows its whole picture, to drag and resize inside the place. */
   cropping?: number | null;
   /** Outlined as hovered from outside the canvas (the layer list). */
   hovered?: Selection;
@@ -482,17 +483,32 @@ export function DocCanvas({
   // ── Dragging ──────────────────────────────────────────────────
   type Drag =
     | { kind: 'pan'; index: number; x: number; y: number; ox: number; oy: number; overX: number; overY: number; moved: boolean; next?: Selection }
-    | { kind: 'move'; sel: Item; x: number; y: number; ix: number; iy: number; snap: SnapInfo; moved: boolean; next: Selection }
+    | { kind: 'move'; sel: Item; x: number; y: number; ix: number; iy: number; snap: SnapInfo; moved: boolean; next: Selection; clone: boolean }
     | { kind: 'resize'; sel: Item; cx: number; cy: number; d0: number; size0: number }
     | { kind: 'turn'; sel: Item; cx: number; cy: number; a0: number; r0: number }
     | { kind: 'zoom'; index: number; cx: number; cy: number; d0: number; zoom0: number }
-    | { kind: 'frame'; index: number; x: number; y: number; ix: number; iy: number; snap: SnapInfo; moved: boolean; next: Selection }
+    | { kind: 'frame'; index: number; x: number; y: number; ix: number; iy: number; snap: SnapInfo; moved: boolean; next: Selection; clone: boolean }
     | { kind: 'frameSize'; index: number; cx: number; cy: number; d0: number; cell: FreeCell }
     | { kind: 'frameTurn'; index: number; cx: number; cy: number; a0: number; r0: number }
-    | { kind: 'group'; x: number; y: number; from: Placed[]; moved: boolean };
+    | { kind: 'group'; x: number; y: number; from: Placed[]; moved: boolean; clone: boolean };
   const drag = useRef<Drag | null>(null);
   const [dragging, setDragging] = useState(false);
   const [hover, setHover] = useState<Selection>(null);
+  // ⌥ held: over something that can move, the pointer shows a copy is coming (as in Photoshop).
+  const [alt, setAlt] = useState(false);
+  useEffect(() => {
+    if (!handlers.onCloneDrag) return;
+    const key = (e: KeyboardEvent) => setAlt(e.altKey);
+    const off = () => setAlt(false);
+    window.addEventListener('keydown', key);
+    window.addEventListener('keyup', key);
+    window.addEventListener('blur', off);
+    return () => {
+      window.removeEventListener('keydown', key);
+      window.removeEventListener('keyup', key);
+      window.removeEventListener('blur', off);
+    };
+  }, [!handlers.onCloneDrag]);
   // Guides: where they are and whether lit, kept apart so a line fades out where it was.
   const [guides, setGuides] = useState({ x: 0.5, y: 0.5, showX: false, showY: false });
 
@@ -506,6 +522,9 @@ export function DocCanvas({
       /* nothing to hold */
     }
   };
+
+  const d0 = drag.current;
+  const copyCursor = alt && !!handlers.onCloneDrag && !editingText && (d0 ? 'clone' in d0 && d0.clone : movable(hover));
 
   const onPointerDown = (e: React.PointerEvent) => {
     // The canvas takes the keyboard: a text box used before (inspector, search)
@@ -536,12 +555,8 @@ export function DocCanvas({
       // On one of the picked set: they move together.
       const member = multi.length > 1 ? hits.find((h) => multi.some((m) => sameSel(m, h))) : undefined;
       if (member) {
-        let from = multi.map(placeOf).filter((p): p is Placed => !!p);
-        if (e.altKey && handlers.onCloneDrag) {
-          const copies = handlers.onCloneDrag(from.map((p) => p.sel));
-          from = from.map((p, i) => ({ ...p, sel: copies[i] ?? p.sel }));
-        }
-        start({ kind: 'group', x, y, from, moved: false }, e);
+        const from = multi.map(placeOf).filter((p): p is Placed => !!p);
+        start({ kind: 'group', x, y, from, moved: false, clone: e.altKey }, e);
         return;
       }
       // Nothing there (or only the canvas): a selection box.
@@ -564,17 +579,13 @@ export function DocCanvas({
       if (isLayerLocked(doc, keyOfItem(s))) return next && handlers.onSelect?.(next);
       const it = itemOf(s)!;
       const snap = snapInfo(doc, f, ref.current!.getContext('2d')!, keyOfItem(s));
-      // ⌥: the copy moves, the original stays.
-      const moving = e.altKey && handlers.onCloneDrag ? ((handlers.onCloneDrag([s])[0] as Item | undefined) ?? s) : s;
-      start({ kind: 'move', sel: moving, x, y, ix: it.x, iy: it.y, snap, moved: false, next: moving === s ? next : null }, e);
+      start({ kind: 'move', sel: s, x, y, ix: it.x, iy: it.y, snap, moved: false, next, clone: e.altKey }, e);
     } else if (s.kind === 'cell' && free) {
-      // A free frame moves like any element; its picture moves in "Atur ukuran".
+      // A free frame moves like any element; its picture moves in "Atur foto".
       const cell = doc.freeCells[s.index];
       if (!cell || isLayerLocked(doc, frameKey(s.index))) return next && handlers.onSelect?.(next);
       const snap = snapInfo(doc, f, ref.current!.getContext('2d')!, frameKey(s.index));
-      const copy = e.altKey && handlers.onCloneDrag ? handlers.onCloneDrag([s])[0] : undefined;
-      const index = copy?.kind === 'cell' ? copy.index : s.index;
-      start({ kind: 'frame', index, x, y, ix: cell.x + cell.w / 2, iy: cell.y + cell.h / 2, snap, moved: false, next: copy ? null : next }, e);
+      start({ kind: 'frame', index: s.index, x, y, ix: cell.x + cell.w / 2, iy: cell.y + cell.h / 2, snap, moved: false, next, clone: e.altKey }, e);
     } else if (s.kind === 'cell') {
       const slot = doc.slots[s.index];
       const img = slot && images.get(slot.file.fileId);
@@ -612,6 +623,16 @@ export function DocCanvas({
     else start({ kind: 'turn', sel, cx: b.cx, cy: b.cy, a0: Math.atan2(y - b.cy, x - b.cx), r0: (it as { rotate?: number }).rotate ?? 0 }, e);
   };
 
+  /**
+   * ⌥ + drag: copies where the originals are once the drag really starts (a
+   * click copies nothing); the drag then moves the copies, the originals stay.
+   */
+  const cloneOnce = (list: Multi) => {
+    const d = drag.current!;
+    if ('next' in d) d.next = null;
+    return handlers.onCloneDrag?.(list) ?? list;
+  };
+
   const onPointerMove = (e: React.PointerEvent) => {
     const d = drag.current;
     const { x, y } = at(e);
@@ -623,6 +644,7 @@ export function DocCanvas({
     }
     if (d.kind === 'move') {
       if (!d.moved && Math.hypot(x - d.x, y - d.y) < CLICK_SLOP) return;
+      if (!d.moved && d.clone) d.sel = (cloneOnce([d.sel])[0] as Item | undefined) ?? d.sel;
       d.moved = true;
       const px = d.ix + (x - d.x) / f.width;
       const py = d.iy + (y - d.y) / f.height;
@@ -641,11 +663,19 @@ export function DocCanvas({
       handlers.onZoom?.(d.index, clamp(d.zoom0 * k, 1, 5));
     } else if (d.kind === 'group') {
       if (!d.moved && Math.hypot(x - d.x, y - d.y) < CLICK_SLOP) return;
+      if (!d.moved && d.clone) {
+        const copies = cloneOnce(d.from.map((p) => p.sel));
+        d.from = d.from.map((p, i) => ({ ...p, sel: copies[i] ?? p.sel }));
+      }
       d.moved = true;
       const dx = (x - d.x) / f.width, dy = (y - d.y) / f.height;
       handlers.onMove?.(d.from.map((p) => ({ ...p, x: p.x + dx, y: p.y + dy })));
     } else if (d.kind === 'frame') {
       if (!d.moved && Math.hypot(x - d.x, y - d.y) < CLICK_SLOP) return;
+      if (!d.moved && d.clone) {
+        const copy = cloneOnce([{ kind: 'cell', index: d.index }])[0];
+        if (copy?.kind === 'cell') d.index = copy.index;
+      }
       d.moved = true;
       const cell = doc.freeCells[d.index];
       if (!cell) return;
@@ -742,6 +772,15 @@ export function DocCanvas({
       })()
     : null;
   const editing = editingText ? doc.texts.find((x) => x.id === editingText) : null;
+  const measureFrom = alt && !dragging && !editingText && !crop ? (unionBox ?? selBox ? edges((unionBox ?? selBox)!) : null) : null;
+  const measureTo: { box: Edges; canvas: boolean } | null = (() => {
+    if (!measureFrom) return null;
+    const over = hover && !sameSel(hover, selection) && !multi.some((m) => sameSel(m, hover)) ? boxOf(hover) : null;
+    if (over) return { box: edges(over), canvas: false };
+    // The slide its middle is on.
+    const i = Math.min(doc.slides - 1, Math.max(0, Math.floor((((measureFrom.l + measureFrom.r) / 2) / f.width) * doc.slides)));
+    return { box: { l: i * f.unit, r: (i + 1) * f.unit, t: 0, b: f.height }, canvas: true };
+  })();
   const editBox = editing ? boxOf({ kind: 'text', id: editing.id }) : null;
   const canHandle =
     !!selection &&
@@ -753,12 +792,12 @@ export function DocCanvas({
     <div className="relative shrink-0" style={{ width: f.width, height: f.height }} {...dnd}>
       <canvas
         ref={ref}
-        style={{ width: f.width, height: f.height }}
         tabIndex={outlines ? -1 : undefined}
         data-keyboard-target
         className="block touch-none rounded-[4px] shadow-[0_20px_60px_rgb(0_0_0/0.5)] outline-none"
+        style={{ width: f.width, height: f.height, cursor: copyCursor ? 'copy' : undefined }}
         onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
+        onPointerMove={(e) => (e.altKey !== alt && handlers.onCloneDrag && setAlt(e.altKey), onPointerMove(e))}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
         onPointerLeave={() => !drag.current && setHover(null)}
@@ -827,6 +866,8 @@ export function DocCanvas({
       )}
       {safe && <SafeZones doc={doc} />}
       {dropAt != null && <Outline box={boxOf({ kind: 'cell', index: dropAt })} drop />}
+      {/* ⌥ held, not dragging: how far the picked thing is from what the pointer is over, or from its slide's edges. */}
+      {measureFrom && measureTo && <Distances from={measureFrom} to={measureTo.box} canvas={measureTo.canvas} perPx={slidePixels(doc) / f.unit} />}
       {/* Hover: a thin outline on what the pointer is over. Selection: a firm one with handles. */}
       {outlines && !dragging && !sameSel(hovered ?? hover, selection) && <Outline box={boxOf(hovered ?? hover)} />}
       {selBox && (
@@ -1012,4 +1053,70 @@ export function useBox<T extends HTMLElement>() {
     return () => ro.disconnect();
   }, []);
   return [ref, box] as const;
+}
+
+type Edges = { l: number; r: number; t: number; b: number };
+
+/** The upright box around `b`, turned as it may be. */
+function edges(b: Box): Edges {
+  const a = (b.rotate * Math.PI) / 180;
+  const hw = (Math.abs(Math.cos(a)) * b.w + Math.abs(Math.sin(a)) * b.h) / 2;
+  const hh = (Math.abs(Math.sin(a)) * b.w + Math.abs(Math.cos(a)) * b.h) / 2;
+  return { l: b.cx - hw, r: b.cx + hw, t: b.cy - hh, b: b.cy + hh };
+}
+
+const MEASURE = '#f24822';
+
+/**
+ * Figma's ⌥ distances: red lines with their length in exported pixels. One
+ * box inside the other: from each side to the side around it. Apart: the gap
+ * between them, across and down, where they face each other.
+ */
+function Distances({ from: a, to: b, canvas, perPx }: { from: Edges; to: Edges; canvas: boolean; perPx: number }) {
+  const lines: { x1: number; y1: number; x2: number; y2: number }[] = [];
+  const h = (x1: number, x2: number, y: number) => x2 - x1 > 0.5 && lines.push({ x1, y1: y, x2, y2: y });
+  const v = (y1: number, y2: number, x: number) => y2 - y1 > 0.5 && lines.push({ x1: x, y1, x2: x, y2 });
+  const inside = (o: Edges, i: Edges) => i.l >= o.l && i.r <= o.r && i.t >= o.t && i.b <= o.b;
+  if (inside(b, a) || inside(a, b)) {
+    const [o, i] = inside(b, a) ? [b, a] : [a, b];
+    const cy = (i.t + i.b) / 2, cx = (i.l + i.r) / 2;
+    h(o.l, i.l, cy);
+    h(i.r, o.r, cy);
+    v(o.t, i.t, cx);
+    v(i.b, o.b, cx);
+  } else {
+    // Where they overlap the other way, the gap line runs through its middle.
+    const midY = (Math.max(a.t, b.t) + Math.min(a.b, b.b)) / 2;
+    const midX = (Math.max(a.l, b.l) + Math.min(a.r, b.r)) / 2;
+    const y = Math.max(a.t, b.t) <= Math.min(a.b, b.b) ? midY : (a.t + a.b) / 2;
+    const x = Math.max(a.l, b.l) <= Math.min(a.r, b.r) ? midX : (a.l + a.r) / 2;
+    if (a.r <= b.l) h(a.r, b.l, y);
+    else if (b.r <= a.l) h(b.r, a.l, y);
+    if (a.b <= b.t) v(a.b, b.t, x);
+    else if (b.b <= a.t) v(b.b, a.t, x);
+  }
+  return (
+    <>
+      {!canvas && (
+        <span
+          className="pointer-events-none absolute border border-dashed"
+          style={{ left: b.l, top: b.t, width: b.r - b.l, height: b.b - b.t, borderColor: MEASURE }}
+        />
+      )}
+      <svg className="pointer-events-none absolute inset-0 size-full overflow-visible">
+        {lines.map((l, i) => (
+          <line key={i} x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2} stroke={MEASURE} strokeWidth={1} />
+        ))}
+      </svg>
+      {lines.map((l, i) => (
+        <span
+          key={i}
+          className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded px-1 py-px text-[10px] font-semibold text-white tabular-nums"
+          style={{ left: (l.x1 + l.x2) / 2, top: (l.y1 + l.y2) / 2, background: MEASURE }}
+        >
+          {Math.round(Math.hypot(l.x2 - l.x1, l.y2 - l.y1) * perPx)}
+        </span>
+      ))}
+    </>
+  );
 }

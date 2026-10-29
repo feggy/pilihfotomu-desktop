@@ -1,15 +1,22 @@
 /**
- * Picture elements made in the editor (a photo with its background removed),
+ * Picture elements made in the editor (a photo with its background removed)
+ * or brought in from this computer (a logo, a PNG),
  * kept as PNG files under `<app data>/kreasi/assets/` so drafts and exports
  * find them again. On the canvas they are image stickers named by their file.
  */
 
 import { api } from '../lib/api';
+import { t } from '../lib/i18n';
 import { IMAGE_STICKER_PREFIX, type CollageDoc } from './engine/document';
 
 const ASSET = `${IMAGE_STICKER_PREFIX}aset-`;
 export const assetSticker = (id: string) => `${ASSET}${id}`;
 export const assetIdOf = (sticker: string) => (sticker.startsWith(ASSET) ? sticker.slice(ASSET.length) : null);
+/** Uploads are named apart from cut-outs: they have no photo behind them to touch up with. */
+const UPLOAD = 'unggah-';
+export const isUpload = (sticker: string) => !!assetIdOf(sticker)?.startsWith(UPLOAD);
+/** A cut-out from a photo (Hapus latar), which "Rapikan potongan" can touch up. */
+export const isCutout = (sticker: string) => assetIdOf(sticker) != null && !isUpload(sticker);
 
 const newAssetId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -33,6 +40,28 @@ export async function saveCutout(shown: HTMLCanvasElement, original: HTMLCanvasE
   const id = newAssetId();
   await Promise.all([put(id, shown), put(`${id}-asli`, original), put(`${id}-penuh`, full)]);
   return assetSticker(id);
+}
+
+/** Largest side an uploaded picture is kept at: plenty for any export, light to load. */
+const UPLOAD_SIDE = 2400;
+
+/**
+ * A picture from this computer (a logo, a PNG with see-through parts) kept as
+ * a new picture element: its sticker id, and its height ÷ width.
+ */
+export async function saveUpload(file: Blob): Promise<{ sticker: string; ratio: number }> {
+  const bmp = await createImageBitmap(file).catch(() => {
+    throw new Error(t('Gambar ini tidak bisa dibaca. Pakai PNG, JPEG, atau WebP.'));
+  });
+  const k = Math.min(1, UPLOAD_SIDE / Math.max(bmp.width, bmp.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(bmp.width * k));
+  canvas.height = Math.max(1, Math.round(bmp.height * k));
+  canvas.getContext('2d')!.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+  bmp.close();
+  const id = `${UPLOAD}${newAssetId()}`;
+  await put(id, canvas);
+  return { sticker: assetSticker(id), ratio: canvas.height / canvas.width };
 }
 
 /** The companions of a cut-out element, or null for an element without them. */
@@ -63,6 +92,12 @@ export function assetImage(id: string): Promise<HTMLImageElement> {
     cache.set(id, p);
   }
   return p;
+}
+
+/** Takes an uploaded picture's file away, and forgets the copy read from it. */
+export async function deleteUploadFile(id: string) {
+  await api.deleteUpload(id);
+  cache.delete(id);
 }
 
 /** Every picture element `doc` uses, by sticker id (missing files left out). */

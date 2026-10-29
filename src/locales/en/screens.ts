@@ -172,4 +172,7 @@ export default {
   'Saya sudah membaca dan menyetujui Ketentuan Penggunaan dan Kebijakan Privasi.':
     'I have read and agree to the Terms of Use and Privacy Policy.',
   'Setuju dan lanjutkan': 'Agree and continue',
+  'Pilah sesi baru': 'Cull a new session',
+  'Seret folder foto ke sini, atau pilih dari komputer. RAW dan JPEG, semuanya diproses di komputer ini.': 'Drag a photo folder here, or choose one on this computer. RAW and JPEG, all processed on this computer.',
+  'Lanjutkan sesi': 'Continue a session',
 } as Record<string, string | [string, string]>;

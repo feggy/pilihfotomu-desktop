@@ -9,6 +9,7 @@ import { api } from '../lib/api';
 import { slotsFor, templateOf, type CollageDoc } from './engine/document';
 import { drawCollage, frameOf } from './engine/render';
 import { blankTemplate, isBlankId, loadDocFonts, loadLocalImage, type Template } from './kit';
+import type { SavedHistory } from './history';
 import { emptyAssets } from './preview';
 import type { Source } from './store';
 
@@ -25,6 +26,8 @@ export interface Draft {
   source: Source | null;
   /** Small JPEG of the design with its photos, for the list. */
   cover: string | null;
+  /** Its undo steps, so Riwayat and ⌘Z carry on after the design is opened again. */
+  history?: SavedHistory;
 }
 
 export const newDraftId = () => `d${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;

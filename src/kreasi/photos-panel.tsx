@@ -8,12 +8,12 @@ import { Folder, ImageOff, ImagePlus, Images, Search } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 
 import { cx } from '../components/ui';
-import { thumbUrl } from '../lib/api';
 import { num } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useApp } from '../store';
 import { filesSource, folderSource, useSourceThumbs } from './sources';
 import { ranked, useKreasi, type SourcePhoto } from './store';
+import { PhotoThumb } from './ui';
 
 type Filter = 'pick' | 'all';
 
@@ -123,9 +123,8 @@ export function PhotosPanel({ onPick, hint }: { onPick: (p: SourcePhoto) => void
                 className="aspect-[3/2] overflow-hidden rounded-md bg-raised hover:ring-2 hover:ring-gold"
               >
                 {p.thumb ? (
-                  <img
-                    src={thumbUrl(p.thumb)}
-                    alt=""
+                  <PhotoThumb
+                    photo={p}
                     loading="lazy"
                     onLoad={(e) => p.ratio == null && seen(p.id, e.currentTarget)}
                     className="size-full object-cover"
