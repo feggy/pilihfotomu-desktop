@@ -5,12 +5,13 @@
  */
 
 import { openUrl } from '@tauri-apps/plugin-opener';
-import { AlertTriangle, CalendarPlus, Plus, Trash2, Wallet, X } from 'lucide-react';
+import { AlertTriangle, ArrowRight, CalendarPlus, Plus, Trash2, Wallet, X } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 
 import { cx } from '../components/ui';
 import { t } from '../lib/i18n';
 import { PAY_COLOR, PAY_LABEL, balanceOf, clashesOf, localString, newId, paidOf, parseLocal, payState, rupiah, shortDate, timeOf, titleOf, today, totalOf } from './model';
+import { nextColumn } from './overview';
 import { googleCalendarLink } from './reminders';
 import { useBisnis } from './store';
 import type { BisnisData, Booking, Client, Payment, Session } from './types';
@@ -99,6 +100,7 @@ export function BookingEditor({ initial, onClose, actions = [] }: { initial: Boo
 
   const setSession = (id: string, patch: Partial<Session>) => set({ sessions: b.sessions.map((s) => (s.id === id ? { ...s, ...patch } : s)) });
   const lastDay = b.sessions[b.sessions.length - 1]?.start.split('T')[0] ?? today();
+  const next = nextColumn(data, b);
   const addons = data.addons.filter((a) => !b.addons.some((x) => x.name === a.name));
 
   return (
@@ -268,7 +270,16 @@ export function BookingEditor({ initial, onClose, actions = [] }: { initial: Boo
       </section>
 
       <section className="grid grid-cols-3 gap-3">
-        <Field label={t('Status')}>
+        <Field
+          label={t('Status')}
+          hint={
+            next && (
+              <button type="button" onClick={() => set({ columnId: next.id })} className="flex items-center gap-1 font-medium text-gold-text hover:underline">
+                {t('Lanjut ke {col}', { col: next.name })} <ArrowRight size={11} />
+              </button>
+            )
+          }
+        >
           <select value={b.columnId} onChange={(e) => set({ columnId: e.target.value })} className={inputCls}>
             {data.columns.map((c) => (
               <option key={c.id} value={c.id}>

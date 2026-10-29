@@ -3,7 +3,7 @@
  * calendar, packages and the rest — tabs over one set of data, kept offline.
  */
 
-import { ArrowLeft, CalendarDays, FileText, KanbanSquare, MessageCircle, Package as PackageIcon, Plus, Settings2, TriangleAlert, Users, Wallet, Sparkles, SlidersHorizontal, LayoutTemplate, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, CalendarDays, FileText, KanbanSquare, MessageCircle, Package as PackageIcon, Plus, Settings2, TriangleAlert, Users, Wallet, Sparkles, SlidersHorizontal, LayoutTemplate, ShieldAlert, LayoutDashboard } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 
 import { TitleBar } from '../components/title-bar';
@@ -20,6 +20,7 @@ import { Clients } from './clients';
 import { Finance } from './finance';
 import { InvoiceDialog } from './invoice-dialog';
 import { MessagesTab } from './messages-tab';
+import { Overview } from './overview';
 import { Packages } from './packages';
 import { ReminderBell } from './reminder-bell';
 import { SendDialog } from './send-dialog';
@@ -28,9 +29,10 @@ import { useBisnis } from './store';
 import type { Booking } from './types';
 import { btnPrimary } from './ui';
 
-export type BisnisTab = 'board' | 'kalender' | 'klien' | 'paket' | 'pesan' | 'keuangan' | 'pengaturan';
+export type BisnisTab = 'ringkasan' | 'board' | 'kalender' | 'klien' | 'paket' | 'pesan' | 'keuangan' | 'pengaturan';
 
 const TABS: { id: BisnisTab; label: string; icon: typeof KanbanSquare }[] = [
+  { id: 'ringkasan', label: 'Ringkasan', icon: LayoutDashboard },
   { id: 'board', label: 'Board', icon: KanbanSquare },
   { id: 'kalender', label: 'Kalender', icon: CalendarDays },
   { id: 'klien', label: 'Klien', icon: Users },
@@ -44,7 +46,7 @@ const TABS: { id: BisnisTab; label: string; icon: typeof KanbanSquare }[] = [
 export function BisnisScreen({ open }: { open?: string }) {
   const go = useApp((s) => s.go);
   const { data, error, load } = useBisnis();
-  const [tab, setTab] = useState<BisnisTab>('board');
+  const [tab, setTab] = useState<BisnisTab>('ringkasan');
   const [editing, setEditing] = useState<Booking | null>(null);
   const [invoice, setInvoice] = useState<string | null>(null);
   // Buat konten for this booking: its client's name and first shoot day fill the templates.
@@ -56,7 +58,7 @@ export function BisnisScreen({ open }: { open?: string }) {
     useKreasi.getState().setClient({ name: clientOf(d, b)?.name ?? b.title, date: first ? Date.parse(`${first.start.split('T')[0]}T00:00:00Z`) / 1000 : null });
     go({ name: 'kreasi', back: { name: 'bisnis' } });
   };
-  const [message, setMessage] = useState<{ bookingId: string | null; phone?: string; name?: string } | null>(null);
+  const [message, setMessage] = useState<{ bookingId: string | null; phone?: string; name?: string; template?: string } | null>(null);
   const actions: BookingAction[] = [
     { key: 'invoice', label: t('Invoice'), icon: <FileText size={13} />, run: setInvoice },
     { key: 'wa', label: t('WhatsApp'), icon: <MessageCircle size={13} />, run: (bookingId) => setMessage({ bookingId }) },
@@ -73,7 +75,8 @@ export function BisnisScreen({ open }: { open?: string }) {
 
   let body: ReactNode = null;
   if (data) {
-    if (tab === 'board') body = <Board onOpen={setEditing} onNew={(col) => setEditing(newBooking(data, col))} />;
+    if (tab === 'ringkasan') body = <Overview onOpen={setEditing} onMessage={(bookingId, template) => setMessage({ bookingId, template })} onStage={() => setTab('board')} />;
+    else if (tab === 'board') body = <Board onOpen={setEditing} onNew={(col) => setEditing(newBooking(data, col))} />;
     else if (tab === 'kalender') body = <Calendar onOpen={setEditing} onNewOn={(day) => setEditing(newBooking(data, data.columns[0]?.id ?? '', day))} />;
     else if (tab === 'klien')
       body = (
