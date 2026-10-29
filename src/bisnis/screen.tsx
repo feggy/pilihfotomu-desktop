@@ -73,14 +73,16 @@ export function BisnisScreen({ open }: { open?: string }) {
     go({ name: 'kreasi', back: { name: 'bisnis' } });
   };
   const [message, setMessage] = useState<{ bookingId: string | null; phone?: string; name?: string; template?: string } | null>(null);
-  const actions: BookingAction[] = [
+  const actions: BookingAction[] = (
+    [
     { key: 'invoice', label: t('Invoice'), icon: <FileText size={13} />, run: setInvoice },
     { key: 'wa', label: t('WhatsApp'), icon: <MessageCircle size={13} />, run: (bookingId) => setMessage({ bookingId }) },
     { key: 'pilih', label: t('Pilih foto##mode'), icon: <Sparkles size={13} />, run: () => go({ name: 'pilih' }) },
     { key: 'edit', label: t('Edit foto'), icon: <SlidersHorizontal size={13} />, run: () => go({ name: 'edit', back: { name: 'bisnis' } }) },
     { key: 'konten', label: t('Buat konten'), icon: <LayoutTemplate size={13} />, run: openKreasi },
     // Pilih foto, Edit foto and Buat konten don't open the booking's photos yet: hidden until they do.
-  ].filter((a) => !['pilih', 'edit', 'konten'].includes(a.key));
+  ] satisfies BookingAction[]
+  ).filter((a) => !['pilih', 'edit', 'konten'].includes(a.key));
   // Pengaturan, scrolled to Backup data and the section lit for a moment: it sits low on the page.
   const setUpBackup = () =>
     guard(() => {
