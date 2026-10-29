@@ -416,8 +416,13 @@ export function EditView({
     };
     const gChange = (e: Event) => {
       e.preventDefault();
-      const ev = e as Event & { scale: number; clientX: number; clientY: number };
-      pinch(start * ev.scale, ev.clientX, ev.clientY);
+      const ev = e as Event & { scale: number; clientX?: number; clientY?: number };
+      // WebKit's gesture events may come without a place: then the pointer's
+      // (where the fingers are), not the photo's middle.
+      const v = el.getBoundingClientRect();
+      const x = Number.isFinite(ev.clientX) ? ev.clientX! : (pointer.current?.x ?? v.left + v.width / 2);
+      const y = Number.isFinite(ev.clientY) ? ev.clientY! : (pointer.current?.y ?? v.top + v.height / 2);
+      pinch(start * ev.scale, x, y);
     };
     const gEnd = (e: Event) => {
       e.preventDefault();
