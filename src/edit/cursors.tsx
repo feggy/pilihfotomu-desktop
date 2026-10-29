@@ -38,29 +38,28 @@ export function BrushRing({ x, y, size, feather, erase }: { x: number; y: number
 /**
  * Where the pointer is over `box`, in its own (unscaled) pixels, kept right
  * while the photo zooms or scrolls under a still pointer: the pointer's
- * place on screen is kept, and the box is measured again each time.
+ * place on screen is kept, and the box measured again whenever it moves.
  */
 export function usePointerAt(box: React.RefObject<HTMLElement | null>) {
   const [client, setClient] = useState<{ x: number; y: number } | null>(null);
   const [, redraw] = useState(0);
+  // While the pointer is over it, the box is watched each frame: a pinch or a
+  // glide scales it with a transform (no event says so), a zoom resizes it.
   useEffect(() => {
     if (!client) return;
     let frame = 0;
-    const again = () => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => redraw((n) => n + 1));
+    let last = '';
+    const watch = () => {
+      const r = box.current?.getBoundingClientRect();
+      const now = r ? `${r.left},${r.top},${r.width},${r.height}` : '';
+      if (now !== last) {
+        last = now;
+        redraw((n) => n + 1);
+      }
+      frame = requestAnimationFrame(watch);
     };
-    window.addEventListener('scroll', again, true);
-    window.addEventListener('wheel', again, true);
-    window.addEventListener('gesturechange', again, true);
-    window.addEventListener('resize', again);
-    return () => {
-      cancelAnimationFrame(frame);
-      window.removeEventListener('scroll', again, true);
-      window.removeEventListener('wheel', again, true);
-      window.removeEventListener('gesturechange', again, true);
-      window.removeEventListener('resize', again);
-    };
+    frame = requestAnimationFrame(watch);
+    return () => cancelAnimationFrame(frame);
   }, [!!client]);
   const el = box.current;
   let at: { x: number; y: number } | null = null;
