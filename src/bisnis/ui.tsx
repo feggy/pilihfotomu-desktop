@@ -51,29 +51,38 @@ export function LazyInput({ value, onCommit, className, placeholder, email }: { 
   );
 }
 
-/** Minutes, digits only (no system spinner), "menit" after them; saved on leaving, at least 15. */
-export function MinutesInput({ value, onCommit }: { value: number; onCommit: (minutes: number) => void }) {
+/**
+ * A whole number typed as digits (no system spinner), saved when the box is
+ * left or on Enter and kept within min…max; a unit ("menit", "%") inside it.
+ * An emptied box goes back to what it was.
+ */
+export function NumberInput({ value, onCommit, min = 0, max = Number.MAX_SAFE_INTEGER, unit, className }: { value: number; onCommit: (n: number) => void; min?: number; max?: number; unit?: string; className?: string }) {
   const [v, setV] = useState(String(value));
   useEffect(() => setV(String(value)), [value]);
   const commit = () => {
-    const n = Math.max(15, Number(v.replace(/\D/g, '')) || value);
+    const digits = v.replace(/\D/g, '');
+    const n = digits ? Math.min(max, Math.max(min, Number(digits))) : value;
     setV(String(n));
     if (n !== value) onCommit(n);
   };
   return (
-    <span className="relative flex items-center">
+    <span className={cx('relative flex items-center', className)}>
       <input
         inputMode="numeric"
         value={v}
         onChange={(e) => setV(e.target.value.replace(/\D/g, ''))}
+        onFocus={(e) => e.currentTarget.select()}
         onBlur={commit}
         onKeyDown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
-        className={cx(inputCls, 'pr-14 tabular-nums')}
+        className={cx(inputCls, unit && 'pr-14', 'tabular-nums')}
       />
-      <span className="pointer-events-none absolute right-2.5 text-[13px] text-faint">{t('menit')}</span>
+      {unit && <span className="pointer-events-none absolute right-2.5 text-[13px] text-faint">{unit}</span>}
     </span>
   );
 }
+
+/** Minutes, at least 15. */
+export const MinutesInput = ({ value, onCommit }: { value: number; onCommit: (minutes: number) => void }) => <NumberInput value={value} onCommit={onCommit} min={15} unit={t('menit')} />;
 
 /** A longer text that saves when it loses focus. */
 export function TextArea({ value, onCommit, rows = 3, placeholder }: { value: string; onCommit: (v: string) => void; rows?: number; placeholder?: string }) {

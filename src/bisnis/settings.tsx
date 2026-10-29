@@ -15,7 +15,7 @@ import { useBisnis } from './store';
 import { DateInput } from '../components/date-picker';
 import { applyBackup, autoBackupError, backupName, exportBackup, lastBackupAt, readBackup } from './backup';
 import type { BisnisData, BisnisSettings, Column } from './types';
-import { Field, LazyInput, SectionTitle, TextArea, btnGhost, inputCls } from './ui';
+import { Field, LazyInput, NumberInput, SectionTitle, TextArea, btnGhost, inputCls } from './ui';
 
 const COLORS = ['#8a9a93', '#c9a96e', '#5b9bd5', '#a77bca', '#e0904a', '#5fb87a', '#c96a6a', '#4fb3b3'];
 
@@ -98,8 +98,8 @@ export function Settings({ sections }: { sections?: ReactNode }) {
 
         <section className="flex flex-col gap-3">
           <SectionTitle>{t('Jadwal')}</SectionTitle>
-          <Field label={t('Jeda antar jadwal (menit)')} hint={t('Waktu perjalanan dan persiapan. Dua jadwal yang lebih dekat dari ini ditandai bentrok.')} className="max-w-60">
-            <input type="number" min={0} step={15} value={data.settings.bufferMin} onChange={(e) => update((d) => ({ ...d, settings: { ...d.settings, bufferMin: Math.max(0, Number(e.target.value) || 0) } }))} className={inputCls} />
+          <Field label={t('Jeda antar jadwal')} hint={t('Waktu perjalanan dan persiapan. Dua jadwal yang lebih dekat dari ini ditandai bentrok.')} className="max-w-60">
+            <NumberInput value={data.settings.bufferMin} onCommit={(bufferMin) => setSettings({ bufferMin })} max={600} unit={t('menit')} />
           </Field>
         </section>
 
@@ -143,16 +143,16 @@ export function Settings({ sections }: { sections?: ReactNode }) {
               <LazyInput value={data.settings.invoicePrefix} onCommit={(invoicePrefix) => setSettings({ invoicePrefix: invoicePrefix.trim().toUpperCase() })} />
             </Field>
             <Field label={t('Urutan berikutnya')}>
-              <input type="number" min={1} value={data.settings.nextInvoice} onChange={(e) => setSettings({ nextInvoice: Math.max(1, Number(e.target.value) || 1) })} className={inputCls} />
+              <NumberInput value={data.settings.nextInvoice} onCommit={(nextInvoice) => setSettings({ nextInvoice })} min={1} />
             </Field>
             <Field label={t('Awalan nomor kuitansi')} hint={t('Nomor berikutnya: {no}', { no: `${data.settings.receiptPrefix || 'KWT'}-${today().slice(0, 4)}${today().slice(5, 7)}-${String(data.settings.nextReceipt).padStart(3, '0')}` })}>
               <LazyInput value={data.settings.receiptPrefix} onCommit={(receiptPrefix) => setSettings({ receiptPrefix: receiptPrefix.trim().toUpperCase() })} />
             </Field>
             <Field label={t('Urutan kuitansi berikutnya')}>
-              <input type="number" min={1} value={data.settings.nextReceipt} onChange={(e) => setSettings({ nextReceipt: Math.max(1, Number(e.target.value) || 1) })} className={inputCls} />
+              <NumberInput value={data.settings.nextReceipt} onCommit={(nextReceipt) => setSettings({ nextReceipt })} min={1} />
             </Field>
             <Field label={t('DP minimal (% dari total)')} hint={t('Untuk isian {dp_minimal} di pesan konfirmasi.')}>
-              <input type="number" min={0} max={100} step={5} value={data.settings.minDpPercent} onChange={(e) => setSettings({ minDpPercent: Math.min(100, Math.max(0, Number(e.target.value) || 0)) })} className={inputCls} />
+              <NumberInput value={data.settings.minDpPercent} onCommit={(minDpPercent) => setSettings({ minDpPercent })} max={100} unit="%" />
             </Field>
           </div>
           <Field label={t('Kontak studio (di bawah nama studio pada invoice)')}>
@@ -178,7 +178,7 @@ export function Settings({ sections }: { sections?: ReactNode }) {
           </div>
           <div className="flex items-center justify-between gap-3 rounded-xl bg-panel px-3 py-2.5 text-[13px]">
             {t('Pelunasan, mulai berapa hari sebelum jatuh tempo')}
-            <input type="number" min={0} max={60} value={data.settings.remindDueDays} onChange={(e) => setSettings({ remindDueDays: Math.min(60, Math.max(0, Number(e.target.value) || 0)) })} className={cx(inputCls, 'h-8 w-20')} />
+            <NumberInput value={data.settings.remindDueDays} onCommit={(remindDueDays) => setSettings({ remindDueDays })} max={60} unit={t('hari')} className="w-28" />
           </div>
         </section>
         <BackupSection />

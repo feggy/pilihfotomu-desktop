@@ -361,4 +361,6 @@ export default {
   'Add-on baru': 'New add-on',
   'Edit add-on': 'Edit add-on',
   'Nama add-on': 'Add-on name',
+  'hari': 'days',
+  'Jeda antar jadwal': 'Gap between sessions',
 } as Record<string, string | [string, string]>;
