@@ -278,7 +278,7 @@ export function Overview({
                   <button
                     type="button"
                     onClick={() => setStage(stage === c.id ? null : c.id)}
-                    className={cx('flex min-w-[96px] flex-1 flex-col gap-1 rounded-xl px-3 py-2.5 text-left', stage === c.id ? 'bg-raised ring-1 ring-gold' : 'bg-panel-2 hover:bg-raised', c.inactive && 'opacity-60')}
+                    className={cx('flex min-w-[96px] flex-1 flex-col gap-1 rounded-xl border px-3 py-2.5 text-left', stage === c.id ? 'border-gold bg-raised' : 'border-panel-2 bg-panel-2 hover:border-raised hover:bg-raised', c.inactive && 'opacity-60')}
                   >
                     <span className="flex items-center gap-1.5 truncate text-[11px] text-muted">
                       <span className="size-2 shrink-0 rounded-full" style={{ background: c.color }} />
