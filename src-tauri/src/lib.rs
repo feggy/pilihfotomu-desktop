@@ -1,5 +1,6 @@
 pub mod analyze;
 mod client_picks;
+mod errlog;
 pub mod cull;
 pub mod cutout;
 pub mod denoise;
@@ -1175,6 +1176,10 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .manage(AppState::default())
+        .setup(|app| {
+            errlog::init(app.handle());
+            Ok(())
+        })
         .menu(menu::build)
         .on_menu_event(|app, event| menu::on_event(app, event.id().as_ref()))
         .invoke_handler(tauri::generate_handler![
@@ -1228,6 +1233,10 @@ pub fn run() {
             write_user_file,
             read_user_file,
             prune_backups,
+            errlog::log_error,
+            errlog::error_report,
+            errlog::error_count,
+            errlog::clear_error_log,
             delete_upload,
             thumbnails,
             resolve_client_picks,

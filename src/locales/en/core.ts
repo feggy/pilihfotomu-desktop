@@ -106,4 +106,12 @@ export default {
   'Story dan feed dari template': 'Stories and feed posts from templates',
   'Mau mulai dari mana?': 'Where do you want to start?',
   'Semua menu tetap ada di Beranda.': 'Everything stays on Home.',
+
+  // Error report
+  'Butuh bantuan?': 'Need help?',
+  'Error yang terjadi dicatat di komputer ini saja, tidak dikirim ke mana pun. Salin infonya lalu kirim ke pengembang lewat WhatsApp atau email bersama cerita singkat apa yang sedang kamu kerjakan.': 'Errors are logged on this computer only and never sent anywhere. Copy the info and send it to the developer over WhatsApp or email, with a short note on what you were doing.',
+  'Salin info error': 'Copy error info',
+  '{n} error tercatat': '{n} errors logged',
+  'Tidak ada error tercatat': 'No errors logged',
+  'Kosongkan catatan': 'Clear the log',
 } as Record<string, string | [string, string]>;

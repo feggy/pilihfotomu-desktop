@@ -3,6 +3,8 @@ import { revealItemInDir } from '@tauri-apps/plugin-opener';
 import {
   ArrowLeft,
   BadgeCheck,
+  Check,
+  Copy,
   FolderSearch,
   HardDrive,
   Info,
@@ -484,6 +486,40 @@ function LanguagePicker() {
   );
 }
 
+/**
+ * Help when something goes wrong: the errors the app logged on this
+ * computer, copied with the version and system to send to the developer.
+ */
+function ErrorReport() {
+  const [count, setCount] = useState<number | null>(null);
+  const [copied, setCopied] = useState(false);
+  useEffect(() => void api.errorCount().then(setCount, () => setCount(0)), []);
+  const copy = async () => {
+    await navigator.clipboard.writeText(await api.errorReport());
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 2000);
+  };
+  return (
+    <div className="mt-3 flex flex-col gap-3 rounded-2xl border border-line-soft bg-panel p-5">
+      <span className="text-[14px] font-semibold">{t('Butuh bantuan?')}</span>
+      <span className="text-[13px] text-muted">
+        {t('Error yang terjadi dicatat di komputer ini saja, tidak dikirim ke mana pun. Salin infonya lalu kirim ke pengembang lewat WhatsApp atau email bersama cerita singkat apa yang sedang kamu kerjakan.')}
+      </span>
+      <span className="flex items-center gap-3">
+        <Button variant="primary" icon={copied ? Check : Copy} onClick={copy}>
+          {copied ? t('Tersalin') : t('Salin info error')}
+        </Button>
+        <span className="text-xs text-faint">{count === null ? '' : count ? t('{n} error tercatat', { n: count }) : t('Tidak ada error tercatat')}</span>
+        {!!count && (
+          <button type="button" onClick={() => api.clearErrorLog().then(() => setCount(0))} className="ml-auto text-xs text-faint hover:text-reject">
+            {t('Kosongkan catatan')}
+          </button>
+        )}
+      </span>
+    </div>
+  );
+}
+
 export function Settings({ back, initial = 'license' }: { back: Screen; initial?: Section }) {
   const go = useApp((s) => s.go);
   const [section, setSection] = useState<Section>(initial);
@@ -554,6 +590,7 @@ export function Settings({ back, initial = 'license' }: { back: Screen; initial?
               <p className="text-[13px] text-muted">
                 {t('Semua foto diproses di perangkat ini. Tidak ada foto yang di-upload, dan file asli tidak pernah diubah.')}
               </p>
+              <ErrorReport />
             </div>
           )}
         </main>

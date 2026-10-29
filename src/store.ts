@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
 import { api, type FolderInfo, type Options, type Progress, type Reason, type Session, type Status } from './lib/api';
+import { logError } from './lib/errors';
 
 export type Screen =
   | { name: 'home' }
@@ -103,7 +104,7 @@ export const useApp = create<AppState>((set, get) => ({
 
   go: (screen) => set({ screen }),
   showSummary: (summary) => set({ summary }),
-  fail: (error) => set({ error: message(error) }),
+  fail: (error) => (logError('app', error), set({ error: message(error) })),
   dismissError: () => set({ error: null }),
   select: (selectedId) => set({ selectedId, selection: [] }),
 

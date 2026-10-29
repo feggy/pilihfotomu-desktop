@@ -349,6 +349,11 @@ export const api = {
   /** A PDF, CSV, ICS or JSON where the person chose; returns the path written. */
   writeUserFile: (path: string, bytes: Uint8Array) => invoke<string>('write_user_file', bytes, { headers: { path: encodeURIComponent(path) } }),
   readUserFile: (path: string) => invoke<string>('read_user_file', { path }),
+  /** Errors kept in a file on this computer (Pengaturan › Tentang copies them for a support message). */
+  logError: (source: string, message: string) => invoke<void>('log_error', { source, message }),
+  errorReport: () => invoke<string>('error_report'),
+  errorCount: () => invoke<number>('error_count'),
+  clearErrorLog: () => invoke<void>('clear_error_log'),
   /** The backup folder's daily copies older than `keepFrom` taken out, but the last of each month. */
   pruneBackups: (dir: string, keepFrom: string) => invoke<number>('prune_backups', { dir, keepFrom }),
   deleteUpload: (id: string) => invoke<void>('delete_upload', { id }),

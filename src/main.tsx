@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 
 import { App } from './app';
+import { catchUncaught } from './lib/errors';
 import './styles.css';
 
 // The webview's own menu (Reload, Inspect Element) isn't part of the app.
@@ -18,6 +19,7 @@ async function start() {
   if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
     await (await import('./dev/mock')).installMock();
   }
+  catchUncaught();
   ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
     <React.StrictMode>
       <App />
