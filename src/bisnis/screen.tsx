@@ -79,7 +79,8 @@ export function BisnisScreen({ open }: { open?: string }) {
     { key: 'pilih', label: t('Pilih foto##mode'), icon: <Sparkles size={13} />, run: () => go({ name: 'pilih' }) },
     { key: 'edit', label: t('Edit foto'), icon: <SlidersHorizontal size={13} />, run: () => go({ name: 'edit', back: { name: 'bisnis' } }) },
     { key: 'konten', label: t('Buat konten'), icon: <LayoutTemplate size={13} />, run: openKreasi },
-  ];
+    // Pilih foto, Edit foto and Buat konten don't open the booking's photos yet: hidden until they do.
+  ].filter((a) => !['pilih', 'edit', 'konten'].includes(a.key));
   // Pengaturan, scrolled to Backup data and the section lit for a moment: it sits low on the page.
   const setUpBackup = () =>
     guard(() => {
