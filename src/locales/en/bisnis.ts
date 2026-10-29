@@ -342,4 +342,23 @@ export default {
   'Urutan kuitansi berikutnya': 'Next receipt sequence',
   'Durasi': 'Duration',
   'menit': 'min',
+
+  // Packages
+  '{n} jam': '{n} h',
+  '{h} jam {m} menit': '{h} h {m} min',
+  '{n} menit': '{n} min',
+  'Diarsipkan: tidak muncul di pricelist dan booking baru': 'Archived: not in the price list or new bookings',
+  'Tanpa nama': 'Untitled',
+  'Dipakai di {n} booking': 'Used in {n} bookings',
+  'Edit paket': 'Edit package',
+  'Paket yang sudah dipakai booking diarsipkan, tidak dihapus': 'A package already used by bookings is archived, not deleted',
+  'Arsipkan': 'Archive',
+  'mis. Wedding Gold': 'e.g. Wedding Gold',
+  'Durasi pemotretan': 'Shoot duration',
+  'Untuk jam selesai jadwal baru.': 'For a new session’s end time.',
+  'Muncul di pricelist dan invoice.': 'Shown on the price list and invoices.',
+  'Mengubah harga tidak mengubah booking yang sudah dibuat dengan paket ini.': 'Changing the price doesn’t change bookings already made with this package.',
+  'Add-on baru': 'New add-on',
+  'Edit add-on': 'Edit add-on',
+  'Nama add-on': 'Add-on name',
 } as Record<string, string | [string, string]>;
