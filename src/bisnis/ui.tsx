@@ -133,24 +133,47 @@ export function useEscape(onEscape: () => void, active = true) {
   }, [active]);
 }
 
-export function Dialog({ title, onClose, children, footer, width = 560 }: { title: ReactNode; onClose: () => void; children: ReactNode; footer?: ReactNode; width?: number }) {
-  useEscape(onClose);
+/**
+ * A dialog over the page. With `dirty` (a form with changes not saved),
+ * Escape, a click outside or × ask first instead of throwing the changes
+ * away; Batal in the form's own footer still just closes.
+ */
+export function Dialog({ title, onClose, children, footer, width = 560, dirty = false }: { title: ReactNode; onClose: () => void; children: ReactNode; footer?: ReactNode; width?: number; dirty?: boolean }) {
+  const [asking, setAsking] = useState(false);
+  const leave = () => (dirty ? setAsking(true) : onClose());
+  useEscape(() => (asking ? setAsking(false) : leave()));
   return (
-    <div className="fixed inset-x-0 top-10 bottom-0 z-40 flex items-center justify-center bg-black/70 p-4" onMouseDown={() => !popoverJustClosed() && onClose()}>
+    <div className="fixed inset-x-0 top-10 bottom-0 z-40 flex items-center justify-center bg-black/70 p-4" onMouseDown={() => !popoverJustClosed() && leave()}>
       <div
         role="dialog"
         onMouseDown={(e) => e.stopPropagation()}
-        className="flex max-h-full max-w-full flex-col rounded-[18px] border border-line bg-panel shadow-2xl"
+        className="relative flex max-h-full max-w-full flex-col rounded-[18px] border border-line bg-panel shadow-2xl"
         style={{ width }}
       >
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line-soft px-6 py-4">
           <h2 className="min-w-0 truncate text-lg font-semibold">{title}</h2>
-          <button type="button" onClick={onClose} aria-label={t('Tutup')} className="text-faint hover:text-fg">
+          <button type="button" onClick={leave} aria-label={t('Tutup')} className="text-faint hover:text-fg">
             <X size={18} />
           </button>
         </div>
         <div className="flex min-h-0 flex-col gap-5 overflow-y-auto px-6 py-5">{children}</div>
         {footer && <div className="flex shrink-0 items-center justify-end gap-2.5 border-t border-line-soft px-6 py-3.5">{footer}</div>}
+        {asking && (
+          <div className="absolute inset-0 flex items-center justify-center rounded-[18px] bg-black/60 p-6">
+            <div className="flex w-[360px] max-w-full flex-col gap-3 rounded-2xl border border-line bg-panel-2 p-5 shadow-2xl">
+              <span className="text-[15px] font-semibold">{t('Perubahan belum disimpan')}</span>
+              <span className="text-[13px] text-muted">{t('Kalau ditutup sekarang, perubahannya hilang.')}</span>
+              <span className="mt-1 flex justify-end gap-2">
+                <button type="button" autoFocus onClick={() => setAsking(false)} className={btnPlain}>
+                  {t('Tetap di sini')}
+                </button>
+                <button type="button" onClick={onClose} className={btnPrimary}>
+                  {t('Buang perubahan')}
+                </button>
+              </span>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

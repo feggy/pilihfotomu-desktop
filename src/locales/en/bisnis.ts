@@ -449,4 +449,5 @@ export default {
   'Tim yang bisa bertugas bersamaan': 'Teams that can shoot at once',
   'Fotografer atau tim. Jadwal baru ditandai bentrok bila waktunya bertumpuk dengan sebanyak ini jadwal lain.': 'Photographers or teams. A session is marked as a clash when it overlaps this many other sessions.',
   'tim': 'teams',
+  'Kalau ditutup sekarang, perubahannya hilang.': 'Close now and the changes are lost.',
 } as Record<string, string | [string, string]>;

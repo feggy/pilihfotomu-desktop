@@ -78,7 +78,10 @@ export function BookingEditor({ initial, onClose, actions = [] }: { initial: Boo
   const isNew = !data.bookings.some((b) => b.id === initial.id);
   const [b, setB] = useState<Booking>(initial);
   const known = data.clients.find((c) => c.id === initial.clientId);
-  const [client, setClient] = useState<Pick<Client, 'id' | 'name' | 'phone' | 'email'>>(known ?? { id: '', name: '', phone: '', email: '' });
+  const [startClient] = useState<Pick<Client, 'id' | 'name' | 'phone' | 'email'>>(() => (known ? { id: known.id, name: known.name, phone: known.phone, email: known.email } : { id: '', name: '', phone: '', email: '' }));
+  const [client, setClient] = useState(startClient);
+  // Anything typed or picked since it opened: closing asks first.
+  const dirty = JSON.stringify(b) !== JSON.stringify(initial) || JSON.stringify(client) !== JSON.stringify(startClient);
   const [asking, setAsking] = useState(false);
   const set = (patch: Partial<Booking>) =>
     setB((x) => {
@@ -131,6 +134,7 @@ export function BookingEditor({ initial, onClose, actions = [] }: { initial: Boo
     <Dialog
       title={isNew ? t('Booking baru') : titleOf(data, { ...b, clientId: client.id })}
       onClose={onClose}
+      dirty={dirty}
       width={720}
       footer={
         <>

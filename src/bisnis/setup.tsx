@@ -160,6 +160,7 @@ function StudioDialog({ onClose }: { onClose: () => void }) {
     <Dialog
       title={t('Nama dan logo studio')}
       onClose={onClose}
+      dirty={studio !== brand.studio || (logo?.url ?? null) !== (brand.logo ?? null)}
       width={480}
       footer={
         <>
@@ -219,6 +220,7 @@ function ContactDialog({ onClose }: { onClose: () => void }) {
     <Dialog
       title={t('Kontak dan rekening')}
       onClose={onClose}
+      dirty={contact !== data.settings.studioContact || payment !== data.settings.paymentInfo}
       width={520}
       footer={
         <>

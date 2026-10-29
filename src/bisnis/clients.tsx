@@ -184,6 +184,7 @@ function ClientForm({ client, canDelete, onClose, onDeleted }: { client: Client;
     <Dialog
       title={t('Edit klien')}
       onClose={onClose}
+      dirty={JSON.stringify(c) !== JSON.stringify(client)}
       width={520}
       footer={
         <>

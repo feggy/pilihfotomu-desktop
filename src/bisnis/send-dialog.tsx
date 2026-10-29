@@ -118,6 +118,7 @@ export function SendDialog({ bookingId, phone: phoneIn = '', name = '', template
     <Dialog
       title={t('Kirim pesan WhatsApp')}
       onClose={onClose}
+      dirty={text !== fill(templateId)}
       width={600}
       footer={
         <>

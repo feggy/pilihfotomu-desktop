@@ -159,6 +159,7 @@ function PackageForm({ initial, onClose }: { initial: Package; onClose: () => vo
     <Dialog
       title={isNew ? t('Paket baru') : t('Edit paket')}
       onClose={onClose}
+      dirty={JSON.stringify(p) !== JSON.stringify(initial)}
       width={540}
       footer={
         <>
@@ -213,6 +214,7 @@ function AddonForm({ initial, onClose }: { initial: Addon; onClose: () => void }
     <Dialog
       title={isNew ? t('Add-on baru') : t('Edit add-on')}
       onClose={onClose}
+      dirty={JSON.stringify(a) !== JSON.stringify(initial)}
       width={460}
       footer={
         <>
