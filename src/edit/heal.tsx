@@ -14,7 +14,7 @@ import { num } from '../lib/format';
 import { t } from '../lib/i18n';
 import { inpaint } from '../kreasi/engine/inpaint';
 import { newId } from '../kreasi/engine/document';
-import { BrushRing } from './cursors';
+import { BrushRing, usePointerAt } from './cursors';
 import { Slider } from './panels';
 import { ToolBox, ToolRow } from './tool-box';
 import type { EditSettings, HealSpot, HealStroke } from './geometry';
@@ -190,7 +190,7 @@ export function HealPanel({
 /** Over the photo: the brush, and the selection in red (taken-away sweeps cut out of it) until Hapus. */
 export function HealLayer({ sel, size, onSize, onSel }: { sel: HealSelection; size: number; onSize: (v: number) => void; onSel: (s: HealSelection) => void }) {
   const box = useRef<HTMLDivElement>(null);
-  const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
+  const pointer = usePointerAt(box);
   const [sweep, setSweep] = useState<HealStroke | null>(null);
   const at = (e: { clientX: number; clientY: number }): [number, number] => {
     const r = box.current!.getBoundingClientRect();
@@ -230,8 +230,8 @@ export function HealLayer({ sel, size, onSize, onSel }: { sel: HealSelection; si
       onKeyDown={(e) => (e.key === '[' || e.key === ']') && onSize(Math.min(0.3, Math.max(0.01, size * (e.key === ']' ? 1.2 : 1 / 1.2))))}
       className="absolute inset-0 cursor-none outline-none"
       onPointerDown={down}
-      onPointerMove={(e) => setCursor({ x: e.nativeEvent.offsetX, y: e.nativeEvent.offsetY })}
-      onPointerLeave={() => setCursor(null)}
+      onPointerMove={pointer.move}
+      onPointerLeave={pointer.leave}
     >
       {strokes.length > 0 && (
         <svg className="pointer-events-none absolute inset-0 size-full">
@@ -243,7 +243,7 @@ export function HealLayer({ sel, size, onSize, onSel }: { sel: HealSelection; si
           <rect width={w} height={h} fill="rgb(255 45 85 / 0.55)" mask="url(#heal-sel)" />
         </svg>
       )}
-      {cursor && <BrushRing x={cursor.x} y={cursor.y} size={size * w} feather={0} />}
+      {pointer.at && <BrushRing x={pointer.at.x} y={pointer.at.y} size={size * w} feather={0} />}
     </div>
   );
 }

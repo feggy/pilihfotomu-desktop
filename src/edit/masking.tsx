@@ -14,7 +14,7 @@ import { Brush, ChevronDown, ChevronRight, Circle, Cloud, Eye, EyeOff, Layers, M
 import { useEffect, useRef, useState } from 'react';
 
 import { Button, cx } from '../components/ui';
-import { BrushRing, EYEDROPPER } from './cursors';
+import { BrushRing, EYEDROPPER, usePointerAt } from './cursors';
 import { PopMenu } from './preset-menu';
 import { objectMask, skyMask, type Box } from './smart-masks';
 import { t } from '../lib/i18n';
@@ -873,7 +873,7 @@ export function MaskLayer({
   const box = useRef<HTMLDivElement>(null);
   const tint = useRef<HTMLCanvasElement>(null);
   const [img, setImg] = useState<HTMLImageElement | null>(null);
-  const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
+  const pointer = usePointerAt(box);
   const masks = a.masks ?? [];
   const mask = masks.find((m) => m.id === sel) ?? null;
   const parts = mask ? maskParts(mask) : [];
@@ -1002,17 +1002,13 @@ export function MaskLayer({
       className={cx('absolute', reach ? '-inset-12' : 'inset-0', cur.kind === 'brush' ? 'cursor-none' : cur.unplaced ? 'cursor-crosshair' : '')}
       style={cur.kind === 'color' ? { cursor: EYEDROPPER } : undefined}
       onPointerDown={down}
-      onPointerMove={(e) => {
-        if (cur.kind !== 'brush' || !box.current) return;
-        const r = box.current.getBoundingClientRect();
-        setCursor({ x: e.clientX - r.left, y: e.clientY - r.top });
-      }}
-      onPointerLeave={() => setCursor(null)}
+      onPointerMove={(e) => cur.kind === 'brush' && pointer.move(e)}
+      onPointerLeave={pointer.leave}
     >
     <div ref={box} className={cx('absolute', reach ? 'inset-12' : 'inset-0')}>
       <canvas ref={tint} className={tintClass} style={{ opacity: tintOn ? 1 : 0 }} />
-      {cur.kind === 'brush' && cursor && box.current && (
-        <BrushRing x={cursor.x} y={cursor.y} size={brush.size * box.current.clientWidth} feather={brush.feather} erase={brush.erase} />
+      {cur.kind === 'brush' && pointer.at && box.current && (
+        <BrushRing x={pointer.at.x} y={pointer.at.y} size={brush.size * box.current.clientWidth} feather={brush.feather} erase={brush.erase} />
       )}
       {cur.kind === 'linear' && placed && (
         <>
