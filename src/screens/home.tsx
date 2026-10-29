@@ -1,6 +1,8 @@
 import { open } from '@tauri-apps/plugin-dialog';
 import {
   ArrowLeft,
+  ArrowRight,
+  Briefcase,
   Check,
   ChevronRight,
   Clock,
@@ -8,10 +10,12 @@ import {
   FolderSearch,
   FolderX,
   Image as ImageIcon,
+  LayoutTemplate,
   RotateCw,
   SlidersHorizontal,
   Sparkles,
   Trash2,
+  type LucideIcon,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
@@ -22,7 +26,7 @@ import { date, duration, num, STATUS } from '../lib/format';
 import { t, tRust } from '../lib/i18n';
 import { settingsLine } from '../lib/shoot';
 import { useApp } from '../store';
-import { BisnisTile, EditTile, KontenTile, PilihTile, RecentStrip, useRecentWork } from './home-bento';
+import { Recent, Today } from './home-today';
 
 const pickFolder = async () => {
   const picked = await open({ directory: true, title: t('Pilih folder sesi') });
@@ -39,6 +43,102 @@ export async function chooseFolder(path?: string) {
   } catch (e) {
     fail(e);
   }
+}
+
+/** Kelola Bisnis's card picture: a small board, drawn rather than photographed. */
+function BoardArt() {
+  const cols = [
+    { color: '#c9a96e', cards: [0.7, 0.5] },
+    { color: '#5b9bd5', cards: [0.8, 0.6, 0.45] },
+    { color: '#5fb87a', cards: [0.55] },
+  ];
+  return (
+    <span className="flex aspect-[296/196] w-full gap-2 overflow-hidden rounded-xl bg-panel-2 p-3">
+      {cols.map((c, i) => (
+        <span key={i} className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-hidden rounded-lg bg-bg/60 p-1.5">
+          <span className="h-1.5 w-1/2 rounded-full" style={{ background: c.color }} />
+          {c.cards.map((w, j) => (
+            <span key={j} className="flex flex-col gap-1 rounded-md bg-raised p-1.5">
+              <span className="h-1.5 rounded-full bg-fg/70" style={{ width: `${w * 100}%` }} />
+              <span className="h-1 w-2/5 rounded-full bg-faint/60" />
+            </span>
+          ))}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+/** One of the things the app does, as a big card with a picture of it. */
+function ModeCard({
+  preview,
+  art,
+  icon: Icon,
+  title,
+  sub,
+  tags,
+  onClick,
+  highlight,
+  soon,
+}: {
+  /** A photo of the mode; or `art`, a picture drawn in place of one. */
+  preview?: string;
+  art?: React.ReactNode;
+  icon: LucideIcon;
+  title: string;
+  sub: string;
+  tags: string[];
+  onClick: () => void;
+  highlight?: boolean;
+  /** Not built yet: says so on the card, so it promises nothing. */
+  soon?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cx(
+        // Two to a row: picture beside the words on a wide window, above them on a narrow one.
+        'group flex flex-col gap-3.5 rounded-[18px] border bg-panel p-3 text-left transition-colors outline-none md:flex-row md:items-stretch md:gap-4',
+        // Gold only while pointed at (or a folder is dragged over): a click opens the mode, nothing stays selected.
+        highlight ? 'border-2 border-gold bg-raised' : 'border-line-soft hover:border-gold/70 focus-visible:border-gold/70',
+      )}
+    >
+      <span className="w-full shrink-0 md:w-[46%]">
+        {art ?? <img src={preview} alt="" className="aspect-[296/196] w-full rounded-xl object-cover" draggable={false} />}
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col gap-3 md:py-1.5 md:pr-1">
+        <span className="flex flex-col gap-1.5 px-1.5">
+          <span className="flex items-center justify-between gap-2">
+            <span className="flex items-center gap-2.5">
+              <span className="flex size-[30px] items-center justify-center rounded-lg bg-raised text-gold-text">
+                <Icon size={16} />
+              </span>
+              <span className="text-[17px] font-semibold whitespace-nowrap">{title}</span>
+              {soon && <Chip color="var(--color-faint)">{t('Segera')}</Chip>}
+            </span>
+            <span
+              className={cx(
+                'flex size-[30px] items-center justify-center rounded-full text-white transition-transform group-hover:translate-x-0.5',
+                'bg-raised group-hover:bg-gold-gradient',
+              )}
+            >
+              <ArrowRight size={15} />
+            </span>
+          </span>
+          <span className="text-xs text-muted">{sub}</span>
+        </span>
+        <span className="mx-1.5 h-px bg-line-soft" />
+        <span className="flex flex-wrap gap-1.5 px-1.5 pb-0.5 md:mt-auto">
+          {tags.map((tag) => (
+            <span key={tag} className="rounded-md bg-panel-2 px-1.5 py-0.5 text-[10px] text-faint">
+              {tag}
+            </span>
+          ))}
+        </span>
+      </span>
+    </button>
+  );
 }
 
 /**
@@ -289,20 +389,55 @@ function SessionList({ title, empty, only }: { title: string; empty: string; onl
 }
 
 export function Home({ dragging }: { dragging: boolean }) {
-  const { sessions, drafts } = useRecentWork();
+  const go = useApp((s) => s.go);
 
   return (
     <div className="flex h-full flex-col">
       <TitleBar />
       <main className="flex-1 overflow-y-auto">
         <div className="mx-auto flex w-full max-w-[1180px] flex-col gap-7 px-6 pt-8 pb-10 lg:px-8 lg:pt-10">
-          {/* A bento: the photo work big, with one's own last work in it; Kelola Bisnis small, for those who use it. */}
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3 md:grid-rows-[minmax(250px,auto)_minmax(250px,auto)_auto] lg:gap-5">
-            <PilihTile sessions={sessions} dragging={dragging} className="md:col-span-2 md:row-span-2" />
-            <EditTile sessions={sessions} />
-            <KontenTile drafts={drafts} />
-            <BisnisTile />
-            <RecentStrip sessions={sessions} drafts={drafts} className="md:col-span-2" />
+
+          <h1 className="-mb-2 text-xl font-semibold">{t('Mau mengerjakan apa?')}</h1>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:gap-5">
+            <ModeCard
+              highlight={dragging}
+              preview="/home/pilih.jpg"
+              icon={Sparkles}
+              title={t('Pilih foto##mode')}
+              sub={t('Ratusan foto sesi dipilah otomatis jadi Pilih, Cek, dan Lewati, lengkap dengan alasannya.')}
+              tags={[t('Offline'), 'RAW & JPEG', '⌘O']}
+              onClick={() => go({ name: 'pilih' })}
+            />
+            <ModeCard
+              preview="/home/edit.jpg"
+              icon={SlidersHorizontal}
+              title={t('Edit foto')}
+              sub={t('Atur cahaya dan warna ala Lightroom, dengan AI denoise, masking, dan preset.')}
+              tags={[t('Preset Lightroom'), 'XMP']}
+              onClick={() => go({ name: 'edit', back: { name: 'home' } })}
+            />
+            <ModeCard
+              preview="/home/konten.jpg"
+              icon={LayoutTemplate}
+              title={t('Buat konten')}
+              sub={t('Story dan feed Instagram dari template. Pilih template, isi fotonya, selesai.')}
+              tags={['Story 9:16', 'Feed 4:5', '1:1']}
+              onClick={() => go({ name: 'kreasi', back: { name: 'home' } })}
+            />
+            <ModeCard
+              art={<BoardArt />}
+              icon={Briefcase}
+              title={t('Kelola Bisnis')}
+              sub={t('Booking klien di board dan kalender, paket, invoice, pesan WhatsApp, dan laporan keuangan.')}
+              tags={[t('Board'), t('Kalender'), t('Invoice')]}
+              onClick={() => go({ name: 'bisnis' })}
+            />
+          </div>
+
+          {/* What today holds and what was left open, under the modes. */}
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] lg:gap-5">
+            <Today />
+            <Recent />
           </div>
         </div>
       </main>
