@@ -14,6 +14,7 @@ import { moveBooking } from './board';
 import { PAY_COLOR, PAY_LABEL, balanceOf, dayKey, longDate, nextSession, parseLocal, payState, rupiah, shortDate, timeOf, titleOf, totalOf } from './model';
 import { Setup } from './setup';
 import { useBisnis } from './store';
+import { useEscape } from './ui';
 import type { BisnisData, Booking, Column } from './types';
 
 /** The column after this booking's, skipping inactive ones (Batal): where "Lanjut" takes it. */
@@ -51,15 +52,13 @@ export function Overview({
   const [stage, setStage] = useState<string | null>(null);
   // A stage's list closes on a click outside the stages, or Escape.
   const stagesRef = useRef<HTMLElement>(null);
+  useEscape(() => setStage(null), !!stage);
   useEffect(() => {
     if (!stage) return;
     const down = (e: MouseEvent) => !stagesRef.current?.contains(e.target as Node) && setStage(null);
-    const key = (e: KeyboardEvent) => e.key === 'Escape' && setStage(null);
     window.addEventListener('mousedown', down);
-    window.addEventListener('keydown', key);
     return () => {
       window.removeEventListener('mousedown', down);
-      window.removeEventListener('keydown', key);
     };
   }, [stage]);
   const now = new Date();

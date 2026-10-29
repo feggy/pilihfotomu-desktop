@@ -19,7 +19,7 @@ import { PAY_COLOR, PAY_LABEL, balanceOf, clashesOf, clientOf, newId, paidOf, pa
 import { nextColumn } from './overview';
 import { googleCalendarLink } from './reminders';
 import { useBisnis } from './store';
-import { MoneyInput, PLAIN, btnPrimary, inputCls } from './ui';
+import { MoneyInput, PLAIN, btnPrimary, inputCls, useEscape } from './ui';
 
 const METHODS = ['Transfer', 'Tunai', 'QRIS', 'E-wallet'];
 
@@ -41,11 +41,7 @@ export function BookingDetail({
   const update = useBisnis((s) => s.update);
   const b = data.bookings.find((x) => x.id === bookingId);
   const [paying, setPaying] = useState<{ date: string; amount: number; method: string } | null>(null);
-  useEffect(() => {
-    const key = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
-    window.addEventListener('keydown', key);
-    return () => window.removeEventListener('keydown', key);
-  }, [onClose]);
+  useEscape(onClose);
   if (!b) return null;
 
   const client = clientOf(data, b);

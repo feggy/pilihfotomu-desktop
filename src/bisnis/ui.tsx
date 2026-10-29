@@ -1,7 +1,7 @@
 /** Small pieces every Kelola Bisnis screen uses: fields, a money box, a dialog. */
 
 import { X } from 'lucide-react';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { cx } from '../components/ui';
 import { t } from '../lib/i18n';
@@ -91,12 +91,32 @@ export function TextArea({ value, onCommit, rows = 3, placeholder }: { value: st
   return <textarea value={v} rows={rows} placeholder={placeholder} onChange={(e) => setV(e.target.value)} onBlur={() => v !== value && onCommit(v)} className={cx(inputCls, 'h-auto resize-y py-2')} />;
 }
 
-export function Dialog({ title, onClose, children, footer, width = 560 }: { title: ReactNode; onClose: () => void; children: ReactNode; footer?: ReactNode; width?: number }) {
+/** What is open, oldest first; Escape closes only the last (a dialog over the booking drawer, not the drawer under it). */
+const escapes: (() => void)[] = [];
+let listening = false;
+
+/** `onEscape` on Escape while `active`, unless something opened later is still open over it. */
+export function useEscape(onEscape: () => void, active = true) {
+  const latest = useRef(onEscape);
+  latest.current = onEscape;
   useEffect(() => {
-    const key = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
-    window.addEventListener('keydown', key);
-    return () => window.removeEventListener('keydown', key);
-  }, [onClose]);
+    if (!active) return;
+    const run = () => latest.current();
+    escapes.push(run);
+    if (!listening) {
+      listening = true;
+      window.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape' || e.defaultPrevented || !escapes.length) return;
+        e.preventDefault();
+        escapes.at(-1)!();
+      });
+    }
+    return () => void escapes.splice(escapes.indexOf(run), 1);
+  }, [active]);
+}
+
+export function Dialog({ title, onClose, children, footer, width = 560 }: { title: ReactNode; onClose: () => void; children: ReactNode; footer?: ReactNode; width?: number }) {
+  useEscape(onClose);
   return (
     <div className="fixed inset-x-0 top-10 bottom-0 z-40 flex items-center justify-center bg-black/70 p-4" onMouseDown={onClose}>
       <div
