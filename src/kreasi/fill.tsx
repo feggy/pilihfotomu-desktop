@@ -360,7 +360,7 @@ function PhotoTile({
         </span>
       )}
       {slot != null && (
-        <span className="absolute top-2 left-2 flex size-[22px] items-center justify-center rounded-full bg-gold text-[11px] font-bold text-bg">
+        <span className="absolute top-2 left-2 flex size-[22px] items-center justify-center rounded-full bg-gold text-[11px] font-bold text-ink">
           {slot + 1}
         </span>
       )}

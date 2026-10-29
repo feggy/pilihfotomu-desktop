@@ -362,7 +362,7 @@ function Checkbox({ on, onChange, children }: { on: boolean; onChange: (v: boole
           on ? 'border-gold bg-gold' : 'border-faint',
         )}
       >
-        {on && <Check size={11} strokeWidth={3} className="text-bg" />}
+        {on && <Check size={11} strokeWidth={3} className="text-ink" />}
       </span>
       {children}
     </label>

@@ -146,7 +146,7 @@ export function DateInput({
                   onClick={() => pick(k)}
                   className={cx(
                     'flex h-8 items-center justify-center rounded-md text-xs tabular-nums',
-                    k === value ? 'bg-gold font-semibold text-bg' : k === today ? 'font-semibold text-gold-text ring-1 ring-gold/50 hover:bg-raised' : outside ? 'text-faint/50 hover:bg-raised' : 'text-fg hover:bg-raised',
+                    k === value ? 'bg-gold font-semibold text-ink' : k === today ? 'font-semibold text-gold-text ring-1 ring-gold/50 hover:bg-raised' : outside ? 'text-faint/50 hover:bg-raised' : 'text-fg hover:bg-raised',
                   )}
                 >
                   {d.getDate()}
@@ -215,7 +215,7 @@ export function TimeInput({ value, onChange, className }: { value: string; onCha
                 type="button"
                 data-on={x === value || undefined}
                 onClick={() => (setTyped(x), onChange(x), setOpen(false))}
-                className={cx('rounded-md px-3 py-1.5 text-left text-xs tabular-nums', x === value ? 'bg-gold font-semibold text-bg' : 'text-fg hover:bg-raised')}
+                className={cx('rounded-md px-3 py-1.5 text-left text-xs tabular-nums', x === value ? 'bg-gold font-semibold text-ink' : 'text-fg hover:bg-raised')}
               >
                 {x}
               </button>

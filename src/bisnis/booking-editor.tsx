@@ -142,7 +142,7 @@ export function BookingEditor({ initial, onClose, actions = [] }: { initial: Boo
             (asking ? (
               <span className="mr-auto flex items-center gap-2 text-xs text-reject">
                 {t('Hapus booking ini?')}
-                <button type="button" onClick={remove} className="h-8 rounded-lg bg-reject px-3 font-semibold text-bg">
+                <button type="button" onClick={remove} className="h-8 rounded-lg bg-reject px-3 font-semibold text-ink">
                   {t('Hapus')}
                 </button>
                 <button type="button" onClick={() => setAsking(false)} className="h-8 px-2 text-muted hover:text-fg">

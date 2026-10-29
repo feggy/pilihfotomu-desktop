@@ -1022,7 +1022,7 @@ function Card({
     >
       <div className="relative aspect-[3/2] w-full bg-raised">
         {inSelection && (
-          <span className="absolute top-2 right-2 z-10 flex size-5 items-center justify-center rounded-full bg-gold text-bg">
+          <span className="absolute top-2 right-2 z-10 flex size-5 items-center justify-center rounded-full bg-gold text-ink">
             <Check size={13} strokeWidth={3} />
           </span>
         )}
@@ -1128,7 +1128,7 @@ function Inspector({
               onClick={() => setStatus(useApp.getState().selection.length ? useApp.getState().selection : [photo.id], st)}
               className={cx(
                 'flex h-[34px] flex-1 items-center justify-center gap-1.5 rounded-lg text-xs font-semibold',
-                on ? 'text-bg' : 'border border-line bg-raised text-fg hover:bg-line',
+                on ? 'text-ink' : 'border border-line bg-raised text-fg hover:bg-line',
               )}
               style={on ? { background: STATUS[st].color } : undefined}
             >

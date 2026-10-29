@@ -232,7 +232,7 @@ export function Gallery({ onBack }: { onBack: () => void }) {
                         {d.cover ? <img src={d.cover} alt="" className="max-h-full max-w-full rounded-[3px] object-contain" /> : null}
                         {/* The design just left: saved, and here to carry on with. */}
                         {d.id === justEdited && (
-                          <span className="absolute bottom-1.5 left-1.5 rounded-md bg-gold px-1.5 py-0.5 text-[10px] font-semibold text-bg">{t('Baru diedit')}</span>
+                          <span className="absolute bottom-1.5 left-1.5 rounded-md bg-gold px-1.5 py-0.5 text-[10px] font-semibold text-ink">{t('Baru diedit')}</span>
                         )}
                       </button>
                       <span className="truncate text-xs font-medium">{d.name}</span>

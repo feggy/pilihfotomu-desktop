@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 
 import { App } from './app';
 import { catchUncaught } from './lib/errors';
+import { watchTheme } from './lib/theme';
 import './styles.css';
 
 // The webview's own menu (Reload, Inspect Element) isn't part of the app.
@@ -20,6 +21,7 @@ async function start() {
     await (await import('./dev/mock')).installMock();
   }
   catchUncaught();
+  watchTheme();
   ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
     <React.StrictMode>
       <App />

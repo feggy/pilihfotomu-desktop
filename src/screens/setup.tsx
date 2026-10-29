@@ -316,8 +316,8 @@ function FolderRow({
           state !== 'off' ? 'border-gold bg-gold' : 'border-faint',
         )}
       >
-        {state === 'on' && <CheckIcon size={11} strokeWidth={3} className="text-bg" />}
-        {state === 'some' && <Minus size={11} strokeWidth={3} className="text-bg" />}
+        {state === 'on' && <CheckIcon size={11} strokeWidth={3} className="text-ink" />}
+        {state === 'some' && <Minus size={11} strokeWidth={3} className="text-ink" />}
       </span>
       {node ? (
         node.hasChildren ? (

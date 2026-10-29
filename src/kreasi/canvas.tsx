@@ -849,7 +849,7 @@ export function DocCanvas({
               title={label}
               aria-label={label}
               className={cx(
-                'absolute z-10 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-line bg-raised text-muted shadow-md transition-colors hover:border-gold hover:bg-gold hover:text-bg',
+                'absolute z-10 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-line bg-raised text-muted shadow-md transition-colors hover:border-gold hover:bg-gold hover:text-ink',
                 end ? 'size-[22px]' : 'size-[18px]',
               )}
               style={

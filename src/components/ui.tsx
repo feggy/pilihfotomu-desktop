@@ -26,7 +26,7 @@ export function Button({ variant = 'ghost', icon: Icon, kbd, size = 'md', classN
         variant === 'primary' && 'bg-gold-gradient text-white',
         variant === 'ghost' && 'border border-line bg-raised text-fg hover:not-disabled:bg-line',
         variant === 'plain' && 'text-fg hover:not-disabled:bg-raised',
-        variant === 'danger' && 'bg-reject font-semibold text-bg',
+        variant === 'danger' && 'bg-reject font-semibold text-ink',
         className,
       )}
     >
@@ -103,7 +103,7 @@ export function StatusBadge({ status, size = 22 }: { status: Status; size?: numb
   const Icon = STATUS_ICON[status];
   return (
     <span
-      className="inline-flex shrink-0 items-center justify-center rounded-full text-bg"
+      className="inline-flex shrink-0 items-center justify-center rounded-full text-ink"
       style={{ width: size, height: size, background: s.color }}
       title={s.one}
     >

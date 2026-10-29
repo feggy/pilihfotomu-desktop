@@ -464,7 +464,7 @@ export function Loupe({
                     >
                       {closed && (
                         <span
-                          className="absolute bottom-full left-0 mb-1 rounded bg-maybe px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap text-bg"
+                          className="absolute bottom-full left-0 mb-1 rounded bg-maybe px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap text-ink"
                         >
                           {t('Mungkin terpejam')}
                         </span>
@@ -603,7 +603,7 @@ function InfoPanel({
                 onClick={() => setStatus([photo.id], st)}
                 className={cx(
                   'flex h-[34px] flex-1 items-center justify-center gap-1.5 rounded-lg text-xs font-semibold',
-                  on ? 'text-bg' : 'border border-line bg-raised text-fg hover:bg-line',
+                  on ? 'text-ink' : 'border border-line bg-raised text-fg hover:bg-line',
                 )}
                 style={on ? { background: STATUS[st].color } : undefined}
               >

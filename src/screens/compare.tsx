@@ -121,7 +121,7 @@ export function Compare({ group, ids }: { group?: number; ids?: number[] }) {
                   <Kbd>{i + 1}</Kbd>
                 </span>
                 {best && (
-                  <span className="absolute top-2.5 right-2.5 inline-flex h-6 items-center gap-1 rounded-full bg-gold px-2 text-[11px] font-semibold text-bg">
+                  <span className="absolute top-2.5 right-2.5 inline-flex h-6 items-center gap-1 rounded-full bg-gold px-2 text-[11px] font-semibold text-ink">
                     <Crown size={12} /> {t('Terbaik')}
                   </span>
                 )}

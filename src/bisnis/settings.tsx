@@ -308,7 +308,7 @@ function BackupSection() {
             <button type="button" onClick={() => setRestoring(null)} className="h-8 px-3 text-xs text-muted hover:text-fg">
               {t('Batal')}
             </button>
-            <button type="button" onClick={() => (applyBackup(restoring.data), setRestoring(null), setDone(t('Data dipulihkan dari backup.')))} className="h-8 rounded-lg bg-reject px-3 text-xs font-semibold text-bg">
+            <button type="button" onClick={() => (applyBackup(restoring.data), setRestoring(null), setDone(t('Data dipulihkan dari backup.')))} className="h-8 rounded-lg bg-reject px-3 text-xs font-semibold text-ink">
               {t('Ganti data')}
             </button>
           </span>

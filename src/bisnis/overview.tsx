@@ -222,7 +222,7 @@ export function Overview({
               const d = parseLocal(s.start);
               return (
                 <button key={s.id} type="button" onClick={() => onOpen(b)} className="flex items-center gap-3 rounded-xl px-1 py-1 text-left hover:bg-panel-2">
-                  <span className={cx('flex w-11 shrink-0 flex-col items-center rounded-lg py-1', day === today ? 'bg-gold text-bg' : 'bg-panel-2')}>
+                  <span className={cx('flex w-11 shrink-0 flex-col items-center rounded-lg py-1', day === today ? 'bg-gold text-ink' : 'bg-panel-2')}>
                     <span className="text-[10px] font-medium uppercase">{t(['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'][d.getDay()]!)}</span>
                     <span className="text-base leading-tight font-semibold">{d.getDate()}</span>
                   </span>

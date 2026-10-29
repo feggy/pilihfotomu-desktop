@@ -3,8 +3,9 @@
 
 /* ─────────────────────────────────────────────
    pilihfotomu Desktop — sama dengan design system web (zamrud gelap, aksen
-   emas), tapi selalu gelap: foto dinilai lebih jujur di latar gelap, dan
-   Lightroom/Capture One juga begitu.
+   emas). Gelap bawaannya: foto dinilai lebih jujur di latar gelap, dan
+   Lightroom/Capture One juga begitu. Tema terang (Pengaturan › Tampilan)
+   menukar warna yang sama di bawah, lewat <html data-theme="light">.
    ───────────────────────────────────────────── */
 
 @theme {
@@ -20,6 +21,8 @@
   --color-fg: #f4f7f5;
   --color-muted: #9eaea6;
   --color-faint: #86978f;
+  /* Text on gold, red or white chips: dark in both themes. */
+  --color-ink: #0b1310;
 
   --color-gold: #c9a96e;
   --color-gold-text: #d9bd88;
@@ -42,6 +45,27 @@
 
 :root {
   color-scheme: dark;
+}
+
+/* Warm paper and white panels; gold and the marks darkened enough to read on them. */
+:root[data-theme='light'] {
+  color-scheme: light;
+  --color-bg: #f3f1ec;
+  --color-panel: #ffffff;
+  --color-panel-2: #f8f6f2;
+  --color-raised: #ebe7df;
+  --color-line: #d6d0c4;
+  --color-line-soft: #e5e0d6;
+  --color-fg: #16201b;
+  --color-muted: #4f5d56;
+  --color-faint: #66746d;
+
+  --color-gold: #b48d48;
+  --color-gold-text: #84601f;
+
+  --color-pick: #23935a;
+  --color-maybe: #c2920f;
+  --color-reject: #cf4a40;
 }
 
 html,

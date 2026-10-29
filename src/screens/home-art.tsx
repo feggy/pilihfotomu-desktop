@@ -117,7 +117,7 @@ export function EditArt() {
         <img src={PHOTO('wedding-garden')} alt="" draggable={false} className="absolute inset-y-0 left-0 h-full max-w-none object-cover brightness-[0.62] contrast-[0.8] saturate-[0.4]" style={{ width: `${100 / 0.45}%` }} />
       </span>
       <span className="absolute inset-y-0 left-[45%] w-0.5 -translate-x-1/2 bg-white" />
-      <span className="absolute top-1/2 left-[45%] flex size-7 -translate-1/2 items-center justify-center rounded-full bg-white text-bg">
+      <span className="absolute top-1/2 left-[45%] flex size-7 -translate-1/2 items-center justify-center rounded-full bg-white text-ink">
         <ChevronsLeftRight size={14} />
       </span>
       <span className="absolute top-3 left-3 rounded-md bg-bg/90 px-2 py-0.5 text-[10px] text-muted">{t('Sebelum')}</span>

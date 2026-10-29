@@ -888,7 +888,7 @@ export function Editor() {
                           onClick={() => (select(null), edit(duplicateSlide(k)), setHistoryStep(useKreasi.getState().doc!, { label: 'Duplikat slide', at: Date.now() }))}
                           title={t('Duplikat slide {n}', { n: k + 1 })}
                           aria-label={t('Duplikat slide {n}', { n: k + 1 })}
-                          className="absolute -top-1.5 -left-1.5 hidden size-4 items-center justify-center rounded-full bg-gold text-bg group-hover:flex"
+                          className="absolute -top-1.5 -left-1.5 hidden size-4 items-center justify-center rounded-full bg-gold text-ink group-hover:flex"
                         >
                           <Copy size={9} strokeWidth={3} />
                         </button>

@@ -121,7 +121,7 @@ export function Calendar({ onOpen, onNewOn }: { onOpen: (b: Booking) => void; on
                 )}
               >
                 <span className="pointer-events-none flex items-center justify-between">
-                  <span className={cx('flex size-6 items-center justify-center rounded-full text-xs tabular-nums', day === now ? 'bg-gold font-semibold text-bg' : outside ? 'text-faint/60' : 'text-muted')}>{date.getDate()}</span>
+                  <span className={cx('flex size-6 items-center justify-center rounded-full text-xs tabular-nums', day === now ? 'bg-gold font-semibold text-ink' : outside ? 'text-faint/60' : 'text-muted')}>{date.getDate()}</span>
                   {off && <span className="truncate text-[10px] text-reject">{off.note || t('Libur')}</span>}
                 </span>
                 <button

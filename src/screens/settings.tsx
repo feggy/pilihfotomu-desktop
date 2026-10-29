@@ -13,6 +13,7 @@ import {
   RotateCcw,
   ScrollText,
   Stamp,
+  SunMoon,
   SlidersHorizontal,
   Trash2,
   X,
@@ -35,13 +36,15 @@ import { FACTORY_OPTIONS, GENERAL, SHOOT_TYPES, shootRule, useDefaults, withShoo
 import type { Screen } from '../store';
 import { useApp } from '../store';
 import { strictnessHint } from './setup';
+import { systemTheme, useTheme, type ThemePref } from '../lib/theme';
 
-type Section = 'license' | 'language' | 'analysis' | 'storage' | 'keys' | 'brand' | 'legal' | 'about';
+type Section = 'license' | 'language' | 'appearance' | 'analysis' | 'storage' | 'keys' | 'brand' | 'legal' | 'about';
 
 /** `label` is an i18n key. */
 const NAV: { id: Section; icon: LucideIcon; label: string }[] = [
   { id: 'license', icon: BadgeCheck, label: 'Lisensi & perangkat' },
   { id: 'language', icon: Languages, label: 'Bahasa' },
+  { id: 'appearance', icon: SunMoon, label: 'Tampilan' },
   { id: 'analysis', icon: SlidersHorizontal, label: 'Analisis bawaan' },
   { id: 'storage', icon: HardDrive, label: 'Penyimpanan & cache' },
   { id: 'keys', icon: Keyboard, label: 'Pintasan keyboard' },
@@ -486,6 +489,41 @@ function LanguagePicker() {
   );
 }
 
+const THEME_NAMES = { dark: 'Gelap', light: 'Terang' } as const;
+
+function ThemePicker() {
+  const pref = useTheme((s) => s.pref);
+  const setPref = useTheme((s) => s.setPref);
+  const options: { value: ThemePref; label: string; sub: string }[] = [
+    { value: 'dark', label: t('Gelap'), sub: t('Foto dinilai paling jujur di latar gelap, seperti di Lightroom.') },
+    { value: 'light', label: t('Terang'), sub: t('Lebih nyaman di ruangan terang, atau untuk Kelola Bisnis seharian.') },
+    { value: 'system', label: t('Ikuti sistem'), sub: t('Sekarang: {name}', { name: t(THEME_NAMES[systemTheme()]) }) },
+  ];
+  return (
+    <div className="flex max-w-[560px] flex-col gap-5">
+      <h1 className="text-[22px] font-semibold">{t('Tampilan')}</h1>
+      <div role="radiogroup" aria-label={t('Tampilan')} className="flex flex-col rounded-2xl border border-line-soft bg-panel px-5 py-1">
+        {options.map((o) => (
+          <button
+            key={o.value}
+            type="button"
+            role="radio"
+            aria-checked={pref === o.value}
+            onClick={() => setPref(o.value)}
+            className="flex min-h-12 items-center justify-between gap-3 border-b border-line-soft py-2 text-left last:border-0"
+          >
+            <span className="flex flex-col gap-0.5">
+              <span className={cx('text-[13px]', pref === o.value ? 'font-semibold text-fg' : 'text-muted')}>{o.label}</span>
+              <span className="text-[11px] text-faint">{o.sub}</span>
+            </span>
+            <span className={cx('size-[18px] shrink-0 rounded-full border-[1.5px]', pref === o.value ? 'border-gold bg-gold' : 'border-faint')} />
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /**
  * Help when something goes wrong: the errors the app logged on this
  * computer, copied with the version and system to send to the developer.
@@ -573,6 +611,7 @@ export function Settings({ back, initial = 'license' }: { back: Screen; initial?
             </div>
           )}
           {section === 'language' && <LanguagePicker />}
+          {section === 'appearance' && <ThemePicker />}
           {section === 'analysis' && <AnalysisDefaults />}
           {section === 'storage' && <Storage />}
           {section === 'keys' && <KeyEditor />}

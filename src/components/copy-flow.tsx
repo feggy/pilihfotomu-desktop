@@ -142,7 +142,7 @@ export function CopySettingsForm({
                     onClick={() => set({ scalePercent: s })}
                     className={cx(
                       'h-7 rounded-md px-2 text-xs font-medium',
-                      value.scalePercent === s ? 'bg-gold text-bg' : 'bg-raised text-muted hover:text-fg',
+                      value.scalePercent === s ? 'bg-gold text-ink' : 'bg-raised text-muted hover:text-fg',
                     )}
                   >
                     {s}%

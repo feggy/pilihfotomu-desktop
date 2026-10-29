@@ -114,4 +114,9 @@ export default {
   '{n} error tercatat': '{n} errors logged',
   'Tidak ada error tercatat': 'No errors logged',
   'Kosongkan catatan': 'Clear the log',
+  'Tampilan': 'Appearance',
+  'Gelap': 'Dark',
+  'Terang': 'Light',
+  'Foto dinilai paling jujur di latar gelap, seperti di Lightroom.': 'Photos are judged most honestly on a dark background, as in Lightroom.',
+  'Lebih nyaman di ruangan terang, atau untuk Kelola Bisnis seharian.': 'Easier in a bright room, or for a day of Manage Business.',
 } as Record<string, string | [string, string]>;

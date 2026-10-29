@@ -34,7 +34,7 @@ export function Steps({ at, onGo, noPhotos }: { at: 1 | 2 | 3; onGo?: (step: 1 |
               <span
                 className={cx(
                   'flex size-[22px] items-center justify-center rounded-full text-[11px] font-semibold',
-                  done || current ? 'bg-gold text-bg' : 'bg-raised text-faint',
+                  done || current ? 'bg-gold text-ink' : 'bg-raised text-faint',
                 )}
               >
                 {done ? <Check size={12} strokeWidth={3} /> : shown}

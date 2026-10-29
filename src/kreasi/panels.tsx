@@ -414,7 +414,7 @@ function UploadButton({ onAdd, edit }: { onAdd: (a: { edit: Edit; id: string }) 
                 <button type="button" onClick={() => setAsking(null)} className="h-7 rounded-md px-2.5 text-xs font-medium text-muted hover:text-fg">
                   {t('Batal')}
                 </button>
-                <button type="button" onClick={remove} className="flex h-7 items-center gap-1 rounded-md bg-reject px-2.5 text-xs font-semibold text-bg">
+                <button type="button" onClick={remove} className="flex h-7 items-center gap-1 rounded-md bg-reject px-2.5 text-xs font-semibold text-ink">
                   <Trash2 size={12} /> {t('Hapus')}
                 </button>
               </span>
