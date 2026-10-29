@@ -81,7 +81,7 @@ export function MessagesTab() {
           >
             {t('Template pesan WhatsApp')}
           </SectionTitle>
-          <div className="grid min-h-[420px] grid-cols-[220px_1fr_1fr] gap-4">
+          <div className="grid min-h-[420px] grid-cols-[220px_minmax(0,1fr)_minmax(0,1fr)] gap-4">
             {/* One list: the stages' templates in the board's order, then the rest. */}
             <nav className="flex flex-col gap-1">
               {[...data.columns.flatMap((c) => data.templates.filter((x) => x.columnId === c.id)), ...data.templates.filter((x) => !x.columnId || !data.columns.some((c) => c.id === x.columnId))].map((x) => (
@@ -140,7 +140,7 @@ export function MessagesTab() {
                 <div className="sticky top-0 flex flex-col gap-2 self-start">
                   <span className="text-[11px] font-medium text-muted">{sample ? t('Pratinjau dengan booking terakhir') : t('Pratinjau')}</span>
                   <div className="max-h-[560px] overflow-y-auto rounded-2xl bg-[#0b1f17] p-4">
-                    <p className="ml-auto max-w-[92%] rounded-xl rounded-tr-sm bg-[#1f5c45] px-3 py-2 text-[13px] leading-relaxed whitespace-pre-wrap text-white">{fillTemplate(body, data, studio, sample)}</p>
+                    <p className="ml-auto max-w-[92%] rounded-xl rounded-tr-sm bg-[#1f5c45] px-3 py-2 text-[13px] leading-relaxed whitespace-pre-wrap text-white [overflow-wrap:anywhere]">{fillTemplate(body, data, studio, sample)}</p>
                   </div>
                 </div>
               </>
@@ -165,7 +165,7 @@ function Pricelist() {
     <section className="flex flex-col gap-3">
       <SectionTitle>{t('Pricelist')}</SectionTitle>
       <p className="-mt-1 text-xs text-faint">{t('Dibuat dari tab Paket (yang tidak diarsipkan). Salin untuk dikirim ke mana saja, atau buka langsung di WhatsApp ke calon klien.')}</p>
-      <div className="grid grid-cols-[1fr_300px] gap-4">
+      <div className="grid grid-cols-[minmax(0,1fr)_300px] gap-4">
         <pre className="max-h-80 overflow-y-auto rounded-2xl bg-panel p-4 font-sans text-[13px] leading-relaxed whitespace-pre-wrap text-fg">{text || t('Belum ada paket. Isi dulu di tab Paket.')}</pre>
         <div className="flex flex-col gap-3">
           <button
