@@ -76,12 +76,34 @@ export const DEFAULT_TEMPLATES: MessageTemplate[] = [
   },
 ];
 
+const startingBody = (stage: string) => `Halo {nama}, kabar terbaru untuk {paket}: booking kamu sekarang di tahap ${stage}.\n\nKalau ada yang ingin ditanyakan, kabari kami ya. Terima kasih!`;
+
+/**
+ * A built-in template that lost its stage (Pengingat jadwal, Terima kasih)
+ * given it back, and the starting one made for that stage in its place,
+ * untouched, taken out.
+ */
+function reclaimStages(data: BisnisData): BisnisData {
+  let templates = data.templates;
+  for (const d of DEFAULT_TEMPLATES) {
+    const col = d.columnId && data.columns.find((c) => c.id === d.columnId);
+    if (!col) continue;
+    const own = templates.find((x) => !x.columnId && (x.id === d.id || x.name === d.name));
+    if (!own) continue;
+    const stand = templates.filter((x) => x.columnId === col.id);
+    if (stand.some((x) => x.name !== col.name || x.body !== startingBody(col.name))) continue;
+    templates = templates.filter((x) => !stand.includes(x)).map((x) => (x === own ? { ...x, columnId: col.id } : x));
+  }
+  return templates === data.templates ? data : { ...data, templates };
+}
+
 /**
  * `data` with a template for every stage of its board: a built-in one for a
  * default stage, a starting one to edit for a stage the studio added —
  * every stage has a message to send, and something to start from.
  */
 export function withStageTemplates(data: BisnisData): BisnisData {
+  data = reclaimStages(data);
   const missing = data.columns.filter((c) => !data.templates.some((x) => x.columnId === c.id));
   if (!missing.length) return data;
   const added = missing.map(
@@ -90,7 +112,7 @@ export function withStageTemplates(data: BisnisData): BisnisData {
         id: newId(),
         name: c.name,
         columnId: c.id,
-        body: `Halo {nama}, kabar terbaru untuk {paket}: booking kamu sekarang di tahap ${c.name}.\n\nKalau ada yang ingin ditanyakan, kabari kami ya. Terima kasih!`,
+        body: startingBody(c.name),
       },
   );
   return { ...data, templates: [...data.templates, ...added] };

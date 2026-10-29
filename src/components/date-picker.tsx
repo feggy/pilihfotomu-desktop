@@ -22,7 +22,7 @@ const parse = (s: string) => {
 };
 
 /** A pop-up under (or, without room, over) `anchor`; closed by a click elsewhere or Escape. */
-function Popover({ anchor, onClose, width, children }: { anchor: RefObject<HTMLElement | null>; onClose: () => void; width: number; children: ReactNode }) {
+export function Popover({ anchor, onClose, width, children, className = 'p-3' }: { anchor: RefObject<HTMLElement | null>; onClose: () => void; width: number; children: ReactNode; className?: string }) {
   const box = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   useLayoutEffect(() => {
@@ -55,7 +55,7 @@ function Popover({ anchor, onClose, width, children }: { anchor: RefObject<HTMLE
     <div
       ref={box}
       onMouseDown={(e) => e.stopPropagation()}
-      className="fixed z-[60] rounded-xl border border-line bg-panel-2 p-3 shadow-2xl"
+      className={cx('fixed z-[60] rounded-xl border border-line bg-panel-2 shadow-2xl', className)}
       style={{ width, left: pos?.left ?? -9999, top: pos?.top ?? -9999 }}
     >
       {children}

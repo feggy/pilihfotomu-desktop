@@ -10,6 +10,7 @@ import { AlertTriangle, ArrowRight, CalendarPlus, Link2, MapPin, Pencil, Phone, 
 import { useEffect, useState, type ReactNode } from 'react';
 
 import { DateInput } from '../components/date-picker';
+import { Select } from '../components/select';
 import { cx } from '../components/ui';
 import { t } from '../lib/i18n';
 import type { BookingAction } from './booking-editor';
@@ -159,13 +160,7 @@ export function BookingDetail({
                 <div className="grid grid-cols-[140px_1fr_110px] gap-2">
                   <DateInput value={paying.date} onChange={(date) => setPaying({ ...paying, date })} clearable={false} />
                   <MoneyInput value={paying.amount} onChange={(amount) => setPaying({ ...paying, amount })} />
-                  <select value={paying.method} onChange={(e) => setPaying({ ...paying, method: e.target.value })} className={inputCls}>
-                    {METHODS.map((m) => (
-                      <option key={m} value={m}>
-                        {t(m)}
-                      </option>
-                    ))}
-                  </select>
+                  <Select value={paying.method} onChange={(method) => setPaying({ ...paying, method })} options={METHODS.map((m) => ({ value: m, label: t(m) }))} />
                 </div>
                 <span className="flex justify-end gap-2">
                   <button type="button" onClick={() => setPaying(null)} className="h-8 px-3 text-xs text-muted hover:text-fg">

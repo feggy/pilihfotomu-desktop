@@ -6,12 +6,13 @@
 import { ArrowDown, ArrowUp, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
+import { Select } from '../components/select';
 import { cx } from '../components/ui';
 import { t } from '../lib/i18n';
 import { PAY_COLOR, PAY_LABEL, balanceOf, clientOf, nextSession, payState, rupiah, shortDate, timeOf, titleOf, totalOf, type PayState } from './model';
 import { useBisnis } from './store';
 import type { Booking } from './types';
-import { Empty, inputCls } from './ui';
+import { Empty } from './ui';
 
 type Sort = 'jadwal' | 'nama' | 'total' | 'sisa' | 'dibuat';
 
@@ -69,23 +70,18 @@ export function BookingsList({ onOpen }: { onOpen: (b: Booking) => void }) {
           <Search size={14} className="text-faint" />
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('Cari klien, paket, lokasi…')} className="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-faint" />
         </label>
-        <select value={stage} onChange={(e) => setStage(e.target.value)} className={cx(inputCls, '!w-48')}>
-          <option value="aktif">{t('Yang masih berjalan')}</option>
-          <option value="">{t('Semua tahap')}</option>
-          {data.columns.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-        <select value={pay} onChange={(e) => setPay(e.target.value as '' | PayState)} className={cx(inputCls, '!w-44')}>
-          <option value="">{t('Semua pembayaran')}</option>
-          {(['belum', 'dp', 'lunas'] as const).map((p) => (
-            <option key={p} value={p}>
-              {t(PAY_LABEL[p])}
-            </option>
-          ))}
-        </select>
+        <Select
+          value={stage}
+          onChange={setStage}
+          className="!w-48"
+          options={[{ value: 'aktif', label: t('Yang masih berjalan') }, { value: '', label: t('Semua tahap') }, ...data.columns.map((c) => ({ value: c.id, label: c.name, color: c.color }))]}
+        />
+        <Select<'' | PayState>
+          value={pay}
+          onChange={setPay}
+          className="!w-44"
+          options={[{ value: '', label: t('Semua pembayaran') }, ...(['belum', 'dp', 'lunas'] as const).map((p) => ({ value: p, label: t(PAY_LABEL[p]), color: PAY_COLOR[p] }))]}
+        />
         <span className="ml-auto text-xs text-faint">{t('{n} booking', { n: rows.length })}</span>
       </div>
 

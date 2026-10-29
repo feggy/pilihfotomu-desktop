@@ -8,6 +8,7 @@ import { openUrl } from '@tauri-apps/plugin-opener';
 import { AlertTriangle, ArrowRight, CalendarPlus, Plus, Trash2, Wallet, X } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 
+import { Select } from '../components/select';
 import { cx } from '../components/ui';
 import { t } from '../lib/i18n';
 import { PAY_COLOR, PAY_LABEL, balanceOf, clashesOf, localString, newId, paidOf, parseLocal, payState, rupiah, shortDate, timeOf, titleOf, today, totalOf } from './model';
@@ -202,27 +203,21 @@ export function BookingEditor({ initial, onClose, actions = [] }: { initial: Boo
         <SectionTitle>{t('Paket & harga')}</SectionTitle>
         <div className="grid grid-cols-[1fr_180px] gap-3">
           <Field label={t('Paket')}>
-            <select
+            <Select
               value={b.packageId ?? ''}
-              onChange={(e) => {
-                const p = data.packages.find((x) => x.id === e.target.value);
+              onChange={(id) => {
+                const p = data.packages.find((x) => x.id === id);
                 set(
                   p
                     ? { packageId: p.id, packageName: p.name, packagePrice: p.price, sessions: fitSessions(b.sessions, duration, p.durationMin) }
                     : { packageId: null, packageName: '', packagePrice: 0 },
                 );
               }}
-              className={inputCls}
-            >
-              <option value="">{t('Tanpa paket (isi sendiri)')}</option>
-              {data.packages
-                .filter((p) => !p.archived || p.id === b.packageId)
-                .map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} · {rupiah(p.price)}
-                  </option>
-                ))}
-            </select>
+              options={[
+                { value: '', label: t('Tanpa paket (isi sendiri)') },
+                ...data.packages.filter((p) => !p.archived || p.id === b.packageId).map((p) => ({ value: p.id, label: p.name, note: rupiah(p.price) })),
+              ]}
+            />
           </Field>
           <Field label={t('Harga')}>
             <MoneyInput value={b.packagePrice} onChange={(packagePrice) => set({ packagePrice })} />
@@ -299,13 +294,7 @@ export function BookingEditor({ initial, onClose, actions = [] }: { initial: Boo
             )
           }
         >
-          <select value={b.columnId} onChange={(e) => set({ columnId: e.target.value })} className={inputCls}>
-            {data.columns.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+          <Select value={b.columnId} onChange={(columnId) => set({ columnId })} options={data.columns.map((c) => ({ value: c.id, label: c.name, color: c.color }))} />
         </Field>
         <Field label={t('Pelunasan paling lambat')}>
           <DateInput value={b.dueDate} onChange={(dueDate) => set({ dueDate })} placeholder={t('Tidak ada')} />
@@ -458,14 +447,7 @@ function Payments({ booking: b, onChange }: { booking: Booking; onChange: (p: Pa
         <div key={p.id} className="grid grid-cols-[140px_170px_120px_1fr_auto] items-center gap-2">
           <DateInput value={p.date} onChange={(date) => set(p.id, { date })} clearable={false} />
           <MoneyInput value={p.amount} onChange={(amount) => set(p.id, { amount })} />
-          <select value={METHODS.includes(p.method) ? p.method : ''} onChange={(e) => set(p.id, { method: e.target.value })} className={inputCls}>
-            {METHODS.map((m) => (
-              <option key={m} value={m}>
-                {t(m)}
-              </option>
-            ))}
-            <option value="">{t('Lainnya')}</option>
-          </select>
+          <Select value={METHODS.includes(p.method) ? p.method : ''} onChange={(method) => set(p.id, { method })} options={[...METHODS.map((m) => ({ value: m, label: t(m) })), { value: '', label: t('Lainnya') }]} />
           <input value={p.note} onChange={(e) => set(p.id, { note: e.target.value })} placeholder={t('Keterangan (mis. DP, pelunasan)')} className={inputCls} />
           <button type="button" onClick={() => onChange(b.payments.filter((x) => x.id !== p.id))} aria-label={t('Hapus')} className="text-faint hover:text-reject">
             <X size={15} />

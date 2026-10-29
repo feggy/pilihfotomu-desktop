@@ -8,6 +8,7 @@ import { openUrl } from '@tauri-apps/plugin-opener';
 import { Check, Copy, MessageCircle, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
+import { Select } from '../components/select';
 import { cx } from '../components/ui';
 import { t } from '../lib/i18n';
 import { useBrand } from '../kreasi/brand';
@@ -119,21 +120,18 @@ export function MessagesTab() {
                   <span className="text-[11px] text-faint">{t('Klik isian untuk menaruhnya di posisi kursor. *teks* jadi tebal di WhatsApp.')}</span>
                   <div className="grid grid-cols-2 gap-3">
                     <Field label={t('Untuk tahap')} hint={t('Terpilih otomatis saat mengirim pesan ke booking di tahap ini.')}>
-                      <select value={stage} onChange={(e) => setStage(e.target.value)} className={inputCls}>
-                        <option value="">{t('Semua tahap')}</option>
-                        {data.columns.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.name}
-                          </option>
-                        ))}
-                      </select>
+                      <Select value={stage} onChange={setStage} options={[{ value: '', label: t('Semua tahap') }, ...data.columns.map((c) => ({ value: c.id, label: c.name, color: c.color }))]} />
                     </Field>
                     <Field label={t('Lampiran gambar')}>
-                      <select value={attach} onChange={(e) => setAttach(e.target.value as '' | 'invoice' | 'kuitansi')} className={inputCls}>
-                        <option value="">{t('Tidak ada')}</option>
-                        <option value="invoice">{t('Invoice')}</option>
-                        <option value="kuitansi">{t('Kuitansi pembayaran terakhir')}</option>
-                      </select>
+                      <Select<'' | 'invoice' | 'kuitansi'>
+                        value={attach}
+                        onChange={setAttach}
+                        options={[
+                          { value: '', label: t('Tidak ada') },
+                          { value: 'invoice', label: t('Invoice') },
+                          { value: 'kuitansi', label: t('Kuitansi pembayaran terakhir') },
+                        ]}
+                      />
                     </Field>
                   </div>
                   {dirty && <SaveBar onSave={() => setTpl({ name: name.trim() || tpl.name, body, columnId: stage || undefined, attach: attach || undefined })} onCancel={reset} />}

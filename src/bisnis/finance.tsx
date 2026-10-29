@@ -12,6 +12,7 @@ import { useMemo, useState } from 'react';
 
 import { Segmented, cx } from '../components/ui';
 import { api } from '../lib/api';
+import { Select } from '../components/select';
 import { t } from '../lib/i18n';
 import { useApp } from '../store';
 import { MONTHS, balanceOf, clientOf, newId, rupiah, shortDate, titleOf, today } from './model';
@@ -229,14 +230,11 @@ function Expenses({ period }: { period: Period }) {
           {adding || !data.expenseCategories.length ? (
             <input value={newCategory} onChange={(e) => setNewCategory(e.target.value)} placeholder={t('Kategori baru')} autoFocus className={inputCls} />
           ) : (
-            <select value={draft.category} onChange={(e) => (e.target.value === '+' ? setAdding(true) : setDraft({ ...draft, category: e.target.value }))} className={inputCls}>
-              {data.expenseCategories.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-              <option value="+">{t('+ Kategori baru…')}</option>
-            </select>
+            <Select
+              value={draft.category}
+              onChange={(v) => (v === '+' ? setAdding(true) : setDraft({ ...draft, category: v }))}
+              options={[...data.expenseCategories.map((c) => ({ value: c, label: c })), { value: '+', label: t('+ Kategori baru…'), divided: true }]}
+            />
           )}
         </Field>
         <Field label={t('Jumlah')}>
@@ -246,14 +244,7 @@ function Expenses({ period }: { period: Period }) {
           <input value={draft.note} onChange={(e) => setDraft({ ...draft, note: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && add()} placeholder={t('mis. Bensin ke Kaliurang')} className={inputCls} />
         </Field>
         <Field label={t('Untuk booking (opsional)')}>
-          <select value={draft.bookingId} onChange={(e) => setDraft({ ...draft, bookingId: e.target.value })} className={inputCls}>
-            <option value="">—</option>
-            {recent.map((b) => (
-              <option key={b.id} value={b.id}>
-                {titleOf(data, b)}
-              </option>
-            ))}
-          </select>
+          <Select value={draft.bookingId} onChange={(bookingId) => setDraft({ ...draft, bookingId })} options={[{ value: '', label: '—' }, ...recent.map((b) => ({ value: b.id, label: titleOf(data, b) }))]} />
         </Field>
         <button type="button" onClick={add} disabled={!draft.amount} className={cx(btnGhost, 'disabled:opacity-40')}>
           <Plus size={14} /> {t('Catat')}

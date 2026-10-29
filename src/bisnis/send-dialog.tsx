@@ -14,6 +14,7 @@ import { Check, Copy, Download, ImageIcon, MessageCircle } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
 import { DateInput } from '../components/date-picker';
+import { Select } from '../components/select';
 import { cx } from '../components/ui';
 import { api } from '../lib/api';
 import { t } from '../lib/i18n';
@@ -131,17 +132,15 @@ export function SendDialog({ bookingId, phone: phoneIn = '', name = '', template
     >
       <div className="grid grid-cols-2 gap-3">
         <Field label={t('Template')}>
-          <select value={templateId} onChange={(e) => (setTemplateId(e.target.value), setText(fill(e.target.value)), setAskDue(!booking?.dueDate))} className={inputCls}>
-            {data.templates.map((x) => {
-              const stage = x.columnId ? data.columns.find((c) => c.id === x.columnId)?.name : null;
-              return (
-                <option key={x.id} value={x.id}>
-                  {x.name}
-                  {stage ? ` · ${stage}` : ''}
-                </option>
-              );
-            })}
-          </select>
+          <Select
+            value={templateId}
+            onChange={(id) => (setTemplateId(id), setText(fill(id)), setAskDue(!booking?.dueDate))}
+            options={[
+              // The stages' in the board's order, then the rest, as in the Pesan tab.
+              ...data.columns.flatMap((c) => data.templates.filter((x) => x.columnId === c.id).map((x) => ({ value: x.id, label: x.name, note: c.name, color: c.color }))),
+              ...data.templates.filter((x) => !x.columnId || !data.columns.some((c) => c.id === x.columnId)).map((x) => ({ value: x.id, label: x.name })),
+            ]}
+          />
         </Field>
         <Field label={t('Nomor WhatsApp')}>
           <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0812…" inputMode="tel" className={inputCls} />
