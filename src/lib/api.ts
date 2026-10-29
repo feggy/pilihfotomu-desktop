@@ -301,9 +301,9 @@ export const api = {
     channel.onmessage = onProgress;
     return invoke<{ full: string; preview: string; width: number; height: number; sigma: number }>('denoise_photo', { root, id, onProgress: channel });
   },
-  /** Edit foto › Lens Corrections: camera, lens, focal length and aperture from the photo's EXIF. */
+  /** Edit foto › Lens Corrections (and the line under the histogram): camera, lens, focal length, aperture, ISO and shutter (seconds) from the photo's EXIF. */
   lensInfo: (root: string, id: number) =>
-    invoke<{ make: string | null; model: string | null; lens: string | null; focal: number | null; aperture: number | null; focal35: number | null }>('lens_info', { root, id }),
+    invoke<{ make: string | null; model: string | null; lens: string | null; focal: number | null; aperture: number | null; focal35: number | null; iso: number | null; exposure: number | null }>('lens_info', { root, id }),
   /** Edit foto › Lens Blur: the photo's depth — width, height (u32 LE), then a nearness byte per pixel. */
   depthMap: (root: string, id: number) => invoke<ArrayBuffer>('depth_map', { root, id }),
   /** Edit foto › Super Resolution: a JPG this app just exported, rewritten at twice the width and height. */

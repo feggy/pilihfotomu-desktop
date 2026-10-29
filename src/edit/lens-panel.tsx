@@ -78,7 +78,7 @@ export function LensPanel({
   /** Setup › Custom: a lens chosen from the lists. */
   const choose = async (picked: LfLens) => {
     const info = await shotLens(root, photoId).catch(() => null);
-    const l = correctionFor(picked, info ?? { make: null, model: null, lens: null, focal: null, aperture: null, focal35: null }, {
+    const l = correctionFor(picked, info ?? { make: null, model: null, lens: null, focal: null, aperture: null, focal35: null, iso: null, exposure: null }, {
       profile: true,
       ca: lens?.ca ?? false,
       distortion: lens?.distortion ?? 100,

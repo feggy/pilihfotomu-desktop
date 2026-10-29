@@ -132,7 +132,7 @@ export async function installMock() {
           return { ...session, photos: session.photos.map((p) => ({ ...p, faces: p.faces?.map((f) => ({ ...f })) })) };
         }
         case 'lens_info':
-          return { make: 'SONY', model: 'ILCE-7C', lens: 'E 28-75mm F2.8 A063', focal: 28, aperture: 2.8, focal35: 28 };
+          return { make: 'SONY', model: 'ILCE-7C', lens: 'E 28-75mm F2.8 A063', focal: 28, aperture: 2.8, focal35: 28, iso: 400, exposure: 1 / 200 };
         case 'face_landmarks':
           return [];
         case 'denoise_photo':

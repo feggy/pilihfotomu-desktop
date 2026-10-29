@@ -252,6 +252,10 @@ pub struct LensInfo {
     pub aperture: Option<f64>,
     /// The same field of view on full frame: with `focal`, the sensor's crop factor.
     pub focal35: Option<f64>,
+    /// Shown under Edit foto's histogram, as Lightroom does.
+    pub iso: Option<f64>,
+    /// Seconds.
+    pub exposure: Option<f64>,
 }
 
 /// `LensInfo` from a photo's bytes (a JPEG, a TIFF-based RAW, or a CR3).
@@ -296,6 +300,8 @@ pub fn lens_info(data: &[u8]) -> LensInfo {
         focal: number(Tag::FocalLength),
         aperture: number(Tag::FNumber),
         focal35: number(Tag::FocalLengthIn35mmFilm),
+        iso: number(Tag::PhotographicSensitivity),
+        exposure: number(Tag::ExposureTime),
     }
 }
 

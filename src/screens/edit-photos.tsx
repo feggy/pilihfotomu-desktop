@@ -649,7 +649,7 @@ function Editor({ back, ids, start }: { back: Screen; ids?: number[]; start?: nu
             />
           ) : (
           <>
-          <HistogramView h={hist} />
+          <HistogramView h={hist} root={root} photoId={photo?.id} />
           <span className="truncate pt-1 text-[11px] text-faint">{photo?.camera ?? ''}</span>
           {/* Lightroom's tool strip: icons in a row, the one open lit. */}
           <div className="my-3 flex items-center justify-around border-y border-line-soft py-1.5">

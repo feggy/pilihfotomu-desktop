@@ -20,6 +20,7 @@ import { drawAdjustOverlays } from '../kreasi/engine/render';
 import { loadLocalImage } from '../kreasi/kit';
 import { EYEDROPPER } from './cursors';
 import { depthOf, type DepthMap } from './lens-blur';
+import { shotLens, type ShotLens } from './lens-profile';
 import { cleanedImage, prepared } from './source';
 import { NO_GEOMETRY, coverScale, cropFromView, cropToView, drawGeometry, frameSize, outputSize, type EditSettings, type Geometry } from './geometry';
 
@@ -866,27 +867,50 @@ function histogramOf(c: HTMLCanvasElement): Histogram | null {
   return bins;
 }
 
-/**
- * The histogram drawn as three overlapping channels: added up like light on
- * the dark theme's ground (screen), laid over like ink on the light one
- * (multiply), so the overlap reads in both.
- */
-const BLEND = 'mix-blend-screen in-data-[theme=light]:mix-blend-multiply';
+/** "1/200 sec", or "1.3 sec" for a long one, as Lightroom writes it. */
+function shutter(s: number) {
+  return s >= 0.5 ? `${Number(s.toFixed(1))} sec` : `1/${Math.round(1 / s)} sec`;
+}
 
-export function HistogramView({ h }: { h: Histogram | null }) {
+/**
+ * The histogram as Lightroom shows it: on its own dark ground in both
+ * themes, the three channels added up like light (where all three meet it
+ * turns grey-white), and the shot's ISO, focal length, aperture and shutter
+ * underneath.
+ */
+export function HistogramView({ h, root, photoId }: { h: Histogram | null; root?: string; photoId?: number }) {
   const W = 256;
   const H = 64;
+  const [shot, setShot] = useState<ShotLens | null>(null);
+  useEffect(() => {
+    setShot(null);
+    if (root == null || photoId == null) return;
+    let alive = true;
+    shotLens(root, photoId).then((s) => alive && setShot(s), () => {});
+    return () => void (alive = false);
+  }, [root, photoId]);
   const path = (b: Float32Array) =>
-    `M0,${H} ` + Array.from(b, (v, i) => `L${((i / 63) * W).toFixed(1)},${(H - v * H).toFixed(1)}`).join(' ') + ` L${W},${H} Z`;
+    `M0,${H} ` + Array.from(b, (v, i) => `L${((i / 63) * W).toFixed(1)},${(H - v * H * 0.94).toFixed(1)}`).join(' ') + ` L${W},${H} Z`;
+  const facts = shot && [
+    shot.iso ? `ISO ${Math.round(shot.iso)}` : '',
+    shot.focal ? `${Number(shot.focal.toFixed(1))} mm` : '',
+    shot.aperture ? `f / ${Number(shot.aperture.toFixed(1))}` : '',
+    shot.exposure ? shutter(shot.exposure) : '',
+  ];
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="block h-16 w-full shrink-0 rounded-md bg-bg">
-      {h && (
-        <g className="isolate">
-          <path d={path(h[0])} fill="rgb(229 72 77 / 0.55)" className={BLEND} />
-          <path d={path(h[1])} fill="rgb(70 167 88 / 0.55)" className={BLEND} />
-          <path d={path(h[2])} fill="rgb(62 99 221 / 0.55)" className={BLEND} />
-        </g>
-      )}
-    </svg>
+    <div className="flex shrink-0 flex-col overflow-hidden rounded-md border border-[#2a3530] bg-[#161d1a]">
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="block h-[84px] w-full bg-[#0c110f]">
+        {h && (
+          <g className="isolate">
+            <path d={path(h[0])} fill="rgb(205 70 72)" className="mix-blend-screen" />
+            <path d={path(h[1])} fill="rgb(70 172 92)" className="mix-blend-screen" />
+            <path d={path(h[2])} fill="rgb(72 108 226)" className="mix-blend-screen" />
+          </g>
+        )}
+      </svg>
+      <span className="flex h-6 items-center justify-between px-2 text-[10px] text-[#a9b5af] tabular-nums">
+        {facts?.some(Boolean) ? facts.map((f, i) => <span key={i}>{f}</span>) : <span>&nbsp;</span>}
+      </span>
+    </div>
   );
 }
