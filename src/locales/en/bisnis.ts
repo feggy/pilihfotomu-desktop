@@ -446,4 +446,7 @@ export default {
   'Tidak ada yang cocok dengan "{q}".': 'Nothing matches "{q}".',
   'Hasil dikirim, berapa hari setelah sesi foto': 'Photos delivered, days after the shoot',
   'Mengisi "Hasil dikirim paling lambat" di booking baru dari sesi terakhirnya; tetap bisa diubah per booking. 0: dikosongkan.': 'Fills “Deliver photos by” on new bookings from their last session; still changeable per booking. 0: left empty.',
+  'Tim yang bisa bertugas bersamaan': 'Teams that can shoot at once',
+  'Fotografer atau tim. Jadwal baru ditandai bentrok bila waktunya bertumpuk dengan sebanyak ini jadwal lain.': 'Photographers or teams. A session is marked as a clash when it overlaps this many other sessions.',
+  'tim': 'teams',
 } as Record<string, string | [string, string]>;

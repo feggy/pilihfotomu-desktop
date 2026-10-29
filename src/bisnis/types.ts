@@ -154,6 +154,8 @@ export interface BisnisSettings {
   /** Reminders: the day before a shoot; payment due within this many days; delivery due. */
   remindShoot: boolean;
   remindDueDays: number;
+  /** Sessions the studio can shoot at once (photographers or teams): a clash only beyond that. */
+  teams: number;
   /** "Hasil dikirim paling lambat" of a new booking: this many days after its last session (0: left empty). */
   deliveryDays: number;
   remindDelivery: boolean;

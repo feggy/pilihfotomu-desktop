@@ -155,6 +155,7 @@ export function emptyData(): BisnisData {
       remindShoot: true,
       remindDueDays: 3,
       deliveryDays: 14,
+      teams: 1,
       remindDelivery: true,
       backupDir: null,
       lastBackup: null,
@@ -318,6 +319,8 @@ export function clashesOf(data: BisnisData, booking: Pick<Booking, 'id'>, sessio
       if (parseLocal(s.start).getTime() < a1 && parseLocal(s.end).getTime() > a0) out.push({ kind: 'booking', booking: b, session: s });
     }
   }
+  // With more than one team, as many sessions at once are fine: a clash only once they are all taken.
+  if (out.length < Math.max(1, data.settings.teams)) out.length = 0;
   const from = session.start.split('T')[0]!;
   const to = session.end.split('T')[0]!;
   for (const d of data.blocked) if (d.date >= from && d.date <= to) out.push({ kind: 'blocked', note: d.note, day: d.date });

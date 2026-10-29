@@ -134,6 +134,9 @@ export function Settings({ sections }: { sections?: ReactNode }) {
 
         <section className="flex flex-col gap-3">
           <SectionTitle>{t('Jadwal')}</SectionTitle>
+          <Field label={t('Tim yang bisa bertugas bersamaan')} hint={t('Fotografer atau tim. Jadwal baru ditandai bentrok bila waktunya bertumpuk dengan sebanyak ini jadwal lain.')} className="max-w-60">
+            <NumberInput live value={draft.settings.teams} onCommit={(teams) => setSettings({ teams })} min={1} max={50} unit={t('tim')} />
+          </Field>
           <Field label={t('Jeda antar jadwal')} hint={t('Waktu perjalanan dan persiapan. Dua jadwal yang lebih dekat dari ini ditandai bentrok.')} className="max-w-60">
             <NumberInput live value={draft.settings.bufferMin} onCommit={(bufferMin) => setSettings({ bufferMin })} max={600} unit={t('menit')} />
           </Field>
