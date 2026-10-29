@@ -132,6 +132,8 @@ export interface BisnisSettings {
   terms: string;
   /** Bank account(s) and the like, for invoices and messages ({rekening}). */
   paymentInfo: string;
+  /** Address, phone, Instagram: under the studio's name on invoices. */
+  studioContact: string;
   /** Reminders: the day before a shoot; payment due within this many days; delivery due. */
   remindShoot: boolean;
   remindDueDays: number;

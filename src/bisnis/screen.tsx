@@ -3,7 +3,7 @@
  * calendar, packages and the rest — tabs over one set of data, kept offline.
  */
 
-import { ArrowLeft, CalendarDays, KanbanSquare, Package as PackageIcon, Plus, Settings2, TriangleAlert } from 'lucide-react';
+import { ArrowLeft, CalendarDays, FileText, KanbanSquare, Package as PackageIcon, Plus, Settings2, TriangleAlert } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 
 import { TitleBar } from '../components/title-bar';
@@ -11,8 +11,9 @@ import { cx } from '../components/ui';
 import { t } from '../lib/i18n';
 import { useApp } from '../store';
 import { Board } from './board';
-import { BookingEditor, newBooking } from './booking-editor';
+import { BookingEditor, newBooking, type BookingAction } from './booking-editor';
 import { Calendar } from './calendar';
+import { InvoiceDialog } from './invoice-dialog';
 import { Packages } from './packages';
 import { Settings } from './settings';
 import { useBisnis } from './store';
@@ -33,6 +34,8 @@ export function BisnisScreen() {
   const { data, error, load } = useBisnis();
   const [tab, setTab] = useState<BisnisTab>('board');
   const [editing, setEditing] = useState<Booking | null>(null);
+  const [invoice, setInvoice] = useState<string | null>(null);
+  const actions: BookingAction[] = [{ key: 'invoice', label: t('Invoice'), icon: <FileText size={13} />, run: setInvoice }];
   useEffect(() => {
     load();
   }, [load]);
@@ -79,7 +82,8 @@ export function BisnisScreen() {
         </p>
       )}
       {body}
-      {editing && <BookingEditor key={editing.id} initial={editing} onClose={() => setEditing(null)} />}
+      {editing && <BookingEditor key={editing.id} initial={editing} onClose={() => setEditing(null)} actions={actions} />}
+      {invoice && <InvoiceDialog bookingId={invoice} onClose={() => setInvoice(null)} />}
     </div>
   );
 }

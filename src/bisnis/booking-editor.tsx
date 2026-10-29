@@ -4,14 +4,14 @@
  * Edits stay here until Simpan.
  */
 
-import { AlertTriangle, CalendarPlus, Plus, Trash2, X } from 'lucide-react';
+import { AlertTriangle, CalendarPlus, Plus, Trash2, Wallet, X } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 
 import { cx } from '../components/ui';
 import { t } from '../lib/i18n';
-import { clashesOf, localString, newId, parseLocal, rupiah, shortDate, timeOf, titleOf, today, totalOf } from './model';
+import { PAY_COLOR, PAY_LABEL, balanceOf, clashesOf, localString, newId, paidOf, parseLocal, payState, rupiah, shortDate, timeOf, titleOf, today, totalOf } from './model';
 import { useBisnis } from './store';
-import type { BisnisData, Booking, Client, Session } from './types';
+import type { BisnisData, Booking, Client, Payment, Session } from './types';
 import { Dialog, Field, MoneyInput, SectionTitle, btnPlain, btnPrimary, inputCls } from './ui';
 
 /** A new booking in column `columnId`, its first session on `day` if given. */
@@ -44,7 +44,15 @@ const sessionOn = (day: string, minutes: number, label = ''): Session => {
   return { id: newId(), label, start: localString(start), end: localString(new Date(start.getTime() + minutes * 60_000)), location: '' };
 };
 
-export function BookingEditor({ initial, onClose, extra }: { initial: Booking; onClose: () => void; extra?: (b: Booking) => ReactNode }) {
+/** Something done with a booking from its form (an invoice, a message): the booking is saved first, the form closed. */
+export interface BookingAction {
+  key: string;
+  label: string;
+  icon: ReactNode;
+  run: (bookingId: string) => void;
+}
+
+export function BookingEditor({ initial, onClose, actions = [] }: { initial: Booking; onClose: () => void; actions?: BookingAction[] }) {
   const data = useBisnis((s) => s.data)!;
   const update = useBisnis((s) => s.update);
   const isNew = !data.bookings.some((b) => b.id === initial.id);
@@ -63,21 +71,22 @@ export function BookingEditor({ initial, onClose, extra }: { initial: Booking; o
     return data.clients.filter((c) => c.name.toLowerCase().includes(q) || c.phone.replace(/\D/g, '').includes(q.replace(/\D/g, '') || '§')).slice(0, 5);
   }, [client, data.clients]);
 
+  const canSave = !!client.name.trim() || !!b.title.trim();
   const save = () => {
     const now = Date.now();
+    const clientId = client.id || (client.name.trim() ? newId() : '');
     update((d) => {
       // The client: the one picked (its details as edited here), or a new one.
-      let clients = d.clients;
-      let clientId = client.id;
-      if (client.name.trim()) {
-        if (clientId) clients = clients.map((c) => (c.id === clientId ? { ...c, name: client.name.trim(), phone: client.phone.trim(), email: client.email.trim() } : c));
-        else {
-          clientId = newId();
-          clients = [...clients, { id: clientId, name: client.name.trim(), phone: client.phone.trim(), email: client.email.trim(), notes: '', createdAt: now }];
-        }
-      }
-      const saved: Booking = { ...b, clientId, updatedAt: now, sessions: [...b.sessions].sort((x, y) => x.start.localeCompare(y.start)) };
-      return { ...d, clients, bookings: isNew ? [...d.bookings, saved] : d.bookings.map((x) => (x.id === b.id ? saved : x)) };
+      const fields = { name: client.name.trim(), phone: client.phone.trim(), email: client.email.trim() };
+      const clients = !client.name.trim()
+        ? d.clients
+        : client.id
+          ? d.clients.map((c) => (c.id === clientId ? { ...c, ...fields } : c))
+          : [...d.clients, { id: clientId, ...fields, notes: '', createdAt: now }];
+      // A number given meanwhile (by an invoice) stays.
+      const stored = d.bookings.find((x) => x.id === b.id);
+      const saved: Booking = { ...b, clientId, invoiceNo: b.invoiceNo || stored?.invoiceNo || '', updatedAt: now, sessions: [...b.sessions].sort((x, y) => x.start.localeCompare(y.start)) };
+      return { ...d, clients, bookings: stored ? d.bookings.map((x) => (x.id === b.id ? saved : x)) : [...d.bookings, saved] };
     });
     onClose();
   };
@@ -113,16 +122,24 @@ export function BookingEditor({ initial, onClose, extra }: { initial: Booking; o
                 <Trash2 size={14} /> {t('Hapus')}
               </button>
             ))}
-          {extra?.({ ...b, clientId: client.id })}
           <button type="button" onClick={onClose} className={btnPlain}>
             {t('Batal')}
           </button>
-          <button type="button" onClick={save} disabled={!client.name.trim() && !b.title.trim()} className={btnPrimary}>
+          <button type="button" onClick={save} disabled={!canSave} className={btnPrimary}>
             {t('Simpan')}
           </button>
         </>
       }
     >
+      {actions.length > 0 && (
+        <div className="-mt-1 flex flex-wrap gap-2">
+          {actions.map((a) => (
+            <button key={a.key} type="button" disabled={!canSave} onClick={() => (save(), a.run(b.id))} className="flex h-8 items-center gap-1.5 rounded-lg border border-line bg-panel-2 px-3 text-xs font-medium text-fg hover:border-gold disabled:opacity-40">
+              {a.icon} {a.label}
+            </button>
+          ))}
+        </div>
+      )}
       <section className="flex flex-col gap-3">
         <SectionTitle
           action={
@@ -219,6 +236,8 @@ export function BookingEditor({ initial, onClose, extra }: { initial: Booking; o
           <span className="px-2.5 text-[15px] font-semibold tabular-nums">{rupiah(totalOf(b))}</span>
         </div>
       </section>
+
+      <Payments booking={b} onChange={(payments) => set({ payments })} />
 
       <section className="flex flex-col gap-3">
         <SectionTitle
@@ -333,5 +352,65 @@ function SessionRow({
         </span>
       ))}
     </div>
+  );
+}
+
+const METHODS = ['Transfer', 'Tunai', 'QRIS', 'E-wallet'];
+
+/** What has been paid (DP, instalments, the rest), and what is left. */
+function Payments({ booking: b, onChange }: { booking: Booking; onChange: (p: Payment[]) => void }) {
+  const total = totalOf(b);
+  const paid = paidOf(b);
+  const state = payState(b);
+  const set = (id: string, patch: Partial<Payment>) => onChange(b.payments.map((p) => (p.id === id ? { ...p, ...patch } : p)));
+  return (
+    <section className="flex flex-col gap-3">
+      <SectionTitle
+        action={
+          <button
+            type="button"
+            onClick={() => onChange([...b.payments, { id: newId(), date: today(), amount: balanceOf(b), method: 'Transfer', note: b.payments.length ? '' : 'DP' }])}
+            className="flex items-center gap-1 text-[11px] font-medium text-gold-text hover:underline"
+          >
+            <Wallet size={12} /> {t('Catat pembayaran')}
+          </button>
+        }
+      >
+        {t('Pembayaran')}
+      </SectionTitle>
+      {b.payments.map((p) => (
+        <div key={p.id} className="grid grid-cols-[140px_170px_120px_1fr_auto] items-center gap-2">
+          <input type="date" value={p.date} onChange={(e) => set(p.id, { date: e.target.value })} className={inputCls} />
+          <MoneyInput value={p.amount} onChange={(amount) => set(p.id, { amount })} />
+          <select value={METHODS.includes(p.method) ? p.method : ''} onChange={(e) => set(p.id, { method: e.target.value })} className={inputCls}>
+            {METHODS.map((m) => (
+              <option key={m} value={m}>
+                {t(m)}
+              </option>
+            ))}
+            <option value="">{t('Lainnya')}</option>
+          </select>
+          <input value={p.note} onChange={(e) => set(p.id, { note: e.target.value })} placeholder={t('Keterangan (mis. DP, pelunasan)')} className={inputCls} />
+          <button type="button" onClick={() => onChange(b.payments.filter((x) => x.id !== p.id))} aria-label={t('Hapus')} className="text-faint hover:text-reject">
+            <X size={15} />
+          </button>
+        </div>
+      ))}
+      <div className="flex items-center gap-4 rounded-xl bg-bg px-4 py-2.5 text-xs">
+        <span className="flex items-center gap-1.5 font-semibold" style={{ color: PAY_COLOR[state] }}>
+          <span className="size-2 rounded-full" style={{ background: PAY_COLOR[state] }} />
+          {t(PAY_LABEL[state])}
+        </span>
+        <span className="text-muted">
+          {t('Total')} <b className="text-fg tabular-nums">{rupiah(total)}</b>
+        </span>
+        <span className="text-muted">
+          {t('Terbayar')} <b className="text-fg tabular-nums">{rupiah(paid)}</b>
+        </span>
+        <span className="ml-auto text-muted">
+          {t('Sisa')} <b className={cx('tabular-nums', balanceOf(b) > 0 ? 'text-reject' : 'text-pick')}>{rupiah(balanceOf(b))}</b>
+        </span>
+      </div>
+    </section>
   );
 }

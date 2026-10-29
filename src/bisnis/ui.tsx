@@ -46,6 +46,13 @@ export function LazyInput({ value, onCommit, className, placeholder }: { value: 
   );
 }
 
+/** A longer text that saves when it loses focus. */
+export function TextArea({ value, onCommit, rows = 3, placeholder }: { value: string; onCommit: (v: string) => void; rows?: number; placeholder?: string }) {
+  const [v, setV] = useState(value);
+  useEffect(() => setV(value), [value]);
+  return <textarea value={v} rows={rows} placeholder={placeholder} onChange={(e) => setV(e.target.value)} onBlur={() => v !== value && onCommit(v)} className={cx(inputCls, 'h-auto resize-y py-2')} />;
+}
+
 export function Dialog({ title, onClose, children, footer, width = 560 }: { title: ReactNode; onClose: () => void; children: ReactNode; footer?: ReactNode; width?: number }) {
   useEffect(() => {
     const key = (e: KeyboardEvent) => e.key === 'Escape' && onClose();

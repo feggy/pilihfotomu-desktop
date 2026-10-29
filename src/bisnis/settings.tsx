@@ -9,10 +9,10 @@ import type { ReactNode } from 'react';
 
 import { Switch, cx } from '../components/ui';
 import { t } from '../lib/i18n';
-import { newId, shortDate } from './model';
+import { newId, shortDate, today } from './model';
 import { useBisnis } from './store';
-import type { Column } from './types';
-import { Field, LazyInput, SectionTitle, btnGhost, inputCls } from './ui';
+import type { BisnisSettings, Column } from './types';
+import { Field, LazyInput, SectionTitle, TextArea, btnGhost, inputCls } from './ui';
 
 const COLORS = ['#8a9a93', '#c9a96e', '#5b9bd5', '#a77bca', '#e0904a', '#5fb87a', '#c96a6a', '#4fb3b3'];
 
@@ -35,6 +35,7 @@ export function Settings({ sections }: { sections?: ReactNode }) {
       return { ...d, columns: cols, bookings: d.bookings.map((b) => (b.columnId === id ? { ...b, columnId: to } : b)) };
     });
   const [newDay, newNote] = ['bisnis-new-day', 'bisnis-new-note'];
+  const setSettings = (patch: Partial<BisnisSettings>) => update((d) => ({ ...d, settings: { ...d.settings, ...patch } }));
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 pt-4 pb-10 lg:px-8">
@@ -128,6 +129,26 @@ export function Settings({ sections }: { sections?: ReactNode }) {
               </button>
             </div>
           ))}
+        </section>
+        <section className="flex flex-col gap-3">
+          <SectionTitle>{t('Invoice & pembayaran')}</SectionTitle>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label={t('Awalan nomor invoice')} hint={t('Nomor berikutnya: {no}', { no: `${data.settings.invoicePrefix || 'INV'}-${today().slice(0, 4)}${today().slice(5, 7)}-${String(data.settings.nextInvoice).padStart(3, '0')}` })}>
+              <LazyInput value={data.settings.invoicePrefix} onCommit={(invoicePrefix) => setSettings({ invoicePrefix: invoicePrefix.trim().toUpperCase() })} />
+            </Field>
+            <Field label={t('Urutan berikutnya')}>
+              <input type="number" min={1} value={data.settings.nextInvoice} onChange={(e) => setSettings({ nextInvoice: Math.max(1, Number(e.target.value) || 1) })} className={inputCls} />
+            </Field>
+          </div>
+          <Field label={t('Kontak studio (di bawah nama studio pada invoice)')}>
+            <TextArea value={data.settings.studioContact} onCommit={(studioContact) => setSettings({ studioContact })} rows={3} placeholder={t('Alamat\n0812-xxxx-xxxx · @namastudio')} />
+          </Field>
+          <Field label={t('Rekening pembayaran')} hint={t('Muncul di invoice dan pesan WhatsApp ({rekening}).')}>
+            <TextArea value={data.settings.paymentInfo} onCommit={(paymentInfo) => setSettings({ paymentInfo })} rows={3} placeholder={t('BCA 1234567890 a.n. Nama Studio')} />
+          </Field>
+          <Field label={t('Syarat & ketentuan')}>
+            <TextArea value={data.settings.terms} onCommit={(terms) => setSettings({ terms })} rows={4} />
+          </Field>
         </section>
         {sections}
       </div>

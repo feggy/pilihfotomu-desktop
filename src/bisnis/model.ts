@@ -66,6 +66,7 @@ export function emptyData(): BisnisData {
       nextInvoice: 1,
       terms: 'DP tidak dapat dikembalikan bila acara dibatalkan oleh klien.\nJadwal dapat diundur satu kali tanpa biaya bila dikabarkan paling lambat 14 hari sebelumnya.',
       paymentInfo: '',
+      studioContact: '',
       remindShoot: true,
       remindDueDays: 3,
       remindDelivery: true,
