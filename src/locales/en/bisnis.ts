@@ -418,10 +418,11 @@ export default {
   'Google Drive atau lainnya, untuk pesan tahap Pilih & edit.': 'Google Drive or similar, for the Pilih & edit stage message.',
   'Untuk pesan tahap Kirim hasil.': 'For the Kirim hasil stage message.',
   'Link foto': 'Photo links',
-  'Untuk dipilih': 'To pick from',
-  'Hasil edit': 'Edited',
   'Buka di browser': 'Open in browser',
   'Disimpan ke booking ini.': 'Saved to this booking.',
   'Link pilih foto': 'Photo pick link',
   'Disimpan ke Pengaturan, dipakai di semua pesan dan invoice.': 'Saved to Settings, used in every message and invoice.',
+  'Simpan link': 'Save link',
+  'Tambah {label}': 'Add {label}',
+  'Ubah link': 'Change link',
 } as Record<string, string | [string, string]>;

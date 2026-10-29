@@ -18,7 +18,7 @@ import { PAY_COLOR, PAY_LABEL, balanceOf, clashesOf, clientOf, newId, paidOf, pa
 import { nextColumn } from './overview';
 import { googleCalendarLink } from './reminders';
 import { useBisnis } from './store';
-import { MoneyInput, btnPrimary, inputCls } from './ui';
+import { MoneyInput, PLAIN, btnPrimary, inputCls } from './ui';
 
 const METHODS = ['Transfer', 'Tunai', 'QRIS', 'E-wallet'];
 
@@ -221,24 +221,10 @@ export function BookingDetail({
             {b.deliveryDate && <span className="text-xs text-muted">{t('Hasil dikirim paling lambat {d}', { d: shortDate(b.deliveryDate) })}</span>}
           </Block>
 
-          {(b.pickLink?.trim() || b.resultLink?.trim()) && (
-            <Block title={t('Link foto')}>
-              {[
-                [t('Untuk dipilih'), b.pickLink?.trim()],
-                [t('Hasil edit'), b.resultLink?.trim()],
-              ].map(([label, url]) =>
-                url && /^https?:\/\//i.test(url) ? (
-                  <button key={label} type="button" onClick={() => openUrl(url).catch(() => {})} title={t('Buka di browser')} className="group flex items-center gap-3 rounded-lg bg-raised px-3 py-2 text-left hover:ring-1 hover:ring-line">
-                    <Link2 size={13} className="shrink-0 text-faint" />
-                    <span className="flex min-w-0 flex-1 flex-col">
-                      <span className="text-[11px] text-faint">{label}</span>
-                      <span className="truncate text-xs text-gold-text group-hover:underline">{url}</span>
-                    </span>
-                  </button>
-                ) : null,
-              )}
-            </Block>
-          )}
+          <Block title={t('Link foto')}>
+            <LinkRow label={t('Link foto untuk dipilih')} value={b.pickLink?.trim() ?? ''} onSave={(pickLink) => update((d) => ({ ...d, bookings: d.bookings.map((x) => (x.id === b.id ? { ...x, pickLink } : x)) }))} />
+            <LinkRow label={t('Link hasil edit')} value={b.resultLink?.trim() ?? ''} onSave={(resultLink) => update((d) => ({ ...d, bookings: d.bookings.map((x) => (x.id === b.id ? { ...x, resultLink } : x)) }))} />
+          </Block>
 
           {b.notes.trim() && (
             <Block title={t('Catatan')}>
@@ -253,6 +239,57 @@ export function BookingDetail({
           </button>
         </footer>
       </aside>
+    </div>
+  );
+}
+
+/** A Drive link: opened with a click, changed in place (Simpan or Enter keeps it); empty, a line to add it. */
+function LinkRow({ label, value, onSave }: { label: string; value: string; onSave: (v: string) => void }) {
+  const [draft, setDraft] = useState<string | null>(null);
+  if (draft !== null) {
+    const save = () => (onSave(draft.trim()), setDraft(null));
+    return (
+      <div className="flex flex-col gap-2 rounded-lg border border-gold/40 bg-bg p-2.5">
+        <span className="text-[11px] text-faint">{label}</span>
+        <input
+          {...PLAIN}
+          autoFocus
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => (e.key === 'Enter' ? save() : e.key === 'Escape' && (e.stopPropagation(), setDraft(null)))}
+          placeholder="https://drive.google.com/…"
+          className={inputCls}
+        />
+        <span className="flex justify-end gap-2">
+          <button type="button" onClick={() => setDraft(null)} className="h-8 px-3 text-xs text-muted hover:text-fg">
+            {t('Batal')}
+          </button>
+          <button type="button" onClick={save} disabled={draft.trim() === value} className={cx(btnPrimary, 'h-8 px-3 text-xs')}>
+            {t('Simpan link')}
+          </button>
+        </span>
+      </div>
+    );
+  }
+  if (!value)
+    return (
+      <button type="button" onClick={() => setDraft('')} className="flex items-center gap-1 self-start text-xs font-medium text-gold-text hover:underline">
+        <Plus size={12} /> {t('Tambah {label}', { label: label.toLowerCase() })}
+      </button>
+    );
+  const web = /^https?:\/\//i.test(value);
+  return (
+    <div className="group flex items-center gap-1 rounded-lg bg-raised pr-1 hover:ring-1 hover:ring-line">
+      <button type="button" disabled={!web} onClick={() => openUrl(value).catch(() => {})} title={web ? t('Buka di browser') : undefined} className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2 text-left">
+        <Link2 size={13} className="shrink-0 text-faint" />
+        <span className="flex min-w-0 flex-col">
+          <span className="text-[11px] text-faint">{label}</span>
+          <span className={cx('truncate text-xs', web ? 'text-gold-text group-hover:underline' : 'text-muted')}>{value}</span>
+        </span>
+      </button>
+      <button type="button" onClick={() => setDraft(value)} title={t('Ubah link')} className="shrink-0 rounded-md p-1.5 text-faint hover:bg-panel hover:text-fg">
+        <Pencil size={13} />
+      </button>
     </div>
   );
 }
