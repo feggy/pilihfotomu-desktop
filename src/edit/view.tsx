@@ -849,10 +849,11 @@ function CropBox({
   );
 }
 
-/** A curved double arrow: turning the photo (outside the crop). */
+/** Lightroom's turning cursor (outside the crop): one quarter arc with a solid arrowhead at each end, black edged in white. */
+const ROTATE_ARC = '<path d="M6 16.5A11 11 0 0 1 16.5 6" fill="none" stroke-width="2"/><path d="M2.5 15h7l-3.5 5z M15 2.5v7l5-3.5z"/>';
 const ROTATE_CURSOR = `url("data:image/svg+xml,${encodeURIComponent(
-  '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M5 12a7 7 0 0 1 12-5" fill="none" stroke="white" stroke-width="4"/><path d="M5 12a7 7 0 0 1 12-5" fill="none" stroke="black" stroke-width="2"/><path d="M17 3v4h-4" fill="none" stroke="black" stroke-width="2"/><path d="M19 12a7 7 0 0 1-12 5" fill="none" stroke="white" stroke-width="4"/><path d="M19 12a7 7 0 0 1-12 5" fill="none" stroke="black" stroke-width="2"/><path d="M7 21v-4h4" fill="none" stroke="black" stroke-width="2"/></svg>',
-)}") 12 12, alias`;
+  `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><g stroke="white" stroke-width="3" stroke-linejoin="round" fill="white">${ROTATE_ARC.replace('stroke-width="2"', 'stroke-width="4"')}</g><g stroke="black" fill="black" stroke-linejoin="round">${ROTATE_ARC}</g></svg>`,
+)}") 11 11, alias`;
 
 function histogramOf(c: HTMLCanvasElement): Histogram | null {
   const s = document.createElement('canvas');
