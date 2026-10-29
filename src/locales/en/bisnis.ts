@@ -437,4 +437,11 @@ export default {
   'Paket dihapus': 'Package deleted',
   'Add-on dihapus': 'Add-on deleted',
   'Template dihapus': 'Template deleted',
+
+  // Search
+  'Cari booking atau klien (⌘K)': 'Search bookings or clients (⌘K)',
+  'Cari': 'Search',
+  'Cari klien, paket, lokasi, nomor invoice…': 'Search clients, packages, places, invoice numbers…',
+  'Baru dibuka atau diubah': 'Recently changed',
+  'Tidak ada yang cocok dengan "{q}".': 'Nothing matches "{q}".',
 } as Record<string, string | [string, string]>;

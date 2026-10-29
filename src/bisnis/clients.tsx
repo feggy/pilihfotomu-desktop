@@ -15,10 +15,21 @@ import type { Booking, Client } from './types';
 import { Dialog, Empty, Field, PLAIN, btnGhost, btnPlain, btnPrimary, inputCls } from './ui';
 import { undoable } from './undo';
 
-export function Clients({ onOpen, onNew, onMessage }: { onOpen: (b: Booking) => void; onNew: (clientId: string) => void; onMessage: (client: Client, bookingId: string | null) => void }) {
+export function Clients({
+  startClient = null,
+  onOpen,
+  onNew,
+  onMessage,
+}: {
+  /** Shown first (one picked in Cari). */
+  startClient?: string | null;
+  onOpen: (b: Booking) => void;
+  onNew: (clientId: string) => void;
+  onMessage: (client: Client, bookingId: string | null) => void;
+}) {
   const data = useBisnis((s) => s.data)!;
   const [q, setQ] = useState('');
-  const [picked, setPicked] = useState<string | null>(null);
+  const [picked, setPicked] = useState<string | null>(startClient);
   const [editing, setEditing] = useState<Client | null>(null);
   const inactive = useMemo(() => new Set(data.columns.filter((c) => c.inactive).map((c) => c.id)), [data.columns]);
 

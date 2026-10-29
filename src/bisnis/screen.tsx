@@ -26,6 +26,7 @@ import { Overview } from './overview';
 import { Packages } from './packages';
 import { ReceiptDialog } from './receipt-dialog';
 import { ReminderBell } from './reminder-bell';
+import { SearchButton } from './search';
 import { SendDialog } from './send-dialog';
 import { Settings } from './settings';
 import { useBisnis } from './store';
@@ -52,6 +53,8 @@ export function BisnisScreen({ open }: { open?: string }) {
   const go = useApp((s) => s.go);
   const { data, error, load } = useBisnis();
   const [tab, setTab] = useState<BisnisTab>('ringkasan');
+  // A client picked in Cari: their page on Klien.
+  const [openClient, setOpenClient] = useState<string | null>(null);
   // Leaving a tab with changes not saved (Pengaturan, a client, a template) asks first.
   const guard = useUnsaved((s) => s.guard);
   // Booking as a table or as the board: two tools over the same bookings.
@@ -137,6 +140,8 @@ export function BisnisScreen({ open }: { open?: string }) {
     else if (tab === 'klien')
       body = (
         <Clients
+          key={openClient ?? ''}
+          startClient={openClient}
           onOpen={view_}
           onNew={(clientId) => setEditing({ ...newBooking(data, data.columns[0]?.id ?? ''), clientId })}
           onMessage={(c, bookingId) => setMessage({ bookingId, phone: c.phone, name: c.name })}
@@ -169,6 +174,7 @@ export function BisnisScreen({ open }: { open?: string }) {
           ))}
         </nav>
         <span className="ml-auto flex items-center gap-2">
+          {data && <SearchButton onBooking={setViewing} onClient={(id) => guard(() => (setTab('klien'), setOpenClient(id)))} />}
           {data && <ReminderBell onOpen={view_} />}
           {data && (
             <button type="button" onClick={() => setEditing(newBooking(data, data.columns[0]?.id ?? ''))} className={btnPrimary}>
