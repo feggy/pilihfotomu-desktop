@@ -97,6 +97,8 @@ export interface Column {
   color: string;
   /** Cancelled and the like: its bookings take no time on the calendar and owe nothing. */
   inactive?: boolean;
+  /** Finished: its bookings are delivered, no delivery reminder. */
+  done?: boolean;
 }
 
 /** A day off: no bookings expected; one made anyway is warned about. */
@@ -159,4 +161,8 @@ export interface BisnisData {
   templates: MessageTemplate[];
   expenseCategories: string[];
   settings: BisnisSettings;
+  /** Reminders put away by hand (`Reminder.key`). */
+  dismissed: string[];
+  /** Reminders already shown as a system notification, so a restart doesn't repeat them. */
+  notified: string[];
 }

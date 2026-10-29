@@ -17,6 +17,7 @@ import { Clients } from './clients';
 import { InvoiceDialog } from './invoice-dialog';
 import { MessagesTab } from './messages-tab';
 import { Packages } from './packages';
+import { ReminderBell } from './reminder-bell';
 import { SendDialog } from './send-dialog';
 import { Settings } from './settings';
 import { useBisnis } from './store';
@@ -87,6 +88,7 @@ export function BisnisScreen() {
           ))}
         </nav>
         <span className="ml-auto flex items-center gap-2">
+          {data && <ReminderBell onOpen={setEditing} />}
           {data && (
             <button type="button" onClick={() => setEditing(newBooking(data, data.columns[0]?.id ?? ''))} className={btnPrimary}>
               <Plus size={15} /> {t('Booking')}

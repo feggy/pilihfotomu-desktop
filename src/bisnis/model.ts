@@ -14,7 +14,7 @@ export const DEFAULT_COLUMNS: Column[] = [
   { id: 'jadwal', name: 'Jadwal foto', color: '#5b9bd5' },
   { id: 'edit', name: 'Pilih & edit', color: '#a77bca' },
   { id: 'kirim', name: 'Kirim hasil', color: '#e0904a' },
-  { id: 'selesai', name: 'Selesai', color: '#5fb87a' },
+  { id: 'selesai', name: 'Selesai', color: '#5fb87a', done: true },
   { id: 'batal', name: 'Batal', color: '#c96a6a', inactive: true },
 ];
 
@@ -60,6 +60,8 @@ export function emptyData(): BisnisData {
     expenses: [],
     templates: DEFAULT_TEMPLATES,
     expenseCategories: DEFAULT_EXPENSE_CATEGORIES,
+    dismissed: [],
+    notified: [],
     settings: {
       bufferMin: 60,
       invoicePrefix: 'INV',

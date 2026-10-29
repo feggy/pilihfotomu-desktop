@@ -4,12 +4,14 @@
  * Edits stay here until Simpan.
  */
 
+import { openUrl } from '@tauri-apps/plugin-opener';
 import { AlertTriangle, CalendarPlus, Plus, Trash2, Wallet, X } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 
 import { cx } from '../components/ui';
 import { t } from '../lib/i18n';
 import { PAY_COLOR, PAY_LABEL, balanceOf, clashesOf, localString, newId, paidOf, parseLocal, payState, rupiah, shortDate, timeOf, titleOf, today, totalOf } from './model';
+import { googleCalendarLink } from './reminders';
 import { useBisnis } from './store';
 import type { BisnisData, Booking, Client, Payment, Session } from './types';
 import { Dialog, Field, MoneyInput, SectionTitle, btnPlain, btnPrimary, inputCls } from './ui';
@@ -251,7 +253,17 @@ export function BookingEditor({ initial, onClose, actions = [] }: { initial: Boo
         </SectionTitle>
         {b.sessions.length === 0 && <p className="text-xs text-faint">{t('Belum ada jadwal. Tambahkan tanggal dan jam pemotretan.')}</p>}
         {b.sessions.map((s) => (
-          <SessionRow key={s.id} data={data} booking={b} session={s} single={b.sessions.length === 1} onChange={(p) => setSession(s.id, p)} onRemove={() => set({ sessions: b.sessions.filter((x) => x.id !== s.id) })} />
+          <SessionRow
+            key={s.id}
+            data={data}
+            booking={b}
+            session={s}
+            who={client.name.trim() || b.title.trim()}
+            phone={client.phone}
+            single={b.sessions.length === 1}
+            onChange={(p) => setSession(s.id, p)}
+            onRemove={() => set({ sessions: b.sessions.filter((x) => x.id !== s.id) })}
+          />
         ))}
       </section>
 
@@ -284,6 +296,8 @@ function SessionRow({
   data,
   booking,
   session: s,
+  who,
+  phone,
   single,
   onChange,
   onRemove,
@@ -291,6 +305,9 @@ function SessionRow({
   data: BisnisData;
   booking: Booking;
   session: Session;
+  /** The client, for the calendar event's title. */
+  who: string;
+  phone: string;
   single: boolean;
   onChange: (p: Partial<Session>) => void;
   onRemove: () => void;
@@ -337,7 +354,27 @@ function SessionRow({
           <X size={15} />
         </button>
       </div>
-      <input value={s.location} onChange={(e) => onChange({ location: e.target.value })} placeholder={t('Lokasi')} className={inputCls} />
+      <div className="flex gap-2">
+        <input value={s.location} onChange={(e) => onChange({ location: e.target.value })} placeholder={t('Lokasi')} className={inputCls} />
+        <button
+          type="button"
+          onClick={() =>
+            openUrl(
+              googleCalendarLink(
+                [who, s.label || booking.packageName].filter(Boolean).join(' — ') || t('Pemotretan'),
+                s.start,
+                s.end,
+                s.location,
+                [booking.packageName, phone && `WhatsApp: ${phone}`, booking.notes].filter(Boolean).join('\n'),
+              ),
+            ).catch(() => {})
+          }
+          title={t('Tambah ke Google Calendar (dibuka di browser)')}
+          className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-line px-2.5 text-[11px] font-medium whitespace-nowrap text-muted hover:border-gold hover:text-fg"
+        >
+          <CalendarPlus size={13} /> {t('Google Calendar')}
+        </button>
+      </div>
       {clashes.map((c, i) => (
         <span key={i} className="flex items-start gap-1.5 text-[11px] text-maybe">
           <AlertTriangle size={13} className="mt-px shrink-0" />

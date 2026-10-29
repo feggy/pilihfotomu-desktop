@@ -5,6 +5,7 @@ import { TriangleAlert, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { BisnisScreen } from './bisnis/screen';
+import { useReminderWatch } from './bisnis/reminder-watch';
 import { flushBisnis } from './bisnis/store';
 import { saveNow } from './kreasi/autosave';
 import { KreasiScreen } from './kreasi/screen';
@@ -41,6 +42,8 @@ function undoRedo(which: 'undo' | 'redo') {
 }
 
 export function App() {
+  // Kelola Bisnis's reminders as notifications, whatever screen is open.
+  useReminderWatch();
   const screen = useApp((s) => s.screen);
   const session = useApp((s) => s.session);
   const [dragging, setDragging] = useState(false);
