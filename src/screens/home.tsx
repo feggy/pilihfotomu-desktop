@@ -84,19 +84,18 @@ function ModeCard({ art, icon: Icon, title, sub, onClick, highlight, extra }: { 
           <span className="flex size-8 items-center justify-center rounded-[9px] bg-raised text-gold-text">
             <Icon size={16} />
           </span>
-          <span className="text-[18px] font-semibold">{title}</span>
-          <span className="ml-auto flex size-8 items-center justify-center rounded-full bg-gold-gradient text-white transition-transform group-hover:translate-x-0.5">
-            <ArrowRight size={15} />
-          </span>
-        </span>
-        <span className="flex items-center gap-3">
-          <span className="min-w-0 flex-1 text-[13px] text-muted">{sub}</span>
+          <span className="shrink-0 text-[18px] font-semibold">{title}</span>
+          {/* Beside the title, not under it: the line below stays one line, the same height on every card. */}
           {extra && (
-            <span className="shrink-0" onClick={(e) => e.stopPropagation()}>
+            <span className="ml-auto flex min-w-0 justify-end" onClick={(e) => e.stopPropagation()}>
               {extra}
             </span>
           )}
+          <span className={cx('flex size-8 shrink-0 items-center justify-center rounded-full bg-gold-gradient text-white transition-transform group-hover:translate-x-0.5', !extra && 'ml-auto')}>
+            <ArrowRight size={15} />
+          </span>
         </span>
+        <span className="truncate text-[13px] text-muted">{sub}</span>
       </span>
     </div>
   );
@@ -373,7 +372,7 @@ export function Home({ dragging }: { dragging: boolean }) {
               onClick={() => go({ name: 'pilih' })}
               extra={
                 last && (
-                  <button type="button" onClick={() => openSession(last.id)} title={`${t('Lanjutkan sesi terakhir')} (⇧⌘O)`} className="flex h-8 max-w-56 items-center gap-1.5 rounded-lg border border-line px-2.5 text-xs font-medium text-fg hover:border-gold/70">
+                  <button type="button" onClick={() => openSession(last.id)} title={`${t('Lanjutkan sesi terakhir')} (⇧⌘O)`} className="flex h-8 max-w-56 min-w-0 items-center gap-1.5 rounded-lg border border-line px-2.5 text-xs font-medium whitespace-nowrap text-fg hover:border-gold/70">
                     <Play size={12} className="shrink-0 fill-current text-gold-text" />
                     <span className="truncate">{t('Lanjutkan: {name}', { name: last.name })}</span>
                   </button>
