@@ -35,12 +35,12 @@ export function MoneyInput({ value, onChange, className, placeholder }: { value:
 }
 
 /** A text box that saves when it loses focus (or Enter), not on every key: one undo-free write per edit. */
-export function LazyInput({ value, onCommit, className, placeholder, email }: { value: string; onCommit: (v: string) => void; className?: string; placeholder?: string; email?: boolean }) {
+export function LazyInput({ value, onCommit, className, placeholder, email, plain }: { value: string; onCommit: (v: string) => void; className?: string; placeholder?: string; email?: boolean; plain?: boolean }) {
   const [v, setV] = useState(value);
   useEffect(() => setV(value), [value]);
   return (
     <input
-      {...(email ? { type: 'email', ...PLAIN } : {})}
+      {...(email ? { type: 'email', ...PLAIN } : plain ? PLAIN : {})}
       value={v}
       placeholder={placeholder}
       onChange={(e) => setV(e.target.value)}

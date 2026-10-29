@@ -6,7 +6,7 @@
  */
 
 import { openUrl } from '@tauri-apps/plugin-opener';
-import { AlertTriangle, ArrowRight, CalendarPlus, MapPin, Pencil, Phone, Plus, ReceiptText, X, Check, ChevronDown } from 'lucide-react';
+import { AlertTriangle, ArrowRight, CalendarPlus, Link2, MapPin, Pencil, Phone, Plus, ReceiptText, X, Check, ChevronDown } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 
 import { DateInput } from '../components/date-picker';
@@ -220,6 +220,25 @@ export function BookingDetail({
             })}
             {b.deliveryDate && <span className="text-xs text-muted">{t('Hasil dikirim paling lambat {d}', { d: shortDate(b.deliveryDate) })}</span>}
           </Block>
+
+          {(b.pickLink?.trim() || b.resultLink?.trim()) && (
+            <Block title={t('Link foto')}>
+              {[
+                [t('Untuk dipilih'), b.pickLink?.trim()],
+                [t('Hasil edit'), b.resultLink?.trim()],
+              ].map(([label, url]) =>
+                url && /^https?:\/\//i.test(url) ? (
+                  <button key={label} type="button" onClick={() => openUrl(url).catch(() => {})} title={t('Buka di browser')} className="group flex items-center gap-3 rounded-lg bg-raised px-3 py-2 text-left hover:ring-1 hover:ring-line">
+                    <Link2 size={13} className="shrink-0 text-faint" />
+                    <span className="flex min-w-0 flex-1 flex-col">
+                      <span className="text-[11px] text-faint">{label}</span>
+                      <span className="truncate text-xs text-gold-text group-hover:underline">{url}</span>
+                    </span>
+                  </button>
+                ) : null,
+              )}
+            </Block>
+          )}
 
           {b.notes.trim() && (
             <Block title={t('Catatan')}>

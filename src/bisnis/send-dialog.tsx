@@ -1,7 +1,7 @@
 /**
  * A WhatsApp message for a booking's client: the template for the stage the
- * booking is at picked first (Follow up for Tanya-tanya, DP diterima once
- * the deposit is in…), filled in, changed if need be, then copied or opened
+ * booking is at picked first (Follow up for Tanya-tanya, Konfirmasi booking
+ * once the deposit is in, the pick link at Pilih & edit…), filled in, changed if need be, then copied or opened
  * in WhatsApp (the browser's wa.me, which hands it to the app) — sent by the
  * photographer, from their number. A template with a picture (the invoice,
  * the last payment's receipt) has it ready: wa.me carries text only, so the
@@ -23,7 +23,12 @@ import { clientOf } from './model';
 import { ensureInvoiceNo, ensureReceiptNo } from './numbering';
 import { receiptPng } from './receipt';
 import { useBisnis } from './store';
-import { Dialog, Field, btnGhost, btnPrimary, inputCls } from './ui';
+import { Dialog, Field, LazyInput, btnGhost, btnPrimary, inputCls } from './ui';
+
+const LINKS = [
+  { key: 'link_pilih', field: 'pickLink', label: 'Link foto untuk dipilih' },
+  { key: 'link_hasil', field: 'resultLink', label: 'Link hasil edit' },
+] as const;
 
 export function SendDialog({ bookingId, phone: phoneIn = '', name = '', template: first, onClose }: { bookingId: string | null; phone?: string; name?: string; template?: string; onClose: () => void }) {
   const data = useBisnis((s) => s.data)!;
@@ -39,6 +44,17 @@ export function SendDialog({ bookingId, phone: phoneIn = '', name = '', template
   const [phone, setPhone] = useState(client?.phone || phoneIn);
   const [copied, setCopied] = useState<'text' | 'image' | null>(null);
   const missing = [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]);
+
+  // The template's Drive links, given here if the booking has none yet: kept on the booking, put in the message.
+  const update = useBisnis((s) => s.update);
+  const links = booking ? LINKS.filter((l) => tpl?.body.includes(`{${l.key}}`)) : [];
+  const setLink = (l: (typeof LINKS)[number], value: string) => {
+    const before = booking?.[l.field]?.trim() ?? '';
+    const v = value.trim();
+    if (!booking || v === before) return;
+    update((d) => ({ ...d, bookings: d.bookings.map((x) => (x.id === booking.id ? { ...x, [l.field]: v } : x)) }));
+    setText((s) => (before && s.includes(before) ? s.split(before).join(v || `{${l.key}}`) : s.split(`{${l.key}}`).join(v || `{${l.key}}`)));
+  };
 
   // The picture to go with it: the invoice, or the latest payment's receipt (numbered first, if new).
   const attach = booking ? tpl?.attach : undefined;
@@ -115,6 +131,11 @@ export function SendDialog({ bookingId, phone: phoneIn = '', name = '', template
           <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0812…" inputMode="tel" className={inputCls} />
         </Field>
       </div>
+      {links.map((l) => (
+        <Field key={l.key} label={t(l.label)} hint={t('Disimpan ke booking ini.')}>
+          <LazyInput value={booking?.[l.field] ?? ''} onCommit={(v) => setLink(l, v)} placeholder="https://drive.google.com/…" plain />
+        </Field>
+      ))}
       <Field label={t('Pesan')} hint={t('Bisa diubah sebelum dikirim. Pesan terkirim dari WhatsApp kamu sendiri.')}>
         <textarea value={text} onChange={(e) => setText(e.target.value)} rows={10} className={cx(inputCls, 'h-auto resize-y py-2 leading-relaxed')} />
       </Field>

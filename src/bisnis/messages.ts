@@ -22,6 +22,8 @@ export const VARIABLES: { key: string; label: string }[] = [
   { key: 'sisa', label: 'Sisa tagihan' },
   { key: 'jatuh_tempo', label: 'Jatuh tempo pelunasan' },
   { key: 'invoice', label: 'Nomor invoice' },
+  { key: 'link_pilih', label: 'Link foto untuk dipilih' },
+  { key: 'link_hasil', label: 'Link hasil edit' },
   { key: 'rekening', label: 'Rekening' },
   { key: 'pricelist', label: 'Daftar paket' },
 ];
@@ -66,6 +68,8 @@ export function fillTemplate(body: string, data: BisnisData, studio: string, boo
       sisa: rupiah(balanceOf(booking)),
       jatuh_tempo: booking.dueDate ? shortDate(booking.dueDate) : undefined,
       invoice: booking.invoiceNo || undefined,
+      link_pilih: booking.pickLink?.trim() || undefined,
+      link_hasil: booking.resultLink?.trim() || undefined,
     });
   }
   return body.replace(/\{(\w+)\}/g, (m, key: string) => values[key] ?? m);

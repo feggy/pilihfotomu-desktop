@@ -315,6 +315,15 @@ export function BookingEditor({ initial, onClose, actions = [] }: { initial: Boo
         </Field>
       </section>
 
+      <div className="grid grid-cols-2 gap-3">
+        <Field label={t('Link foto untuk dipilih')} hint={t('Google Drive atau lainnya, untuk pesan tahap Pilih & edit.')}>
+          <input {...PLAIN} value={b.pickLink ?? ''} onChange={(e) => set({ pickLink: e.target.value })} placeholder="https://drive.google.com/…" className={inputCls} />
+        </Field>
+        <Field label={t('Link hasil edit')} hint={t('Untuk pesan tahap Kirim hasil.')}>
+          <input {...PLAIN} value={b.resultLink ?? ''} onChange={(e) => set({ resultLink: e.target.value })} placeholder="https://drive.google.com/…" className={inputCls} />
+        </Field>
+      </div>
+
       <Field label={t('Catatan')}>
         <textarea value={b.notes} onChange={(e) => set({ notes: e.target.value })} rows={3} placeholder={t('Konsep, permintaan khusus, kontak keluarga…')} className={cx(inputCls, 'h-auto resize-none py-2')} />
       </Field>

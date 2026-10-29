@@ -411,4 +411,16 @@ export default {
   'Terpilih otomatis saat mengirim pesan ke booking di tahap ini.': 'Picked automatically when messaging a booking at this stage.',
   'Lampiran gambar': 'Picture attachment',
   'Kuitansi pembayaran terakhir': 'Latest payment’s receipt',
+
+  // Drive links
+  'Link foto untuk dipilih': 'Link to the photos to pick from',
+  'Link hasil edit': 'Link to the edited photos',
+  'Google Drive atau lainnya, untuk pesan tahap Pilih & edit.': 'Google Drive or similar, for the Pilih & edit stage message.',
+  'Untuk pesan tahap Kirim hasil.': 'For the Kirim hasil stage message.',
+  'Link foto': 'Photo links',
+  'Untuk dipilih': 'To pick from',
+  'Hasil edit': 'Edited',
+  'Buka di browser': 'Open in browser',
+  'Disimpan ke booking ini.': 'Saved to this booking.',
+  'Link pilih foto': 'Photo pick link',
 } as Record<string, string | [string, string]>;

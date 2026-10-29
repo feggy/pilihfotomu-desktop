@@ -89,6 +89,10 @@ export interface Booking {
   notes: string;
   /** Given on the first invoice, then kept. */
   invoiceNo: string;
+  /** Where the client picks from (a Google Drive folder…), for {link_pilih}. */
+  pickLink?: string;
+  /** Where the finished photos are, for {link_hasil}. */
+  resultLink?: string;
   createdAt: number;
   updatedAt: number;
 }

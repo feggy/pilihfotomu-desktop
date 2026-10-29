@@ -46,15 +46,15 @@ export const DEFAULT_TEMPLATES: MessageTemplate[] = [
   },
   {
     id: 'sedang-diedit',
-    name: 'Foto sedang diedit',
+    name: 'Link pilih foto',
     columnId: 'edit',
-    body: 'Halo {nama}, terima kasih untuk sesi fotonya! Foto sedang kami pilih dan edit. Kami kabari begitu hasilnya siap ya.',
+    body: 'Halo {nama}, terima kasih untuk sesi fotonya! Foto-fotonya sudah bisa dilihat dan dipilih di sini:\n{link_pilih}\n\nBalas pesan ini dengan nama file foto yang dipilih, contoh:\nPilih: IMG_0101, IMG_0105, IMG_0110-0115\n\nSetelah pilihannya kami terima, foto langsung kami edit.',
   },
   {
     id: 'hasil-siap',
     name: 'Hasil siap',
     columnId: 'kirim',
-    body: 'Halo {nama}, hasil foto {paket} sudah siap! Ini link-nya:\n\n\nSilakan diunduh dan disimpan. Kalau ada yang perlu ditanyakan, kabari kami ya.',
+    body: 'Halo {nama}, hasil edit foto {paket} sudah siap! Silakan diunduh di sini:\n{link_hasil}\n\nSimpan filenya ya, link ini tidak selamanya aktif. Kalau ada yang perlu ditanyakan, kabari kami.',
   },
   {
     id: 'tagihan',
@@ -95,7 +95,7 @@ export function withStageTemplates(data: BisnisData): BisnisData {
   );
   return { ...data, templates: [...data.templates, ...added] };
 }
-const TEMPLATES_VERSION = 3;
+const TEMPLATES_VERSION = 4;
 
 export const DEFAULT_EXPENSE_CATEGORIES = ['Transport', 'Sewa alat', 'Freelancer', 'Cetak & album', 'Makan', 'Iklan', 'Lainnya'];
 
@@ -157,8 +157,16 @@ export function fromJson(json: string): BisnisData {
     data.templates = data.templates
       .filter((x) => x.id !== 'dp-diterima')
       .map((x) => (x.id === 'konfirmasi' ? { ...x, columnId: 'dp', attach: 'kuitansi', body: x.body.includes('DP untuk mengunci tanggal') ? konfirmasi.body : x.body } : x));
-    data.templatesVersion = TEMPLATES_VERSION;
   }
+  // The Pilih & edit and Kirim hasil templates carry the Drive links: replaced where still as they came.
+  if ((data.templatesVersion ?? 1) < 4) {
+    const was: Record<string, string> = { 'sedang-diedit': 'Halo {nama}, terima kasih untuk sesi fotonya! Foto sedang kami pilih dan edit. Kami kabari begitu hasilnya siap ya.', 'hasil-siap': 'Halo {nama}, hasil foto {paket} sudah siap! Ini link-nya:\n\n\nSilakan diunduh dan disimpan. Kalau ada yang perlu ditanyakan, kabari kami ya.' };
+    data.templates = data.templates.map((x) => {
+      const d = DEFAULT_TEMPLATES.find((y) => y.id === x.id);
+      return d && was[x.id] === x.body ? { ...x, name: x.name === 'Foto sedang diedit' ? d.name : x.name, body: d.body } : x;
+    });
+  }
+  data.templatesVersion = TEMPLATES_VERSION;
   return withStageTemplates(data);
 }
 
