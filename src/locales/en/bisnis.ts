@@ -411,5 +411,4 @@ export default {
   'Terpilih otomatis saat mengirim pesan ke booking di tahap ini.': 'Picked automatically when messaging a booking at this stage.',
   'Lampiran gambar': 'Picture attachment',
   'Kuitansi pembayaran terakhir': 'Latest payment’s receipt',
-  'Per tahap': 'By stage',
 } as Record<string, string | [string, string]>;

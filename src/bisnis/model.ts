@@ -34,15 +34,9 @@ export const DEFAULT_TEMPLATES: MessageTemplate[] = [
   {
     id: 'konfirmasi',
     name: 'Konfirmasi booking',
-    attach: 'invoice',
-    body: 'Halo {nama}, booking {paket} sudah kami catat untuk {jadwal}.\n\nTotal: {total}\nDP untuk mengunci tanggal: {dp_minimal}\n\nPembayaran ke:\n{rekening}\n\nInvoice terlampir. Terima kasih!',
-  },
-  {
-    id: 'dp-diterima',
-    name: 'DP diterima',
     columnId: 'dp',
     attach: 'kuitansi',
-    body: 'Halo {nama}, DP untuk {paket} sudah kami terima, terima kasih! Jadwal {jadwal} sudah terkunci.\n\nSudah dibayar: {terbayar}\nSisa: {sisa}, paling lambat {jatuh_tempo}.\n\nKuitansi terlampir.',
+    body: 'Halo {nama}, DP untuk {paket} sudah kami terima, terima kasih! Booking kamu sudah terkonfirmasi untuk {jadwal}.\n\nSudah dibayar: {terbayar}\nSisa: {sisa}, paling lambat {jatuh_tempo}.\n\nPembayaran ke:\n{rekening}\n\nKuitansi terlampir.',
   },
   {
     id: 'pengingat',
@@ -101,7 +95,7 @@ export function withStageTemplates(data: BisnisData): BisnisData {
   );
   return { ...data, templates: [...data.templates, ...added] };
 }
-const TEMPLATES_VERSION = 2;
+const TEMPLATES_VERSION = 3;
 
 export const DEFAULT_EXPENSE_CATEGORIES = ['Transport', 'Sewa alat', 'Freelancer', 'Cetak & album', 'Makan', 'Iklan', 'Lainnya'];
 
@@ -148,14 +142,21 @@ export function fromJson(json: string): BisnisData {
   const base = emptyData();
   const data: BisnisData = { ...base, ...raw, v: DATA_VERSION, settings: { ...base.settings, ...raw.settings } };
   // Data from before the stage templates: they are added, and the built-in ones it kept get their stage and picture.
-  if ((data.templatesVersion ?? 1) < TEMPLATES_VERSION) {
+  if ((data.templatesVersion ?? 1) < 2) {
     const builtIn = new Map(DEFAULT_TEMPLATES.map((x) => [x.id, x]));
     const kept = data.templates.map((x) => {
       const d = builtIn.get(x.id);
       return d ? { ...x, columnId: x.columnId ?? d.columnId, attach: x.attach ?? d.attach } : x;
     });
-    const added = DEFAULT_TEMPLATES.filter((x) => !kept.some((y) => y.id === x.id) && ['follow-up', 'dp-diterima', 'sedang-diedit', 'hasil-siap'].includes(x.id));
+    const added = DEFAULT_TEMPLATES.filter((x) => !kept.some((y) => y.id === x.id) && ['follow-up', 'sedang-diedit', 'hasil-siap'].includes(x.id));
     data.templates = [...kept, ...added];
+  }
+  // DP diterima became Konfirmasi booking (a booking is confirmed by its deposit): one template, for DP masuk.
+  if ((data.templatesVersion ?? 1) < 3) {
+    const konfirmasi = DEFAULT_TEMPLATES.find((x) => x.id === 'konfirmasi')!;
+    data.templates = data.templates
+      .filter((x) => x.id !== 'dp-diterima')
+      .map((x) => (x.id === 'konfirmasi' ? { ...x, columnId: 'dp', attach: 'kuitansi', body: x.body.includes('DP untuk mengunci tanggal') ? konfirmasi.body : x.body } : x));
     data.templatesVersion = TEMPLATES_VERSION;
   }
   return withStageTemplates(data);
