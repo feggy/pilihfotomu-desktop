@@ -14,32 +14,62 @@ import { newId, shortDate, today } from './model';
 import { useBisnis } from './store';
 import { DateInput } from '../components/date-picker';
 import { applyBackup, autoBackupError, backupName, exportBackup, lastBackupAt, readBackup } from './backup';
-import type { BisnisData, BisnisSettings, Column } from './types';
+import type { BisnisData, BisnisSettings, BlockedDay, Column } from './types';
+import { SaveBar, useDirty } from './unsaved';
 import { Field, LazyInput, NumberInput, SectionTitle, TextArea, btnGhost, inputCls } from './ui';
+
+/** What Pengaturan edits before Simpan perubahan. */
+type Draft = { columns: Column[]; blocked: BlockedDay[]; settings: BisnisSettings };
 
 const COLORS = ['#8a9a93', '#c9a96e', '#5b9bd5', '#a77bca', '#e0904a', '#5fb87a', '#c96a6a', '#4fb3b3'];
 
 export function Settings({ sections }: { sections?: ReactNode }) {
   const data = useBisnis((s) => s.data)!;
   const update = useBisnis((s) => s.update);
-  const setCol = (id: string, patch: Partial<Column>) => update((d) => ({ ...d, columns: d.columns.map((c) => (c.id === id ? { ...c, ...patch } : c)) }));
-  const moveCol = (i: number, by: number) =>
+  // Changes are made to a copy, kept by Simpan perubahan; Batal (or leaving and discarding) throws them away.
+  const snapshot = (): Draft => ({ columns: data.columns, blocked: data.blocked, settings: data.settings });
+  const [base, setBase] = useState<Draft>(snapshot);
+  const [draft, setDraft] = useState<Draft>(base);
+  const dirty = JSON.stringify(draft) !== JSON.stringify(base);
+  useDirty(dirty);
+  const saveDraft = () => {
     update((d) => {
+      // Only the settings changed here: a counter moved meanwhile by an invoice stays as it is.
+      const changed = Object.fromEntries(Object.entries(draft.settings).filter(([k, v]) => JSON.stringify(v) !== JSON.stringify(base.settings[k as keyof BisnisSettings])));
+      const columns = draft.columns;
+      // Bookings of a column taken away go to the first column left.
+      const ids = new Set(columns.map((c) => c.id));
+      return {
+        ...d,
+        columns,
+        blocked: draft.blocked,
+        settings: { ...d.settings, ...changed },
+        bookings: d.bookings.map((b) => (ids.has(b.columnId) ? b : { ...b, columnId: columns[0]!.id })),
+      };
+    });
+    const now = useBisnis.getState().data!;
+    const next = { columns: now.columns, blocked: now.blocked, settings: now.settings };
+    setBase(next);
+    setDraft(next);
+  };
+  const cancel = () => {
+    const now = snapshot();
+    setBase(now);
+    setDraft(now);
+  };
+  const setCol = (id: string, patch: Partial<Column>) => setDraft((d) => ({ ...d, columns: d.columns.map((c) => (c.id === id ? { ...c, ...patch } : c)) }));
+  const moveCol = (i: number, by: number) =>
+    setDraft((d) => {
       const cols = [...d.columns];
       const [c] = cols.splice(i, 1);
       cols.splice(i + by, 0, c!);
       return { ...d, columns: cols };
     });
-  // A column taken away hands its bookings to the first column left.
-  const removeCol = (id: string) =>
-    update((d) => {
-      const cols = d.columns.filter((c) => c.id !== id);
-      const to = cols[0]!.id;
-      return { ...d, columns: cols, bookings: d.bookings.map((b) => (b.columnId === id ? { ...b, columnId: to } : b)) };
-    });
+  // A column taken away hands its bookings to the first column left (when saved).
+  const removeCol = (id: string) => setDraft((d) => ({ ...d, columns: d.columns.filter((c) => c.id !== id) }));
   // A day off being added.
   const [dayOff, setDayOff] = useState({ date: '', note: '' });
-  const setSettings = (patch: Partial<BisnisSettings>) => update((d) => ({ ...d, settings: { ...d.settings, ...patch } }));
+  const setSettings = (patch: Partial<BisnisSettings>) => setDraft((d) => ({ ...d, settings: { ...d.settings, ...patch } }));
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 pt-4 pb-10 lg:px-8">
@@ -49,7 +79,7 @@ export function Settings({ sections }: { sections?: ReactNode }) {
             action={
               <button
                 type="button"
-                onClick={() => update((d) => ({ ...d, columns: [...d.columns, { id: newId(), name: t('Kolom baru'), color: COLORS[d.columns.length % COLORS.length]! }] }))}
+                onClick={() => setDraft((d) => ({ ...d, columns: [...d.columns, { id: newId(), name: t('Kolom baru'), color: COLORS[d.columns.length % COLORS.length]! }] }))}
                 className={cx(btnGhost, 'h-8 px-3 text-xs')}
               >
                 <Plus size={14} /> {t('Tambah kolom')}
@@ -59,13 +89,13 @@ export function Settings({ sections }: { sections?: ReactNode }) {
             {t('Kolom board')}
           </SectionTitle>
           <p className="-mt-1 text-xs text-faint">{t('Tahap yang dilalui tiap booking. Kolom "tidak aktif" (mis. Batal) tidak dihitung saat cek bentrok, tagihan, dan pengingat.')}</p>
-          {data.columns.map((c, i) => (
+          {draft.columns.map((c, i) => (
             <div key={c.id} className="flex items-center gap-2 rounded-xl border border-line-soft bg-panel p-2">
               <span className="flex flex-col">
                 <button type="button" disabled={i === 0} onClick={() => moveCol(i, -1)} aria-label={t('Naikkan')} className="text-faint hover:text-fg disabled:opacity-25">
                   <ArrowUp size={13} />
                 </button>
-                <button type="button" disabled={i === data.columns.length - 1} onClick={() => moveCol(i, 1)} aria-label={t('Turunkan')} className="text-faint hover:text-fg disabled:opacity-25">
+                <button type="button" disabled={i === draft.columns.length - 1} onClick={() => moveCol(i, 1)} aria-label={t('Turunkan')} className="text-faint hover:text-fg disabled:opacity-25">
                   <ArrowDown size={13} />
                 </button>
               </span>
@@ -85,7 +115,7 @@ export function Settings({ sections }: { sections?: ReactNode }) {
               </div>
               <button
                 type="button"
-                disabled={data.columns.length <= 1}
+                disabled={draft.columns.length <= 1}
                 onClick={() => removeCol(c.id)}
                 title={t('Hapus kolom (bookingnya pindah ke kolom pertama)')}
                 className="rounded-lg p-1.5 text-faint hover:text-reject disabled:opacity-25"
@@ -99,7 +129,7 @@ export function Settings({ sections }: { sections?: ReactNode }) {
         <section className="flex flex-col gap-3">
           <SectionTitle>{t('Jadwal')}</SectionTitle>
           <Field label={t('Jeda antar jadwal')} hint={t('Waktu perjalanan dan persiapan. Dua jadwal yang lebih dekat dari ini ditandai bentrok.')} className="max-w-60">
-            <NumberInput value={data.settings.bufferMin} onCommit={(bufferMin) => setSettings({ bufferMin })} max={600} unit={t('menit')} />
+            <NumberInput value={draft.settings.bufferMin} onCommit={(bufferMin) => setSettings({ bufferMin })} max={600} unit={t('menit')} />
           </Field>
         </section>
 
@@ -112,7 +142,7 @@ export function Settings({ sections }: { sections?: ReactNode }) {
               e.preventDefault();
               const date = dayOff.date;
               if (!date) return;
-              update((d) => ({ ...d, blocked: [...d.blocked.filter((x) => x.date !== date), { id: newId(), date, note: dayOff.note.trim() }].sort((a, b) => a.date.localeCompare(b.date)) }));
+              setDraft((d) => ({ ...d, blocked: [...d.blocked.filter((x) => x.date !== date), { id: newId(), date, note: dayOff.note.trim() }].sort((a, b) => a.date.localeCompare(b.date)) }));
               setDayOff({ date: '', note: '' });
             }}
           >
@@ -126,11 +156,11 @@ export function Settings({ sections }: { sections?: ReactNode }) {
               <Plus size={14} /> {t('Tambah')}
             </button>
           </form>
-          {data.blocked.map((d) => (
+          {draft.blocked.map((d) => (
             <div key={d.id} className="flex items-center gap-3 rounded-lg bg-panel px-3 py-2 text-[13px]">
               <span className="w-28 shrink-0 font-medium tabular-nums">{shortDate(d.date)}</span>
               <span className="min-w-0 flex-1 truncate text-muted">{d.note || t('Libur')}</span>
-              <button type="button" onClick={() => update((x) => ({ ...x, blocked: x.blocked.filter((b) => b.id !== d.id) }))} aria-label={t('Hapus')} className="text-faint hover:text-reject">
+              <button type="button" onClick={() => setDraft((x) => ({ ...x, blocked: x.blocked.filter((b) => b.id !== d.id) }))} aria-label={t('Hapus')} className="text-faint hover:text-reject">
                 <Trash2 size={14} />
               </button>
             </div>
@@ -139,30 +169,30 @@ export function Settings({ sections }: { sections?: ReactNode }) {
         <section className="flex flex-col gap-3">
           <SectionTitle>{t('Invoice & pembayaran')}</SectionTitle>
           <div className="grid grid-cols-2 gap-3">
-            <Field label={t('Awalan nomor invoice')} hint={t('Nomor berikutnya: {no}', { no: `${data.settings.invoicePrefix || 'INV'}-${today().slice(0, 4)}${today().slice(5, 7)}-${String(data.settings.nextInvoice).padStart(3, '0')}` })}>
-              <LazyInput value={data.settings.invoicePrefix} onCommit={(invoicePrefix) => setSettings({ invoicePrefix: invoicePrefix.trim().toUpperCase() })} />
+            <Field label={t('Awalan nomor invoice')} hint={t('Nomor berikutnya: {no}', { no: `${draft.settings.invoicePrefix || 'INV'}-${today().slice(0, 4)}${today().slice(5, 7)}-${String(draft.settings.nextInvoice).padStart(3, '0')}` })}>
+              <LazyInput value={draft.settings.invoicePrefix} onCommit={(invoicePrefix) => setSettings({ invoicePrefix: invoicePrefix.trim().toUpperCase() })} />
             </Field>
             <Field label={t('Urutan berikutnya')}>
-              <NumberInput value={data.settings.nextInvoice} onCommit={(nextInvoice) => setSettings({ nextInvoice })} min={1} />
+              <NumberInput value={draft.settings.nextInvoice} onCommit={(nextInvoice) => setSettings({ nextInvoice })} min={1} />
             </Field>
-            <Field label={t('Awalan nomor kuitansi')} hint={t('Nomor berikutnya: {no}', { no: `${data.settings.receiptPrefix || 'KWT'}-${today().slice(0, 4)}${today().slice(5, 7)}-${String(data.settings.nextReceipt).padStart(3, '0')}` })}>
-              <LazyInput value={data.settings.receiptPrefix} onCommit={(receiptPrefix) => setSettings({ receiptPrefix: receiptPrefix.trim().toUpperCase() })} />
+            <Field label={t('Awalan nomor kuitansi')} hint={t('Nomor berikutnya: {no}', { no: `${draft.settings.receiptPrefix || 'KWT'}-${today().slice(0, 4)}${today().slice(5, 7)}-${String(draft.settings.nextReceipt).padStart(3, '0')}` })}>
+              <LazyInput value={draft.settings.receiptPrefix} onCommit={(receiptPrefix) => setSettings({ receiptPrefix: receiptPrefix.trim().toUpperCase() })} />
             </Field>
             <Field label={t('Urutan kuitansi berikutnya')}>
-              <NumberInput value={data.settings.nextReceipt} onCommit={(nextReceipt) => setSettings({ nextReceipt })} min={1} />
+              <NumberInput value={draft.settings.nextReceipt} onCommit={(nextReceipt) => setSettings({ nextReceipt })} min={1} />
             </Field>
             <Field label={t('DP minimal (% dari total)')} hint={t('Untuk isian {dp_minimal} di pesan konfirmasi.')}>
-              <NumberInput value={data.settings.minDpPercent} onCommit={(minDpPercent) => setSettings({ minDpPercent })} max={100} unit="%" />
+              <NumberInput value={draft.settings.minDpPercent} onCommit={(minDpPercent) => setSettings({ minDpPercent })} max={100} unit="%" />
             </Field>
           </div>
           <Field label={t('Kontak studio (di bawah nama studio pada invoice)')}>
-            <TextArea value={data.settings.studioContact} onCommit={(studioContact) => setSettings({ studioContact })} rows={3} placeholder={t('Alamat\n0812-xxxx-xxxx · @namastudio')} />
+            <TextArea value={draft.settings.studioContact} onCommit={(studioContact) => setSettings({ studioContact })} rows={3} placeholder={t('Alamat\n0812-xxxx-xxxx · @namastudio')} />
           </Field>
           <Field label={t('Rekening pembayaran')} hint={t('Muncul di invoice dan pesan WhatsApp ({rekening}).')}>
-            <TextArea value={data.settings.paymentInfo} onCommit={(paymentInfo) => setSettings({ paymentInfo })} rows={3} placeholder={t('BCA 1234567890 a.n. Nama Studio')} />
+            <TextArea value={draft.settings.paymentInfo} onCommit={(paymentInfo) => setSettings({ paymentInfo })} rows={3} placeholder={t('BCA 1234567890 a.n. Nama Studio')} />
           </Field>
           <Field label={t('Syarat & ketentuan')}>
-            <TextArea value={data.settings.terms} onCommit={(terms) => setSettings({ terms })} rows={4} />
+            <TextArea value={draft.settings.terms} onCommit={(terms) => setSettings({ terms })} rows={4} />
           </Field>
         </section>
         <section className="flex flex-col gap-3">
@@ -170,19 +200,20 @@ export function Settings({ sections }: { sections?: ReactNode }) {
           <p className="-mt-1 text-xs text-faint">{t('Muncul di lonceng Kelola Bisnis dan sebagai notifikasi sistem, selama aplikasi terbuka. Saat aplikasi ditutup tidak ada pengingat: tambahkan jadwal ke Google Calendar agar diingatkan di HP.')}</p>
           <div className="flex items-center justify-between gap-3 rounded-xl bg-panel px-3 py-2.5 text-[13px]">
             {t('Jadwal foto hari ini dan besok')}
-            <Switch label={t('Jadwal foto hari ini dan besok')} checked={data.settings.remindShoot} onChange={(remindShoot) => setSettings({ remindShoot })} />
+            <Switch label={t('Jadwal foto hari ini dan besok')} checked={draft.settings.remindShoot} onChange={(remindShoot) => setSettings({ remindShoot })} />
           </div>
           <div className="flex items-center justify-between gap-3 rounded-xl bg-panel px-3 py-2.5 text-[13px]">
             {t('Hasil yang harus dikirim (2 hari sebelum tenggat)')}
-            <Switch label={t('Hasil yang harus dikirim')} checked={data.settings.remindDelivery} onChange={(remindDelivery) => setSettings({ remindDelivery })} />
+            <Switch label={t('Hasil yang harus dikirim')} checked={draft.settings.remindDelivery} onChange={(remindDelivery) => setSettings({ remindDelivery })} />
           </div>
           <div className="flex items-center justify-between gap-3 rounded-xl bg-panel px-3 py-2.5 text-[13px]">
             {t('Pelunasan, mulai berapa hari sebelum jatuh tempo')}
-            <NumberInput value={data.settings.remindDueDays} onCommit={(remindDueDays) => setSettings({ remindDueDays })} max={60} unit={t('hari')} className="w-28" />
+            <NumberInput value={draft.settings.remindDueDays} onCommit={(remindDueDays) => setSettings({ remindDueDays })} max={60} unit={t('hari')} className="w-28" />
           </div>
         </section>
         <BackupSection />
         {sections}
+        {dirty && <SaveBar onSave={saveDraft} onCancel={cancel} />}
       </div>
     </div>
   );

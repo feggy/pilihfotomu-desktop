@@ -364,4 +364,13 @@ export default {
   'hari': 'days',
   'Jeda antar jadwal': 'Gap between sessions',
   'Ganti tahap': 'Change stage',
+
+  // Unsaved changes
+  'Ada perubahan yang belum disimpan.': 'You have unsaved changes.',
+  'Simpan perubahan': 'Save changes',
+  'Perubahan belum disimpan': 'Unsaved changes',
+  'Tetap di sini': 'Stay here',
+  'Buang perubahan': 'Discard changes',
+  'Perubahan yang kamu buat belum disimpan. Kalau pergi sekarang, perubahannya hilang.': 'Your changes aren’t saved. If you leave now, they’re lost.',
+  'Edit klien': 'Edit client',
 } as Record<string, string | [string, string]>;

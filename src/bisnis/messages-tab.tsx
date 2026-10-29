@@ -14,7 +14,8 @@ import { useBrand } from '../kreasi/brand';
 import { VARIABLES, fillTemplate, pricelistText, waLink, waNumber } from './messages';
 import { DEFAULT_TEMPLATES, newId } from './model';
 import { useBisnis } from './store';
-import { Field, LazyInput, SectionTitle, btnGhost, btnPrimary, inputCls } from './ui';
+import { Field, SectionTitle, btnGhost, btnPrimary, inputCls } from './ui';
+import { SaveBar, useDirty, useUnsaved } from './unsaved';
 
 export function MessagesTab() {
   const data = useBisnis((s) => s.data)!;
@@ -26,15 +27,19 @@ export function MessagesTab() {
   // Filled from the newest booking, so the preview reads like a real message.
   const sample = [...data.bookings].sort((a, b) => b.updatedAt - a.updatedAt)[0] ?? null;
 
+  // The template is edited as a copy, kept by Simpan perubahan; going to another one first asks.
+  const [name, setName] = useState(tpl?.name ?? '');
   const [body, setBody] = useState(tpl?.body ?? '');
-  useEffect(() => setBody(tpl?.body ?? ''), [tpl?.id]);
+  useEffect(() => (setName(tpl?.name ?? ''), setBody(tpl?.body ?? '')), [tpl?.id]);
+  const dirty = !!tpl && (name !== tpl.name || body !== tpl.body);
+  useDirty(dirty);
+  const guard = useUnsaved((s) => s.guard);
   const area = useRef<HTMLTextAreaElement>(null);
   const insert = (key: string) => {
     const el = area.current;
     const at = el?.selectionStart ?? body.length;
     const next = `${body.slice(0, at)}{${key}}${body.slice(el?.selectionEnd ?? at)}`;
     setBody(next);
-    setTpl({ body: next });
     requestAnimationFrame(() => el && (el.focus(), (el.selectionStart = el.selectionEnd = at + key.length + 2)));
   };
 
@@ -47,7 +52,7 @@ export function MessagesTab() {
               <span className="flex gap-2">
                 <button
                   type="button"
-                  onClick={() => update((d) => ({ ...d, templates: [...d.templates, ...DEFAULT_TEMPLATES.filter((x) => !d.templates.some((y) => y.id === x.id))] }))}
+                  onClick={() => guard(() => update((d) => ({ ...d, templates: [...d.templates, ...DEFAULT_TEMPLATES.filter((x) => !d.templates.some((y) => y.id === x.id))] })))}
                   title={t('Kembalikan template bawaan yang terhapus')}
                   className={cx(btnGhost, 'h-8 px-3 text-xs')}
                 >
@@ -55,11 +60,13 @@ export function MessagesTab() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    const id = newId();
-                    update((d) => ({ ...d, templates: [...d.templates, { id, name: t('Template baru'), body: 'Halo {nama}, ' }] }));
-                    setPicked(id);
-                  }}
+                  onClick={() =>
+                    guard(() => {
+                      const id = newId();
+                      update((d) => ({ ...d, templates: [...d.templates, { id, name: t('Template baru'), body: 'Halo {nama}, ' }] }));
+                      setPicked(id);
+                    })
+                  }
                   className={cx(btnPrimary, 'h-8 px-3 text-xs')}
                 >
                   <Plus size={14} /> {t('Template')}
@@ -72,7 +79,7 @@ export function MessagesTab() {
           <div className="grid min-h-[420px] grid-cols-[220px_1fr_1fr] gap-4">
             <nav className="flex flex-col gap-1">
               {data.templates.map((x) => (
-                <button key={x.id} type="button" onClick={() => setPicked(x.id)} className={cx('truncate rounded-lg px-3 py-2 text-left text-[13px]', x.id === tpl?.id ? 'bg-raised font-semibold text-fg ring-1 ring-gold' : 'text-muted hover:bg-panel hover:text-fg')}>
+                <button key={x.id} type="button" onClick={() => x.id !== tpl?.id && guard(() => setPicked(x.id))} className={cx('truncate rounded-lg px-3 py-2 text-left text-[13px]', x.id === tpl?.id ? 'bg-raised font-semibold text-fg ring-1 ring-gold' : 'text-muted hover:bg-panel hover:text-fg')}>
                   {x.name}
                 </button>
               ))}
@@ -82,14 +89,14 @@ export function MessagesTab() {
                 <div className="flex flex-col gap-3">
                   <div className="flex items-end gap-2">
                     <Field label={t('Nama template')} className="flex-1">
-                      <LazyInput value={tpl.name} onCommit={(name) => name.trim() && setTpl({ name: name.trim() })} />
+                      <input value={name} onChange={(e) => setName(e.target.value)} className={inputCls} />
                     </Field>
                     <button type="button" onClick={() => update((d) => ({ ...d, templates: d.templates.filter((x) => x.id !== tpl.id) }))} title={t('Hapus template')} className="mb-1 rounded-lg p-2 text-faint hover:text-reject">
                       <Trash2 size={15} />
                     </button>
                   </div>
                   <Field label={t('Isi pesan')} className="flex-1">
-                    <textarea ref={area} value={body} onChange={(e) => setBody(e.target.value)} onBlur={() => body !== tpl.body && setTpl({ body })} className={cx(inputCls, 'h-full min-h-56 resize-none py-2 leading-relaxed')} />
+                    <textarea ref={area} value={body} onChange={(e) => setBody(e.target.value)} className={cx(inputCls, 'h-full min-h-56 resize-none py-2 leading-relaxed')} />
                   </Field>
                   <div className="flex flex-wrap gap-1">
                     {VARIABLES.map((v) => (
@@ -99,6 +106,7 @@ export function MessagesTab() {
                     ))}
                   </div>
                   <span className="text-[11px] text-faint">{t('Klik isian untuk menaruhnya di posisi kursor. *teks* jadi tebal di WhatsApp.')}</span>
+                  {dirty && <SaveBar onSave={() => setTpl({ name: name.trim() || tpl.name, body })} onCancel={() => (setName(tpl.name), setBody(tpl.body))} />}
                 </div>
                 <div className="flex flex-col gap-2">
                   <span className="text-[11px] font-medium text-muted">{sample ? t('Pratinjau dengan booking terakhir') : t('Pratinjau')}</span>

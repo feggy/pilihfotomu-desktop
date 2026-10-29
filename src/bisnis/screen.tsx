@@ -29,6 +29,7 @@ import { ReminderBell } from './reminder-bell';
 import { SendDialog } from './send-dialog';
 import { Settings } from './settings';
 import { useBisnis } from './store';
+import { LeaveUnsaved, useUnsaved } from './unsaved';
 import type { Booking } from './types';
 import { btnPrimary } from './ui';
 
@@ -50,6 +51,8 @@ export function BisnisScreen({ open }: { open?: string }) {
   const go = useApp((s) => s.go);
   const { data, error, load } = useBisnis();
   const [tab, setTab] = useState<BisnisTab>('ringkasan');
+  // Leaving a tab with changes not saved (Pengaturan, a client, a template) asks first.
+  const guard = useUnsaved((s) => s.guard);
   // Booking as a table or as the board: two tools over the same bookings.
   const [view, setView] = useState<'daftar' | 'board'>('daftar');
   const [editing, setEditing] = useState<Booking | null>(null);
@@ -122,7 +125,7 @@ export function BisnisScreen({ open }: { open?: string }) {
     <div className="flex h-full flex-col">
       <TitleBar title={t('Kelola Bisnis')} />
       <div className="flex shrink-0 flex-wrap items-center gap-4 border-b border-line-soft px-6 py-3 lg:px-8">
-        <button type="button" onClick={() => go({ name: 'home' })} aria-label={t('Kembali')} className="text-muted hover:text-fg">
+        <button type="button" onClick={() => guard(() => go({ name: 'home' }))} aria-label={t('Kembali')} className="text-muted hover:text-fg">
           <ArrowLeft size={18} />
         </button>
         <h1 className="text-[20px] font-semibold">{t('Kelola Bisnis')}</h1>
@@ -131,7 +134,7 @@ export function BisnisScreen({ open }: { open?: string }) {
             <button
               key={x.id}
               type="button"
-              onClick={() => setTab(x.id)}
+              onClick={() => x.id !== tab && guard(() => setTab(x.id))}
               className={cx('flex h-8 items-center gap-1.5 rounded-lg px-3 text-[13px]', tab === x.id ? 'border border-line bg-raised font-semibold text-fg' : 'font-medium text-muted hover:text-fg')}
             >
               <x.icon size={14} /> {t(x.label)}
@@ -165,6 +168,7 @@ export function BisnisScreen({ open }: { open?: string }) {
       )}
       {receipt && <ReceiptDialog {...receipt} onClose={() => setReceipt(null)} />}
       {editing && <BookingEditor key={editing.id} initial={editing} onClose={() => setEditing(null)} actions={actions} />}
+      <LeaveUnsaved />
       {invoice && <InvoiceDialog bookingId={invoice} onClose={() => setInvoice(null)} />}
       {message && <SendDialog {...message} onClose={() => setMessage(null)} />}
     </div>

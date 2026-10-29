@@ -4,7 +4,7 @@
  * is edited here, messaged, or booked again without typing them in twice.
  */
 
-import { CalendarPlus, MessageCircle, Search, Trash2, Users } from 'lucide-react';
+import { CalendarPlus, MessageCircle, Pencil, Search, Trash2, Users } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 import { cx } from '../components/ui';
@@ -12,13 +12,13 @@ import { t } from '../lib/i18n';
 import { PAY_COLOR, PAY_LABEL, balanceOf, nextSession, paidOf, payState, rupiah, shortDate, titleOf, totalOf } from './model';
 import { useBisnis } from './store';
 import type { Booking, Client } from './types';
-import { Empty, Field, LazyInput, TextArea, btnGhost, btnPrimary } from './ui';
+import { Dialog, Empty, Field, PLAIN, btnGhost, btnPlain, btnPrimary, inputCls } from './ui';
 
 export function Clients({ onOpen, onNew, onMessage }: { onOpen: (b: Booking) => void; onNew: (clientId: string) => void; onMessage: (client: Client, bookingId: string | null) => void }) {
   const data = useBisnis((s) => s.data)!;
-  const update = useBisnis((s) => s.update);
   const [q, setQ] = useState('');
   const [picked, setPicked] = useState<string | null>(null);
+  const [editing, setEditing] = useState<Client | null>(null);
   const inactive = useMemo(() => new Set(data.columns.filter((c) => c.inactive).map((c) => c.id)), [data.columns]);
 
   // Each client with their bookings and money, newest activity first.
@@ -40,7 +40,6 @@ export function Clients({ onOpen, onNew, onMessage }: { onOpen: (b: Booking) => 
       .sort((a, b) => b.last - a.last);
   }, [data, q, inactive]);
   const row = rows.find((r) => r.client.id === picked) ?? null;
-  const setClient = (id: string, patch: Partial<Client>) => update((d) => ({ ...d, clients: d.clients.map((c) => (c.id === id ? { ...c, ...patch } : c)) }));
 
   if (!data.clients.length)
     return (
@@ -86,26 +85,16 @@ export function Clients({ onOpen, onNew, onMessage }: { onOpen: (b: Booking) => 
         ) : (
           <>
             <div className="flex items-start gap-3">
-              <div className="grid min-w-0 flex-1 grid-cols-3 gap-3">
-                <Field label={t('Nama')}>
-                  <LazyInput value={row.client.name} onCommit={(name) => name.trim() && setClient(row.client.id, { name: name.trim() })} />
-                </Field>
-                <Field label={t('Nomor WhatsApp')}>
-                  <LazyInput value={row.client.phone} onCommit={(phone) => setClient(row.client.id, { phone: phone.trim() })} />
-                </Field>
-                <Field label={t('Email')}>
-                  <LazyInput email value={row.client.email} onCommit={(email) => setClient(row.client.id, { email: email.trim() })} />
-                </Field>
+              <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-gold/15 text-lg font-semibold text-gold-text">{row.client.name.slice(0, 1).toUpperCase()}</span>
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="truncate text-[17px] font-semibold">{row.client.name}</span>
+                <span className="truncate text-xs text-muted">{[row.client.phone || t('Tanpa nomor'), row.client.email].filter(Boolean).join(' · ')}</span>
+                {row.client.notes.trim() && <p className="mt-1.5 text-xs leading-relaxed whitespace-pre-wrap text-faint">{row.client.notes}</p>}
               </div>
-              {row.bookings.length === 0 && (
-                <button type="button" onClick={() => (update((d) => ({ ...d, clients: d.clients.filter((c) => c.id !== row.client.id) })), setPicked(null))} title={t('Hapus klien')} className="mt-5 rounded-lg p-2 text-faint hover:text-reject">
-                  <Trash2 size={15} />
-                </button>
-              )}
+              <button type="button" onClick={() => setEditing(row.client)} className={cx(btnGhost, 'h-8 px-3 text-xs')}>
+                <Pencil size={13} /> {t('Edit')}
+              </button>
             </div>
-            <Field label={t('Catatan tentang klien')}>
-              <TextArea value={row.client.notes} onCommit={(notes) => setClient(row.client.id, { notes })} rows={2} placeholder={t('Referensi dari siapa, preferensi, hal yang perlu diingat…')} />
-            </Field>
             <div className="flex gap-2">
               <button type="button" onClick={() => onNew(row.client.id)} className={btnPrimary}>
                 <CalendarPlus size={14} /> {t('Booking baru')}
@@ -157,7 +146,63 @@ export function Clients({ onOpen, onNew, onMessage }: { onOpen: (b: Booking) => 
           </>
         )}
       </div>
+      {editing && (
+        <ClientForm
+          client={editing}
+          canDelete={!data.bookings.some((b) => b.clientId === editing.id)}
+          onClose={() => setEditing(null)}
+          onDeleted={() => setPicked(null)}
+        />
+      )}
     </div>
   );
 }
 
+
+/** A client's details changed in a form, kept by Simpan; one without bookings can be deleted here. */
+function ClientForm({ client, canDelete, onClose, onDeleted }: { client: Client; canDelete: boolean; onClose: () => void; onDeleted: () => void }) {
+  const update = useBisnis((s) => s.update);
+  const [c, setC] = useState(client);
+  const save = () => {
+    const saved = { ...c, name: c.name.trim(), phone: c.phone.trim(), email: c.email.trim() };
+    update((d) => ({ ...d, clients: d.clients.map((x) => (x.id === saved.id ? saved : x)) }));
+    onClose();
+  };
+  return (
+    <Dialog
+      title={t('Edit klien')}
+      onClose={onClose}
+      width={520}
+      footer={
+        <>
+          {canDelete && (
+            <button type="button" onClick={() => (update((d) => ({ ...d, clients: d.clients.filter((x) => x.id !== client.id) })), onDeleted(), onClose())} className={cx(btnPlain, 'mr-auto hover:text-reject')}>
+              <Trash2 size={14} /> {t('Hapus klien')}
+            </button>
+          )}
+          <button type="button" onClick={onClose} className={btnPlain}>
+            {t('Batal')}
+          </button>
+          <button type="button" onClick={save} disabled={!c.name.trim()} className={btnPrimary}>
+            {t('Simpan')}
+          </button>
+        </>
+      }
+    >
+      <Field label={t('Nama')}>
+        <input value={c.name} onChange={(e) => setC({ ...c, name: e.target.value })} autoFocus className={inputCls} />
+      </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label={t('Nomor WhatsApp')}>
+          <input value={c.phone} onChange={(e) => setC({ ...c, phone: e.target.value })} inputMode="tel" className={inputCls} />
+        </Field>
+        <Field label={t('Email')}>
+          <input type="email" {...PLAIN} value={c.email} onChange={(e) => setC({ ...c, email: e.target.value })} className={inputCls} />
+        </Field>
+      </div>
+      <Field label={t('Catatan tentang klien')}>
+        <textarea value={c.notes} onChange={(e) => setC({ ...c, notes: e.target.value })} rows={4} placeholder={t('Referensi dari siapa, preferensi, hal yang perlu diingat…')} className={cx(inputCls, 'h-auto resize-y py-2')} />
+      </Field>
+    </Dialog>
+  );
+}
