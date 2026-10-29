@@ -806,19 +806,19 @@ function CropBox({
             </span>
           ))}
         </div>
-        {/* L-shaped corners, as Lightroom's. */}
+        {/* L-shaped corners, as Lightroom's: white edged in black, dark edged in white on the light theme (--handle in styles.css), so they show on the photo and on the ground. */}
         {corners.map((h) => {
           const [hx, hy] = at[h];
           return (
             <span
               key={h}
               onPointerDown={(e) => start(e, h)}
-              className="absolute size-5"
+              className="absolute size-5 [filter:drop-shadow(0_0_1px_var(--handle-edge))_drop-shadow(0_0_1px_var(--handle-edge))]"
               style={{
                 left: `calc(${pct(hx)} - ${hx ? 17 : 3}px)`,
                 top: `calc(${pct(hy)} - ${hy ? 17 : 3}px)`,
                 cursor: CURSOR[h],
-                borderColor: 'white',
+                borderColor: 'var(--handle)',
                 borderStyle: 'solid',
                 borderWidth: `${hy ? 0 : 3}px ${hx ? 3 : 0}px ${hy ? 3 : 0}px ${hx ? 0 : 3}px`,
               }}
@@ -831,7 +831,7 @@ function CropBox({
             <span
               key={h}
               onPointerDown={(e) => start(e, h)}
-              className={cx('absolute -translate-x-1/2 -translate-y-1/2 bg-white', h === 'n' || h === 's' ? 'h-[3px] w-5' : 'h-5 w-[3px]')}
+              className={cx('absolute -translate-x-1/2 -translate-y-1/2 bg-[var(--handle)] [filter:drop-shadow(0_0_1px_var(--handle-edge))_drop-shadow(0_0_1px_var(--handle-edge))]', h === 'n' || h === 's' ? 'h-[3px] w-5' : 'h-5 w-[3px]')}
               style={{ left: pct(hx), top: pct(hy), cursor: CURSOR[h] }}
             />
           );

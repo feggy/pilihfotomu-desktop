@@ -45,6 +45,9 @@
 
 :root {
   color-scheme: dark;
+  /* Edit foto's crop handles: they sit half on the photo, half on the ground. */
+  --handle: #ffffff;
+  --handle-edge: rgb(0 0 0 / 0.9);
 }
 
 /* Warm paper and white panels. Gold and the marks are deep enough to read as
@@ -64,6 +67,8 @@
   --color-gold: #a17a35;
   --color-gold-text: #84601f;
   --color-ink: #ffffff;
+  --handle: #16201b;
+  --handle-edge: rgb(255 255 255 / 0.95);
 
   --color-pick: #1f8a53;
   --color-maybe: #a87a0c;
