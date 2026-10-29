@@ -14,6 +14,7 @@ import { PAY_COLOR, PAY_LABEL, balanceOf, clashesOf, localString, newId, paidOf,
 import { nextColumn } from './overview';
 import { googleCalendarLink } from './reminders';
 import { useBisnis } from './store';
+import { DateInput, TimeInput } from '../components/date-picker';
 import type { BisnisData, Booking, Client, Payment, Session } from './types';
 import { Dialog, Field, MoneyInput, PLAIN, SectionTitle, btnPlain, btnPrimary, inputCls } from './ui';
 
@@ -289,10 +290,10 @@ export function BookingEditor({ initial, onClose, actions = [] }: { initial: Boo
           </select>
         </Field>
         <Field label={t('Pelunasan paling lambat')}>
-          <input type="date" value={b.dueDate} onChange={(e) => set({ dueDate: e.target.value })} className={inputCls} />
+          <DateInput value={b.dueDate} onChange={(dueDate) => set({ dueDate })} placeholder={t('Tidak ada')} />
         </Field>
         <Field label={t('Hasil dikirim paling lambat')}>
-          <input type="date" value={b.deliveryDate} onChange={(e) => set({ deliveryDate: e.target.value })} className={inputCls} />
+          <DateInput value={b.deliveryDate} onChange={(deliveryDate) => set({ deliveryDate })} placeholder={t('Tidak ada')} />
         </Field>
       </section>
 
@@ -353,13 +354,13 @@ function SessionRow({
           <input value={s.label} onChange={(e) => onChange({ label: e.target.value })} placeholder={single ? t('mis. Prewedding') : t('mis. Akad')} className={inputCls} />
         </Field>
         <Field label={t('Tanggal')}>
-          <input type="date" value={day} onChange={(e) => setDay(e.target.value)} className={inputCls} />
+          <DateInput value={day} onChange={setDay} clearable={false} />
         </Field>
         <Field label={t('Mulai')}>
-          <input type="time" value={timeOf(s.start)} onChange={(e) => setTime('start', e.target.value)} className={inputCls} />
+          <TimeInput value={timeOf(s.start)} onChange={(v) => setTime('start', v)} />
         </Field>
         <Field label={t('Selesai')}>
-          <input type="time" value={timeOf(s.end)} onChange={(e) => setTime('end', e.target.value)} className={inputCls} />
+          <TimeInput value={timeOf(s.end)} onChange={(v) => setTime('end', v)} />
         </Field>
         <button type="button" onClick={onRemove} aria-label={t('Hapus jadwal')} title={t('Hapus jadwal')} className="mb-2 text-faint hover:text-reject">
           <X size={15} />
@@ -428,7 +429,7 @@ function Payments({ booking: b, onChange }: { booking: Booking; onChange: (p: Pa
       </SectionTitle>
       {b.payments.map((p) => (
         <div key={p.id} className="grid grid-cols-[140px_170px_120px_1fr_auto] items-center gap-2">
-          <input type="date" value={p.date} onChange={(e) => set(p.id, { date: e.target.value })} className={inputCls} />
+          <DateInput value={p.date} onChange={(date) => set(p.id, { date })} clearable={false} />
           <MoneyInput value={p.amount} onChange={(amount) => set(p.id, { amount })} />
           <select value={METHODS.includes(p.method) ? p.method : ''} onChange={(e) => set(p.id, { method: e.target.value })} className={inputCls}>
             {METHODS.map((m) => (

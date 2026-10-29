@@ -7,6 +7,7 @@
 import { Building2, Settings2, Stamp, Type, UserRound } from 'lucide-react';
 
 import { Segmented, Switch, cx } from '../components/ui';
+import { DateInput } from '../components/date-picker';
 import { t } from '../lib/i18n';
 import { useApp } from '../store';
 import { addText, type Edit } from './actions';
@@ -188,12 +189,7 @@ export function BrandPanel({ doc, edit, onAdd }: { doc: CollageDoc; edit: (fn: E
         </label>
         <label className="flex flex-col gap-1 text-[11px] text-muted">
           {t('Tanggal acara')}
-          <input
-            type="date"
-            value={dateValue}
-            onChange={(e) => setClient({ date: e.target.value ? Date.parse(`${e.target.value}T00:00:00Z`) / 1000 : null })}
-            className="h-8 rounded-md border border-line bg-panel px-2 text-xs text-fg outline-none focus:border-gold"
-          />
+          <DateInput value={dateValue} onChange={(v) => setClient({ date: v ? Date.parse(`${v}T00:00:00Z`) / 1000 : null })} className="h-8 rounded-md bg-panel text-xs" />
         </label>
         {examples ? (
           <>

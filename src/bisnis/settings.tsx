@@ -12,6 +12,7 @@ import { Switch, cx } from '../components/ui';
 import { t } from '../lib/i18n';
 import { newId, shortDate, today } from './model';
 import { useBisnis } from './store';
+import { DateInput } from '../components/date-picker';
 import { applyBackup, autoBackupError, backupName, exportBackup, lastBackupAt, readBackup } from './backup';
 import type { BisnisData, BisnisSettings, Column } from './types';
 import { Field, LazyInput, SectionTitle, TextArea, btnGhost, inputCls } from './ui';
@@ -36,7 +37,8 @@ export function Settings({ sections }: { sections?: ReactNode }) {
       const to = cols[0]!.id;
       return { ...d, columns: cols, bookings: d.bookings.map((b) => (b.columnId === id ? { ...b, columnId: to } : b)) };
     });
-  const [newDay, newNote] = ['bisnis-new-day', 'bisnis-new-note'];
+  // A day off being added.
+  const [dayOff, setDayOff] = useState({ date: '', note: '' });
   const setSettings = (patch: Partial<BisnisSettings>) => update((d) => ({ ...d, settings: { ...d.settings, ...patch } }));
 
   return (
@@ -108,21 +110,19 @@ export function Settings({ sections }: { sections?: ReactNode }) {
             className="flex items-end gap-2"
             onSubmit={(e) => {
               e.preventDefault();
-              const form = e.currentTarget;
-              const date = (form.elements.namedItem(newDay) as HTMLInputElement).value;
-              const note = (form.elements.namedItem(newNote) as HTMLInputElement).value.trim();
+              const date = dayOff.date;
               if (!date) return;
-              update((d) => ({ ...d, blocked: [...d.blocked.filter((x) => x.date !== date), { id: newId(), date, note }].sort((a, b) => a.date.localeCompare(b.date)) }));
-              form.reset();
+              update((d) => ({ ...d, blocked: [...d.blocked.filter((x) => x.date !== date), { id: newId(), date, note: dayOff.note.trim() }].sort((a, b) => a.date.localeCompare(b.date)) }));
+              setDayOff({ date: '', note: '' });
             }}
           >
             <Field label={t('Tanggal')} className="w-44">
-              <input name={newDay} type="date" className={inputCls} />
+              <DateInput value={dayOff.date} onChange={(date) => setDayOff({ ...dayOff, date })} />
             </Field>
             <Field label={t('Keterangan')} className="flex-1">
-              <input name={newNote} placeholder={t('mis. Liburan keluarga')} className={inputCls} />
+              <input value={dayOff.note} onChange={(e) => setDayOff({ ...dayOff, note: e.target.value })} placeholder={t('mis. Liburan keluarga')} className={inputCls} />
             </Field>
-            <button type="submit" className={btnGhost}>
+            <button type="submit" disabled={!dayOff.date} className={cx(btnGhost, 'disabled:opacity-40')}>
               <Plus size={14} /> {t('Tambah')}
             </button>
           </form>

@@ -9,6 +9,7 @@ import { revealItemInDir } from '@tauri-apps/plugin-opener';
 import { Check, FolderOpen, Info, Layers, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
+import { DateInput } from '../components/date-picker';
 import { Button, Segmented, Switch } from '../components/ui';
 import { api, thumbUrl } from '../lib/api';
 import { num } from '../lib/format';
@@ -181,12 +182,7 @@ export function BatchDialog({ templates, onClose, onDone }: { templates: Templat
                 />
               </Field>
               <Field label={t('Tanggal acara')}>
-                <input
-                  type="date"
-                  value={dateValue}
-                  onChange={(e) => setDate(e.target.value ? Date.parse(`${e.target.value}T00:00:00Z`) / 1000 : null)}
-                  className="h-[38px] rounded-[10px] border border-line bg-bg px-3 text-[13px] outline-none focus:border-gold"
-                />
+                <DateInput value={dateValue} onChange={(v) => setDate(v ? Date.parse(`${v}T00:00:00Z`) / 1000 : null)} className="h-[38px] rounded-[10px]" />
               </Field>
             </div>
             <div className="grid grid-cols-[180px_1fr] gap-3">

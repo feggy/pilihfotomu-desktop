@@ -66,4 +66,7 @@ export default {
   Umum: 'General',
   // app.tsx
   Tutup: 'Close',
+  'Pilih tanggal': 'Pick a date',
+  'Bulan sebelumnya': 'Previous month',
+  'Bulan berikutnya': 'Next month',
 } as Record<string, string | [string, string]>;

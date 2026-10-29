@@ -16,6 +16,7 @@ import { t } from '../lib/i18n';
 import { useApp } from '../store';
 import { MONTHS, balanceOf, clientOf, newId, rupiah, shortDate, titleOf, today } from './model';
 import { useBisnis } from './store';
+import { DateInput } from '../components/date-picker';
 import type { BisnisData, Booking } from './types';
 import { Field, MoneyInput, SectionTitle, btnGhost, inputCls } from './ui';
 
@@ -222,7 +223,7 @@ function Expenses({ period }: { period: Period }) {
       <SectionTitle>{t('Pengeluaran')}</SectionTitle>
       <div className="grid grid-cols-[140px_170px_160px_1fr_180px_auto] items-end gap-2 rounded-2xl bg-panel p-3">
         <Field label={t('Tanggal')}>
-          <input type="date" value={draft.date} onChange={(e) => setDraft({ ...draft, date: e.target.value })} className={inputCls} />
+          <DateInput value={draft.date} onChange={(date) => setDraft({ ...draft, date })} clearable={false} />
         </Field>
         <Field label={t('Kategori')}>
           {adding || !data.expenseCategories.length ? (
