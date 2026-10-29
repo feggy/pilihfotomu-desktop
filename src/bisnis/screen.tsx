@@ -3,7 +3,7 @@
  * calendar, packages and the rest — tabs over one set of data, kept offline.
  */
 
-import { ArrowLeft, CalendarDays, FileText, KanbanSquare, MessageCircle, Package as PackageIcon, Plus, Settings2, TriangleAlert, Users } from 'lucide-react';
+import { ArrowLeft, CalendarDays, FileText, KanbanSquare, MessageCircle, Package as PackageIcon, Plus, Settings2, TriangleAlert, Users, Wallet } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 
 import { TitleBar } from '../components/title-bar';
@@ -14,6 +14,7 @@ import { Board } from './board';
 import { BookingEditor, newBooking, type BookingAction } from './booking-editor';
 import { Calendar } from './calendar';
 import { Clients } from './clients';
+import { Finance } from './finance';
 import { InvoiceDialog } from './invoice-dialog';
 import { MessagesTab } from './messages-tab';
 import { Packages } from './packages';
@@ -24,7 +25,7 @@ import { useBisnis } from './store';
 import type { Booking } from './types';
 import { btnPrimary } from './ui';
 
-export type BisnisTab = 'board' | 'kalender' | 'klien' | 'paket' | 'pesan' | 'pengaturan';
+export type BisnisTab = 'board' | 'kalender' | 'klien' | 'paket' | 'pesan' | 'keuangan' | 'pengaturan';
 
 const TABS: { id: BisnisTab; label: string; icon: typeof KanbanSquare }[] = [
   { id: 'board', label: 'Board', icon: KanbanSquare },
@@ -32,6 +33,7 @@ const TABS: { id: BisnisTab; label: string; icon: typeof KanbanSquare }[] = [
   { id: 'klien', label: 'Klien', icon: Users },
   { id: 'paket', label: 'Paket', icon: PackageIcon },
   { id: 'pesan', label: 'Pesan', icon: MessageCircle },
+  { id: 'keuangan', label: 'Keuangan', icon: Wallet },
   { id: 'pengaturan', label: 'Pengaturan', icon: Settings2 },
 ];
 
@@ -64,6 +66,7 @@ export function BisnisScreen() {
       );
     else if (tab === 'paket') body = <Packages />;
     else if (tab === 'pesan') body = <MessagesTab />;
+    else if (tab === 'keuangan') body = <Finance onOpen={setEditing} />;
     else body = <Settings />;
   }
 
