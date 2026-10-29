@@ -866,7 +866,13 @@ function histogramOf(c: HTMLCanvasElement): Histogram | null {
   return bins;
 }
 
-/** The histogram drawn as three overlapping channels. */
+/**
+ * The histogram drawn as three overlapping channels: added up like light on
+ * the dark theme's ground (screen), laid over like ink on the light one
+ * (multiply), so the overlap reads in both.
+ */
+const BLEND = 'mix-blend-screen in-data-[theme=light]:mix-blend-multiply';
+
 export function HistogramView({ h }: { h: Histogram | null }) {
   const W = 256;
   const H = 64;
@@ -875,10 +881,10 @@ export function HistogramView({ h }: { h: Histogram | null }) {
   return (
     <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="block h-16 w-full shrink-0 rounded-md bg-bg">
       {h && (
-        <g style={{ mixBlendMode: 'screen' }}>
-          <path d={path(h[0])} fill="rgb(229 72 77 / 0.55)" />
-          <path d={path(h[1])} fill="rgb(70 167 88 / 0.55)" />
-          <path d={path(h[2])} fill="rgb(62 99 221 / 0.55)" />
+        <g className="isolate">
+          <path d={path(h[0])} fill="rgb(229 72 77 / 0.55)" className={BLEND} />
+          <path d={path(h[1])} fill="rgb(70 167 88 / 0.55)" className={BLEND} />
+          <path d={path(h[2])} fill="rgb(62 99 221 / 0.55)" className={BLEND} />
         </g>
       )}
     </svg>
