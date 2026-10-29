@@ -44,13 +44,6 @@ export async function chooseFolder(path?: string) {
   }
 }
 
-/** "Selamat pagi" … by the clock on this computer. */
-function greeting() {
-  const h = new Date().getHours();
-  return h < 11 ? t('Selamat pagi') : h < 15 ? t('Selamat siang') : h < 18 ? t('Selamat sore') : t('Selamat malam');
-}
-
-/** One of the three things the app does, as a big card with a picture of it. */
 /** Kelola Bisnis's card picture: a small board, drawn rather than photographed. */
 function BoardArt() {
   const cols = [
@@ -75,6 +68,7 @@ function BoardArt() {
   );
 }
 
+/** One of the things the app does, as a big card with a picture of it. */
 function ModeCard({
   preview,
   art,
@@ -401,20 +395,7 @@ export function Home({ dragging }: { dragging: boolean }) {
       <TitleBar />
       <main className="flex-1 overflow-y-auto">
         <div className="mx-auto flex w-full max-w-[1180px] flex-col gap-7 px-6 pt-10 pb-10 lg:px-8 lg:pt-12">
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <div className="flex flex-col gap-1.5">
-              <span className="text-[13px] text-gold-text">{greeting()}</span>
-              <h1 className="text-2xl font-semibold lg:text-[28px]">{t('Mau mengerjakan apa hari ini?')}</h1>
-            </div>
-            <span
-              className={cx(
-                'flex items-center gap-2 rounded-[10px] border px-3 py-2 text-xs',
-                dragging ? 'border-gold bg-gold/10 text-gold-text' : 'border-line-soft bg-panel text-muted',
-              )}
-            >
-              <FolderDown size={15} /> {dragging ? t('Lepas untuk memilah foto di folder ini') : t('Seret folder ke mana saja di jendela ini')}
-            </span>
-          </div>
+          <h1 className="text-2xl font-semibold lg:text-[28px]">{t('Mau mengerjakan apa?')}</h1>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:gap-5">
             <ModeCard

@@ -2,13 +2,7 @@
 
 export default {
   // Home
-  'Selamat pagi': 'Good morning',
-  'Selamat siang': 'Good afternoon',
-  'Selamat sore': 'Good afternoon',
-  'Selamat malam': 'Good evening',
-  'Mau mengerjakan apa hari ini?': 'What are we working on today?',
   'Lepas untuk memilah foto di folder ini': 'Drop to cull the photos in this folder',
-  'Seret folder ke mana saja di jendela ini': 'Drag a folder anywhere into this window',
   'Ratusan foto sesi dipilah otomatis jadi Pilih, Cek, dan Lewati, lengkap dengan alasannya.':
     'Hundreds of session photos sorted into Pick, Check and Skip automatically, each with its reason.',
   Offline: 'Offline',
@@ -458,4 +452,5 @@ export default {
   'Simpan desain ini?': 'Keep this design?',
   'Disimpan di Lanjutkan desain, bisa dibuka lagi kapan saja. Kalau dihapus, desain ini hilang.': 'It is kept under Continue a design, to open again any time. If deleted, this design is gone.',
   'Hapus desain': 'Delete design',
+  'Mau mengerjakan apa?': 'What are you working on?',
 } as Record<string, string | [string, string]>;
