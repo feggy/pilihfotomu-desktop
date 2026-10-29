@@ -89,4 +89,6 @@ export default {
   '{n} Lewati': '{n} Skip',
   'Kehangatan': 'Warmth',
   'Akad nikah': 'Wedding ceremony',
+  'Lanjutkan sesi terakhir': 'Continue last session',
+  'Lanjutkan: {name}': 'Continue: {name}',
 } as Record<string, string | [string, string]>;

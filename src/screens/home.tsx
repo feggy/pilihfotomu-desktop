@@ -33,6 +33,19 @@ const pickFolder = async () => {
   return typeof picked === 'string' ? picked : null;
 };
 
+/** The culling session worked on last (its folder still there), or null. */
+export async function lastSession(): Promise<SessionSummary | null> {
+  const list = await api.listSessions().catch(() => []);
+  return list.find((s) => s.available && s.kind !== 'edit') ?? null;
+}
+
+/** Back into the last culling session (File › Lanjutkan sesi terakhir, ⇧⌘O); Pilih foto's start when there is none. */
+export async function openLastSession() {
+  const s = await lastSession();
+  if (s) useApp.getState().openSession(s.id);
+  else useApp.getState().go({ name: 'pilih' });
+}
+
 /** Opens the folder picker and moves on to the setup screen. */
 export async function chooseFolder(path?: string) {
   const { go, fail } = useApp.getState();
@@ -45,13 +58,20 @@ export async function chooseFolder(path?: string) {
   }
 }
 
-/** One of the things the app does, as a big card: the mode at work above, its name and a line below. */
-function ModeCard({ art, icon: Icon, title, sub, onClick, highlight }: { art: React.ReactNode; icon: LucideIcon; title: string; sub: string; onClick: () => void; highlight?: boolean }) {
+/**
+ * One of the things the app does, as a big card: the mode at work above, its
+ * name and a line below — and, for Pilih foto, a way straight back into the
+ * last session (`extra`, a button of its own).
+ */
+function ModeCard({ art, icon: Icon, title, sub, onClick, highlight, extra }: { art: React.ReactNode; icon: LucideIcon; title: string; sub: string; onClick: () => void; highlight?: boolean; extra?: React.ReactNode }) {
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
+      onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget && (e.preventDefault(), onClick())}
       className={cx(
+        'cursor-pointer',
         'group flex flex-col rounded-[22px] border bg-panel p-2.5 pb-5 text-left transition-colors outline-none',
         // Gold only while pointed at (or a folder is dragged over): a click opens the mode, nothing stays selected.
         highlight ? 'border-gold bg-raised' : 'border-line-soft hover:border-gold/70 focus-visible:border-gold/70',
@@ -68,9 +88,16 @@ function ModeCard({ art, icon: Icon, title, sub, onClick, highlight }: { art: Re
             <ArrowRight size={15} />
           </span>
         </span>
-        <span className="text-[13px] text-muted">{sub}</span>
+        <span className="flex items-center gap-3">
+          <span className="min-w-0 flex-1 text-[13px] text-muted">{sub}</span>
+          {extra && (
+            <span className="shrink-0" onClick={(e) => e.stopPropagation()}>
+              {extra}
+            </span>
+          )}
+        </span>
       </span>
-    </button>
+    </div>
   );
 }
 
@@ -323,6 +350,9 @@ function SessionList({ title, empty, only }: { title: string; empty: string; onl
 
 export function Home({ dragging }: { dragging: boolean }) {
   const go = useApp((s) => s.go);
+  const openSession = useApp((s) => s.openSession);
+  const [last, setLast] = useState<SessionSummary | null>(null);
+  useEffect(() => void lastSession().then(setLast), []);
 
   return (
     <div className="flex h-full flex-col">
@@ -333,7 +363,22 @@ export function Home({ dragging }: { dragging: boolean }) {
           <h1 className="text-[26px] font-semibold">{t('Mau mengerjakan apa?')}</h1>
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
             <ModeCard art={<BoardArt />} icon={Briefcase} title={t('Kelola Bisnis')} sub={t('Booking klien, jadwal, invoice, dan pesan WhatsApp di satu tempat.')} onClick={() => go({ name: 'bisnis' })} />
-            <ModeCard highlight={dragging} art={<CullArt />} icon={Sparkles} title={t('Pilih foto##mode')} sub={t('Ratusan foto sesi dipilah otomatis jadi Pilih, Cek, dan Lewati.')} onClick={() => go({ name: 'pilih' })} />
+            <ModeCard
+              highlight={dragging}
+              art={<CullArt />}
+              icon={Sparkles}
+              title={t('Pilih foto##mode')}
+              sub={t('Ratusan foto sesi dipilah otomatis jadi Pilih, Cek, dan Lewati.')}
+              onClick={() => go({ name: 'pilih' })}
+              extra={
+                last && (
+                  <button type="button" onClick={() => openSession(last.id)} title={`${t('Lanjutkan sesi terakhir')} (⇧⌘O)`} className="flex h-8 max-w-56 items-center gap-1.5 rounded-lg border border-line px-2.5 text-xs font-medium text-fg hover:border-gold/70">
+                    <RotateCw size={12} className="shrink-0 text-gold-text" />
+                    <span className="truncate">{t('Lanjutkan: {name}', { name: last.name })}</span>
+                  </button>
+                )
+              }
+            />
             <ModeCard art={<EditArt />} icon={SlidersHorizontal} title={t('Edit foto')} sub={t('Cahaya dan warna ala Lightroom, AI denoise, masking, preset.')} onClick={() => go({ name: 'edit', back: { name: 'home' } })} />
             <ModeCard art={<StoryArt />} icon={LayoutTemplate} title={t('Buat konten')} sub={t('Story dan feed Instagram dari template, langsung dari fotomu.')} onClick={() => go({ name: 'kreasi', back: { name: 'home' } })} />
           </div>

@@ -14,7 +14,7 @@ import { KreasiScreen } from './kreasi/screen';
 import { ClientPicks } from './screens/client-picks';
 import { EditPhotos } from './screens/edit-photos';
 import { Compare } from './screens/compare';
-import { chooseFolder, Home, PilihStart } from './screens/home';
+import { chooseFolder, Home, openLastSession, PilihStart } from './screens/home';
 import { ProgressScreen } from './screens/progress';
 import { Review } from './screens/review';
 import { Settings } from './screens/settings';
@@ -137,6 +137,7 @@ export function App() {
       else if (payload === 'shortcuts') goTo({ name: 'settings', back, section: 'keys' });
       else if (payload === 'home') goTo({ name: 'home' });
       else if (payload === 'open-folder') chooseFolder();
+      else if (payload === 'open-last') openLastSession();
       else if (payload === 'client-picks') {
         if (open) goTo({ name: 'picks', root: open.root, back: { name: 'review' } });
         else goTo({ name: 'home' });

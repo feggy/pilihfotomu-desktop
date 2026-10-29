@@ -73,6 +73,7 @@ pub fn build_in<R: Runtime>(app: &AppHandle<R>, en: bool) -> tauri::Result<Menu<
 
     let file = SubmenuBuilder::new(app, "File")
         .item(&item("open-folder", l("Buka folder sesi…", "Open Session Folder…"), Some("CmdOrCtrl+O"))?)
+        .item(&item("open-last", l("Lanjutkan sesi terakhir", "Continue Last Session"), Some("CmdOrCtrl+Shift+O"))?)
         .item(&item("client-picks", l("Tempel pilihan klien…", "Paste Client Picks…"), Some("CmdOrCtrl+Shift+V"))?)
         .item(&item("export", l("Ekspor…", "Export…"), Some("CmdOrCtrl+E"))?)
         .separator()
