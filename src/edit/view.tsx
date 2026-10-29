@@ -340,11 +340,12 @@ export function EditView({
     }, GLIDE_MS);
   };
 
-  // Z: 1:1 at the middle, or back to fit.
+  // Z: 1:1 where the pointer is (the middle when it is off the photo), or back to fit.
+  const pointer = useRef<{ x: number; y: number } | null>(null);
   const first = useRef(true);
   useEffect(() => {
     if (first.current) return void (first.current = false);
-    if (zoomable) glide(zoomed ? 1 : oneToOne());
+    if (zoomable) glide(zoomed ? 1 : oneToOne(), pointer.current?.x, pointer.current?.y);
   }, [zoomToggle]);
 
   // Pinch on a trackpad: WebKit's gesture events (the app's window), or a
@@ -464,7 +465,8 @@ export function EditView({
   const [hand, setHand] = useState(false);
   useEffect(() => {
     if (!masking) return setHand(false);
-    const typing = (e: KeyboardEvent) => (e.target as HTMLElement | null)?.closest('input, textarea, [contenteditable="true"]');
+    // Typing in a field keeps its space; a slider or button just focused does not.
+    const typing = (e: KeyboardEvent) => (e.target as HTMLElement | null)?.closest('textarea, [contenteditable="true"], input:not([type=range]):not([type=checkbox]):not([type=radio])');
     const down = (e: KeyboardEvent) => {
       if (e.code !== 'Space' || typing(e)) return;
       e.preventDefault();
@@ -546,6 +548,8 @@ export function EditView({
       <div
         ref={scroller}
         onPointerDown={press}
+        onPointerMove={(e) => (pointer.current = { x: e.clientX, y: e.clientY })}
+        onPointerLeave={() => (pointer.current = null)}
         // The browser's own scroll anchoring would move the zoom's anchor point again.
         style={{ overflowAnchor: 'none' }}
         className={cx('no-scrollbar flex size-full', zoomed ? 'overflow-auto' : 'items-center justify-center overflow-hidden', zoomable && !picking && !masking && (zoomed ? (panning ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-zoom-in'))}
