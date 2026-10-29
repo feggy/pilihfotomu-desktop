@@ -790,9 +790,13 @@ function CropBox({
       style={{ cursor: hoverOut || dragging === 'turn' ? ROTATE_CURSOR : undefined }}
     >
     <div ref={box} className="pointer-events-none absolute inset-16">
+      {/* The photo outside the crop dimmed, as Lightroom does; the ground around the photo keeps its own color in either theme. */}
+      <div className="absolute inset-0 overflow-hidden">
+        <span className="absolute" style={{ left: pct(crop.x), top: pct(crop.y), width: pct(crop.w), height: pct(crop.h), boxShadow: '0 0 0 9999px rgb(0 0 0 / 0.6)' }} />
+      </div>
       <div
         className="pointer-events-auto absolute border border-white/80"
-        style={{ left: pct(crop.x), top: pct(crop.y), width: pct(crop.w), height: pct(crop.h), boxShadow: '0 0 0 9999px rgb(0 0 0 / 0.6)' }}
+        style={{ left: pct(crop.x), top: pct(crop.y), width: pct(crop.w), height: pct(crop.h) }}
       >
         <div className="absolute inset-0 cursor-move" onPointerDown={(e) => start(e, 'move')} onDoubleClick={onCommit}>
           {Array.from({ length: Math.max(0, lines - 1) }, (_, i) => (i + 1) / lines).map((f) => (
