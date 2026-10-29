@@ -363,4 +363,5 @@ export default {
   'Nama add-on': 'Add-on name',
   'hari': 'days',
   'Jeda antar jadwal': 'Gap between sessions',
+  'Ganti tahap': 'Change stage',
 } as Record<string, string | [string, string]>;

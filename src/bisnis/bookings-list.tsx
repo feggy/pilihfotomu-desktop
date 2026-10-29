@@ -1,7 +1,6 @@
 /**
  * Every booking as a table: found by name, narrowed by stage or payment,
- * sorted by when, how much or what is owed — and its stage changed right in
- * the row, without the board.
+ * sorted by when, how much or what is owed. A row opens the booking's detail.
  */
 
 import { ArrowDown, ArrowUp, Search } from 'lucide-react';
@@ -9,7 +8,6 @@ import { useMemo, useState } from 'react';
 
 import { cx } from '../components/ui';
 import { t } from '../lib/i18n';
-import { moveBooking } from './board';
 import { PAY_COLOR, PAY_LABEL, balanceOf, clientOf, nextSession, payState, rupiah, shortDate, timeOf, titleOf, totalOf, type PayState } from './model';
 import { useBisnis } from './store';
 import type { Booking } from './types';
@@ -19,7 +17,6 @@ type Sort = 'jadwal' | 'nama' | 'total' | 'sisa' | 'dibuat';
 
 export function BookingsList({ onOpen }: { onOpen: (b: Booking) => void }) {
   const data = useBisnis((s) => s.data)!;
-  const update = useBisnis((s) => s.update);
   const [q, setQ] = useState('');
   // '' every stage; 'aktif' all but finished and cancelled; else one column.
   const [stage, setStage] = useState('aktif');
@@ -123,16 +120,9 @@ export function BookingsList({ onOpen }: { onOpen: (b: Booking) => void }) {
                 </span>
                 <span className="truncate text-muted">{b.packageName || '—'}</span>
                 <span className="text-xs text-muted tabular-nums">{s ? `${shortDate(s.start.split('T')[0]!)} · ${timeOf(s.start)}` : <span className="text-faint">{t('Belum ada jadwal')}</span>}</span>
-                {/* The stage changed here; the click stops before it opens the booking. */}
-                <span onClick={(e) => e.stopPropagation()} className="flex items-center gap-2">
+                <span className="flex min-w-0 items-center gap-2 text-xs">
                   <span className="size-2 shrink-0 rounded-full" style={{ background: col?.color }} />
-                  <select value={b.columnId} onChange={(e) => update((d) => moveBooking(d, b.id, e.target.value, null))} className="h-8 w-full min-w-0 rounded-md border border-transparent bg-transparent px-1 text-xs text-fg outline-none hover:border-line focus:border-gold">
-                    {data.columns.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
+                  <span className="truncate">{col?.name}</span>
                 </span>
                 <span className="text-xs font-medium" style={{ color: PAY_COLOR[state] }}>
                   {t(PAY_LABEL[state])}

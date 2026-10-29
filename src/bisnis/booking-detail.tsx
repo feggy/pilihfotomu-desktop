@@ -6,7 +6,7 @@
  */
 
 import { openUrl } from '@tauri-apps/plugin-opener';
-import { AlertTriangle, ArrowRight, CalendarPlus, MapPin, Pencil, Phone, Plus, ReceiptText, X } from 'lucide-react';
+import { AlertTriangle, ArrowRight, CalendarPlus, MapPin, Pencil, Phone, Plus, ReceiptText, X, Check, ChevronDown } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 
 import { DateInput } from '../components/date-picker';
@@ -48,7 +48,6 @@ export function BookingDetail({
   if (!b) return null;
 
   const client = clientOf(data, b);
-  const col = data.columns.find((c) => c.id === b.columnId);
   const next = nextColumn(data, b);
   const state = payState(b);
   const owed = balanceOf(b);
@@ -66,10 +65,7 @@ export function BookingDetail({
           <div className="flex min-w-0 flex-1 flex-col gap-1.5">
             <h2 className="truncate text-lg font-semibold">{titleOf(data, b)}</h2>
             <span className="flex flex-wrap items-center gap-2 text-xs">
-              <span className="flex items-center gap-1.5 rounded-full bg-raised px-2.5 py-1 font-medium">
-                <span className="size-2 rounded-full" style={{ background: col?.color }} />
-                {col?.name}
-              </span>
+              <StagePicker current={b.columnId} onPick={(id) => update((d) => moveBooking(d, b.id, id, null))} />
               {next && (
                 <button type="button" onClick={() => update((d) => moveBooking(d, b.id, next.id, null))} className="flex items-center gap-1 rounded-full border border-line px-2.5 py-1 font-medium text-gold-text hover:border-gold">
                   {t('Lanjut ke {col}', { col: next.name })} <ArrowRight size={12} />
@@ -248,5 +244,38 @@ function Block({ title, children }: { title: string; children: ReactNode }) {
       <h3 className="text-[11px] font-semibold tracking-wide text-faint uppercase">{title}</h3>
       {children}
     </section>
+  );
+}
+
+/** The booking's stage as a chip; a click lists every stage to move it to. */
+function StagePicker({ current, onPick }: { current: string; onPick: (columnId: string) => void }) {
+  const data = useBisnis((s) => s.data)!;
+  const [open, setOpen] = useState(false);
+  const col = data.columns.find((c) => c.id === current);
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    window.addEventListener('mousedown', close);
+    return () => window.removeEventListener('mousedown', close);
+  }, [open]);
+  return (
+    <span className="relative" onMouseDown={(e) => e.stopPropagation()}>
+      <button type="button" onClick={() => setOpen((v) => !v)} title={t('Ganti tahap')} className={cx('flex items-center gap-1.5 rounded-full bg-raised px-2.5 py-1 font-medium hover:ring-1 hover:ring-line', open && 'ring-1 ring-gold')}>
+        <span className="size-2 rounded-full" style={{ background: col?.color }} />
+        {col?.name}
+        <ChevronDown size={12} className="text-faint" />
+      </button>
+      {open && (
+        <span className="absolute top-8 left-0 z-10 flex w-52 flex-col rounded-xl border border-line bg-panel-2 p-1 shadow-2xl">
+          {data.columns.map((c) => (
+            <button key={c.id} type="button" onClick={() => (setOpen(false), c.id !== current && onPick(c.id))} className={cx('flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs hover:bg-raised', c.id === current && 'font-semibold')}>
+              <span className="size-2 shrink-0 rounded-full" style={{ background: c.color }} />
+              <span className="flex-1 truncate">{c.name}</span>
+              {c.id === current && <Check size={12} className="text-gold-text" />}
+            </button>
+          ))}
+        </span>
+      )}
+    </span>
   );
 }
