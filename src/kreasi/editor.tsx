@@ -403,9 +403,16 @@ export function Editor() {
       const { canvas, original, scale = 1 } = await make();
       const kept = trimCutout(canvas);
       return kept ? { status: 'ok', canvas, original, kept, scale, preview: thumbOf(kept.canvas), print: printOf(canvas) } : { status: 'none' };
-    } catch {
-      return { status: 'none' };
+    } catch (e) {
+      // Kept to say why, if no way works at all (a model missing, say), rather than "nothing found".
+      console.error('hapus latar', e);
+      return { status: 'none', error: tRust(e instanceof Error ? e.message : String(e)) };
     }
+  };
+  /** Nothing kept by any way: the error, if one failed outright, else that nothing was found in it. */
+  const noCut = (set: CutSet, nothing: string) => {
+    const err = Object.values(set.variants).find((v): v is { status: 'none'; error: string } => v?.status === 'none' && !!v.error);
+    useApp.getState().fail(err ? t('Hapus latar gagal: {why}', { why: err.error }) : nothing);
   };
   /** Result `method` as element `id`'s picture: kept once as a file, placed where it sat. */
   const applyCut = async (id: string, set: CutSet, method: ImageCutMethod) => {
@@ -471,7 +478,7 @@ export function Editor() {
         setNotice({ text: t('Subjeknya jadi elemen baru di atas, fotonya disembunyikan. Kalau belum pas, pilih hasil lain di panel kanan. ⌘Z mengembalikan foto.'), refine: newEl });
         setCutting(null);
       }
-      if (!id) useApp.getState().fail(t('Tidak ada subjek yang bisa dipisahkan dari foto ini.'));
+      if (!id) noCut(set, t('Tidak ada subjek yang bisa dipisahkan dari foto ini.'));
     } catch (e) {
       useApp.getState().fail(tRust(e instanceof Error ? e.message : String(e)));
     } finally {
@@ -518,7 +525,7 @@ export function Editor() {
       }
       if (!set.shown) {
         setCutSets(({ [id]: _, ...rest }) => rest);
-        useApp.getState().fail(t('Tidak ada subjek yang bisa dipisahkan dari gambar ini.'));
+        noCut(set, t('Tidak ada subjek yang bisa dipisahkan dari gambar ini.'));
       }
     } catch (e) {
       setCutSets(({ [id]: _, ...rest }) => rest);
@@ -1634,7 +1641,7 @@ type OkVariant = {
   /** What it keeps, coarsely: two results alike are offered once. */
   print: Uint8Array;
 };
-type CutVariant = { status: 'busy' } | { status: 'none' } | OkVariant;
+type CutVariant = { status: 'busy' } | { status: 'none'; error?: string } | OkVariant;
 
 /** One element's Hapus latar: every way's result, the one shown, and where a result sits on the canvas. */
 type CutSet = {

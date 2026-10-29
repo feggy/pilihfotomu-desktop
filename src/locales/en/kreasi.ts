@@ -438,4 +438,5 @@ export default {
   'Tidak ada subjek yang bisa dipisahkan dari foto ini.': 'Nothing could be separated from this photo.',
   'Subjeknya jadi elemen di tempat yang sama, latarnya hilang. Kalau belum pas, ada pilihan hasil lain. Diproses di komputer ini.': 'The subject becomes an element in the same place, without its background. If it’s not right, there are other results to pick. Processed on this computer.',
   'Hasil {n}': 'Result {n}',
+  'Hapus latar gagal: {why}': 'Background removal failed: {why}',
 } as Record<string, string | [string, string]>;
