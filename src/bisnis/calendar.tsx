@@ -62,6 +62,8 @@ export function Calendar({ onOpen, onNewOn }: { onOpen: (b: Booking) => void; on
   const move = (by: number) => setAnchor((a) => (view === 'bulan' ? new Date(a.getFullYear(), a.getMonth() + by, 1) : addDays(a, by * 7)));
   const start = view === 'bulan' ? monday(new Date(anchor.getFullYear(), anchor.getMonth(), 1)) : monday(anchor);
   const weekEnd = addDays(start, 6);
+  const today_ = new Date();
+  const showingToday = view === 'bulan' ? anchor.getFullYear() === today_.getFullYear() && anchor.getMonth() === today_.getMonth() : today_ >= start && today_ < addDays(start, 7);
   const title =
     view === 'bulan'
       ? `${t(MONTHS[anchor.getMonth()]!)} ${anchor.getFullYear()}`
@@ -69,18 +71,21 @@ export function Calendar({ onOpen, onNewOn }: { onOpen: (b: Booking) => void; on
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 px-6 pt-4 pb-6 lg:px-8">
-      <div className="flex items-center gap-2">
-        <button type="button" onClick={() => move(-1)} aria-label={t('Sebelumnya')} className="rounded-lg p-1.5 text-muted hover:bg-raised hover:text-fg">
-          <ChevronLeft size={16} />
-        </button>
-        <button type="button" onClick={() => move(1)} aria-label={t('Berikutnya')} className="rounded-lg p-1.5 text-muted hover:bg-raised hover:text-fg">
-          <ChevronRight size={16} />
-        </button>
-        <span className="min-w-48 text-[15px] font-semibold">{title}</span>
-        <button type="button" onClick={() => setAnchor(new Date())} className="h-8 rounded-lg border border-line px-3 text-xs font-medium text-muted hover:text-fg">
-          {t('Hari ini')}
-        </button>
-        <span className="ml-auto w-48">
+      {/* The period on the left; going back, to today and on as one control by the view switch, as in a calendar app. */}
+      <div className="flex items-center gap-3">
+        <span className="min-w-0 flex-1 truncate text-[17px] font-semibold">{title}</span>
+        <span className="flex h-9 items-center rounded-[10px] border border-line bg-panel p-0.5">
+          <button type="button" onClick={() => move(-1)} aria-label={t('Sebelumnya')} title={t('Sebelumnya')} className="flex h-full items-center rounded-lg px-2 text-muted hover:bg-raised hover:text-fg">
+            <ChevronLeft size={16} />
+          </button>
+          <button type="button" onClick={() => setAnchor(new Date())} disabled={showingToday} className="h-full rounded-lg px-3 text-xs font-medium text-fg hover:bg-raised disabled:text-faint disabled:hover:bg-transparent">
+            {t('Hari ini')}
+          </button>
+          <button type="button" onClick={() => move(1)} aria-label={t('Berikutnya')} title={t('Berikutnya')} className="flex h-full items-center rounded-lg px-2 text-muted hover:bg-raised hover:text-fg">
+            <ChevronRight size={16} />
+          </button>
+        </span>
+        <span className="w-48">
           <Segmented
             value={view}
             onChange={setView}
