@@ -14,7 +14,7 @@ import { num } from '../lib/format';
 import { t } from '../lib/i18n';
 import { inpaint } from '../kreasi/engine/inpaint';
 import { newId } from '../kreasi/engine/document';
-import { BrushRing, usePointerAt } from './cursors';
+import { ScreenRing, usePointerAt } from './cursors';
 import { Slider } from './panels';
 import { ToolBox, ToolRow } from './tool-box';
 import type { EditSettings, HealSpot, HealStroke } from './geometry';
@@ -238,7 +238,7 @@ export function HealLayer({ sel, size, onSize, onSel }: { sel: HealSelection; si
           <rect width={w} height={h} fill="rgb(255 45 85 / 0.55)" mask="url(#heal-sel)" />
         </svg>
       )}
-      {pointer.at && <BrushRing x={pointer.at.x} y={pointer.at.y} size={size * w} feather={0} />}
+      <ScreenRing at={pointer.screen} share={size} feather={0} />
     </div>
   );
 }

@@ -14,7 +14,7 @@ import { Brush, ChevronDown, ChevronRight, Circle, Cloud, Eye, EyeOff, Layers, M
 import { useEffect, useRef, useState } from 'react';
 
 import { Button, cx } from '../components/ui';
-import { BrushRing, EYEDROPPER, usePointerAt } from './cursors';
+import { EYEDROPPER, ScreenRing, usePointerAt } from './cursors';
 import { PopMenu } from './preset-menu';
 import { objectMask, skyMask, type Box } from './smart-masks';
 import { t } from '../lib/i18n';
@@ -1007,9 +1007,7 @@ export function MaskLayer({
     >
     <div ref={box} className={cx('absolute', reach ? 'inset-12' : 'inset-0')}>
       <canvas ref={tint} className={tintClass} style={{ opacity: tintOn ? 1 : 0 }} />
-      {cur.kind === 'brush' && pointer.at && box.current && (
-        <BrushRing x={pointer.at.x} y={pointer.at.y} size={brush.size * box.current.clientWidth} feather={brush.feather} erase={brush.erase} />
-      )}
+      {cur.kind === 'brush' && <ScreenRing at={pointer.screen} share={brush.size} feather={brush.feather} erase={brush.erase} />}
       {cur.kind === 'linear' && placed && (
         <>
           <svg className="pointer-events-none absolute inset-0 size-full overflow-visible">

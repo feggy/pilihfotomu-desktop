@@ -6,6 +6,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 /** An eyedropper, its tip at the bottom left where the colour is read. */
 export const EYEDROPPER = `url("data:image/svg+xml,${encodeURIComponent(
@@ -63,14 +64,34 @@ export function usePointerAt(box: React.RefObject<HTMLElement | null>) {
   }, [!!client]);
   const el = box.current;
   let at: { x: number; y: number } | null = null;
+  /** On screen: the pointer, and the box's width as drawn (zoomed, mid-pinch). */
+  let screen: { x: number; y: number; width: number } | null = null;
   if (client && el) {
     const r = el.getBoundingClientRect();
     const k = r.width ? el.clientWidth / r.width : 1;
     at = { x: (client.x - r.left) * k, y: (client.y - r.top) * k };
+    screen = { ...client, width: r.width };
   }
   return {
     at,
+    screen,
     move: (e: { clientX: number; clientY: number }) => setClient({ x: e.clientX, y: e.clientY }),
     leave: () => setClient(null),
   };
+}
+
+/**
+ * The brush ring drawn over the whole window at the pointer, not inside the
+ * photo: a pinch or a glide moves the photo by a transform each frame, and a
+ * ring inside it would be carried along for a frame before catching up (it
+ * flickers away and back). `share` is the brush's width as a share of the photo's.
+ */
+export function ScreenRing({ at, share, feather, erase }: { at: { x: number; y: number; width: number } | null; share: number; feather: number; erase?: boolean }) {
+  if (!at) return null;
+  return createPortal(
+    <div className="pointer-events-none fixed inset-0 z-[60]">
+      <BrushRing x={at.x} y={at.y} size={share * at.width} feather={feather} erase={erase} />
+    </div>,
+    document.body,
+  );
 }
