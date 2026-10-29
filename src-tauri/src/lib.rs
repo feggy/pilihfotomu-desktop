@@ -968,6 +968,51 @@ fn read_user_file(path: String) -> CmdResult<String> {
     std::fs::read_to_string(user_file(&path)?).map_err(|e| e.to_string())
 }
 
+/// The day of a daily Kelola Bisnis backup copy ("pilihfotomu-bisnis-2026-10-29.json"), or None for any other file.
+fn backup_day(name: &str) -> Option<&str> {
+    let day = name.strip_prefix("pilihfotomu-bisnis-")?.strip_suffix(".json")?;
+    let b = day.as_bytes();
+    let ok = b.len() == 10 && b[4] == b'-' && b[7] == b'-' && b.iter().enumerate().all(|(i, c)| i == 4 || i == 7 || c.is_ascii_digit());
+    ok.then_some(day)
+}
+
+/// Daily copies to let go: older than `keep_from` ("YYYY-MM-DD"), except the last of each month.
+fn backups_to_prune(names: &[String], keep_from: &str) -> Vec<String> {
+    let mut old: Vec<(&str, &String)> = names.iter().filter_map(|n| backup_day(n).map(|d| (d, n))).filter(|(d, _)| *d < keep_from).collect();
+    old.sort();
+    let mut out = Vec::new();
+    for (i, (day, name)) in old.iter().enumerate() {
+        let last_of_month = old.get(i + 1).is_none_or(|(next, _)| next[..7] != day[..7]);
+        if !last_of_month {
+            out.push((*name).clone());
+        }
+    }
+    out
+}
+
+/// Thins the backup folder: daily copies older than `keep_from` go, but for the last of each month.
+/// Only files named as the app names its daily copies are ever touched.
+#[tauri::command]
+fn prune_backups(dir: String, keep_from: String) -> CmdResult<u32> {
+    let dir = PathBuf::from(dir);
+    if !dir.is_absolute() || !dir.is_dir() {
+        return Err("Folder backup tidak ditemukan.".into());
+    }
+    let names: Vec<String> = std::fs::read_dir(&dir)
+        .map_err(|e| e.to_string())?
+        .flatten()
+        .filter(|e| e.file_type().is_ok_and(|t| t.is_file()))
+        .filter_map(|e| e.file_name().into_string().ok())
+        .collect();
+    let mut gone = 0;
+    for name in backups_to_prune(&names, &keep_from) {
+        if std::fs::remove_file(dir.join(&name)).is_ok() {
+            gone += 1;
+        }
+    }
+    Ok(gone)
+}
+
 /// Quits, once the UI has saved what it had open (the menu's Quit).
 #[tauri::command]
 fn quit_app(app: AppHandle) {
@@ -1182,6 +1227,7 @@ pub fn run() {
             save_bisnis,
             write_user_file,
             read_user_file,
+            prune_backups,
             delete_upload,
             thumbnails,
             resolve_client_picks,
@@ -1196,6 +1242,30 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn prunes_old_daily_backups_but_one_a_month() {
+        let names: Vec<String> = [
+            "pilihfotomu-bisnis-2026-08-03.json",
+            "pilihfotomu-bisnis-2026-08-31.json",
+            "pilihfotomu-bisnis-2026-09-01.json",
+            "pilihfotomu-bisnis-2026-09-15.json",
+            "pilihfotomu-bisnis-2026-09-29.json",
+            "pilihfotomu-bisnis-2026-09-30.json",
+            "pilihfotomu-bisnis-2026-10-28.json",
+            "pilihfotomu-bisnis.json",
+            "pilihfotomu-bisnis-2026-08-0x.json",
+            "catatan.json",
+        ]
+        .map(String::from)
+        .to_vec();
+        let mut gone = backups_to_prune(&names, "2026-09-29");
+        gone.sort();
+        // August keeps its last (31st); September before the 29th keeps its last too (15th); from the 29th all stay.
+        assert_eq!(gone, ["pilihfotomu-bisnis-2026-08-03.json", "pilihfotomu-bisnis-2026-09-01.json"]);
+        assert_eq!(backup_day("pilihfotomu-bisnis.json"), None);
+        assert_eq!(backup_day("pilihfotomu-bisnis-2026-10-29.json"), Some("2026-10-29"));
+    }
 
     #[test]
     fn decodes_headers_and_never_overwrites() {

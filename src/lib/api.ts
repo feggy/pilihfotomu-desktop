@@ -349,6 +349,8 @@ export const api = {
   /** A PDF, CSV, ICS or JSON where the person chose; returns the path written. */
   writeUserFile: (path: string, bytes: Uint8Array) => invoke<string>('write_user_file', bytes, { headers: { path: encodeURIComponent(path) } }),
   readUserFile: (path: string) => invoke<string>('read_user_file', { path }),
+  /** The backup folder's daily copies older than `keepFrom` taken out, but the last of each month. */
+  pruneBackups: (dir: string, keepFrom: string) => invoke<number>('prune_backups', { dir, keepFrom }),
   deleteUpload: (id: string) => invoke<void>('delete_upload', { id }),
   /** Files dragged in from Finder, added to `root`'s photos with new ids. */
   addFiles: (root: string, paths: string[]) => invoke<Photo[]>('add_files', { root, paths }),

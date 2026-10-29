@@ -273,7 +273,7 @@ function BackupSection() {
       </p>
       <div className="flex flex-col gap-2 rounded-xl bg-panel p-3">
         <span className="text-[13px] font-medium">{t('Backup otomatis ke folder')}</span>
-        <span className="text-[11px] text-faint">{t('Pilih folder yang disinkronkan ke cloud (iCloud Drive, Google Drive, Dropbox) supaya datanya ikut tersimpan di sana. Disalin setiap ada perubahan, plus satu salinan per hari.')}</span>
+        <span className="text-[11px] text-faint">{t('Pilih folder yang disinkronkan ke cloud (iCloud Drive, Google Drive, Dropbox) supaya datanya ikut tersimpan di sana. Disalin setiap ada perubahan, plus satu salinan per hari: 30 hari terakhir disimpan semua, sebelum itu satu per bulan.')}</span>
         <div className="flex items-center gap-2">
           <span className={cx('min-w-0 flex-1 truncate rounded-lg bg-bg px-2.5 py-2 text-xs', data.settings.backupDir ? 'text-fg' : 'text-faint')}>{data.settings.backupDir ?? t('Belum dipilih')}</span>
           <button type="button" onClick={pickFolder} className={cx(btnGhost, 'h-8 px-3 text-xs')}>

@@ -263,7 +263,7 @@ export default {
   'Backup data': 'Data backup',
   'Semua data Kelola Bisnis hanya tersimpan di komputer ini, tidak di server mana pun. Kalau komputer rusak, hilang, atau aplikasi dihapus, datanya ikut hilang. Menjaga backup adalah tanggung jawab kamu.': 'All Manage Business data is stored only on this computer, not on any server. If the computer breaks, is lost or the app is removed, the data goes with it. Keeping backups is your responsibility.',
   'Backup otomatis ke folder': 'Automatic backup to a folder',
-  'Pilih folder yang disinkronkan ke cloud (iCloud Drive, Google Drive, Dropbox) supaya datanya ikut tersimpan di sana. Disalin setiap ada perubahan, plus satu salinan per hari.': 'Choose a folder synced to the cloud (iCloud Drive, Google Drive, Dropbox) so the data is kept there too. Copied on every change, plus one copy a day.',
+  'Pilih folder yang disinkronkan ke cloud (iCloud Drive, Google Drive, Dropbox) supaya datanya ikut tersimpan di sana. Disalin setiap ada perubahan, plus satu salinan per hari: 30 hari terakhir disimpan semua, sebelum itu satu per bulan.': 'Choose a folder synced to the cloud (iCloud Drive, Google Drive, Dropbox) so the data is kept there too. Copied on every change, plus one copy a day: the last 30 days all kept, one a month before that.',
   'Belum dipilih': 'Not chosen',
   'Matikan': 'Turn off',
   'Backup otomatis terakhir gagal: {e}': 'The last automatic backup failed: {e}',

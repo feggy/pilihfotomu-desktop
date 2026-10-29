@@ -2,7 +2,7 @@
  * Backups of Kelola Bisnis, which lives on this computer only: a file saved
  * by hand, a file restored, and — once a folder is chosen (one iCloud Drive
  * or Google Drive keeps in the cloud) — a copy written there on every change,
- * plus one a day to go back to.
+ * plus one a day to go back to (the last 30 days, then one a month).
  */
 
 import { documentDir, join } from '@tauri-apps/api/path';
@@ -13,6 +13,8 @@ import { onBisnisSaved, useBisnis } from './store';
 import type { BisnisData } from './types';
 
 const AUTO_KEY = 'pilihfotomu-bisnis-auto-backup';
+/** Daily copies kept whole; older ones thin out to one a month. */
+const KEEP_DAYS = 30;
 const joinPath = (dir: string, name: string) => `${dir}${dir.includes('\\') && !dir.includes('/') ? '\\' : '/'}${name}`;
 
 export const backupName = (day = dayKey(new Date())) => `pilihfotomu-bisnis-${day}.json`;
@@ -39,7 +41,13 @@ onBisnisSaved(async (json, data) => {
     await api.writeUserFile(joinPath(dir, 'pilihfotomu-bisnis.json'), bytes);
     const today = dayKey(new Date());
     const last = lastAutoBackup();
-    if (!last || dayKey(new Date(last)) !== today) await api.writeUserFile(joinPath(dir, backupName(today)), bytes);
+    if (!last || dayKey(new Date(last)) !== today) {
+      await api.writeUserFile(joinPath(dir, backupName(today)), bytes);
+      // Once a day: the last 30 days kept, and one a month before that, so the folder doesn't grow for ever.
+      const keepFrom = new Date();
+      keepFrom.setDate(keepFrom.getDate() - KEEP_DAYS);
+      api.pruneBackups(dir, dayKey(keepFrom)).catch(() => {});
+    }
     failed = null;
     try {
       localStorage.setItem(AUTO_KEY, String(Date.now()));
