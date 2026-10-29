@@ -8,6 +8,7 @@ import { X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 
+import { Select } from '../components/select';
 import { Button, cx } from '../components/ui';
 import { t } from '../lib/i18n';
 
@@ -63,22 +64,15 @@ export function SavePresetDialog({
             className="h-9 rounded-[10px] border border-line bg-bg px-3 text-[13px] font-normal text-fg outline-none focus:border-gold"
           />
         </label>
-        <label className="flex flex-col gap-1.5 text-xs font-medium text-muted">
+        <div className="flex flex-col gap-1.5 text-xs font-medium text-muted">
           {t('Grup')}
-          <select
+          <Select
             value={group}
-            onChange={(e) => setGroup(e.target.value)}
-            className="h-9 rounded-[10px] border border-line bg-bg px-2 text-[13px] font-normal text-fg outline-none"
-          >
-            <option value="">{t('Preset saya')}</option>
-            {groups.map((g) => (
-              <option key={g} value={g}>
-                {g}
-              </option>
-            ))}
-            <option value={NEW}>{t('Grup baru…')}</option>
-          </select>
-        </label>
+            onChange={setGroup}
+            className="font-normal"
+            options={[{ value: '', label: t('Preset saya') }, ...groups.map((g) => ({ value: g, label: g })), { value: NEW, label: t('Grup baru…'), divided: true }]}
+          />
+        </div>
         {group === NEW && (
           <input
             type="text"

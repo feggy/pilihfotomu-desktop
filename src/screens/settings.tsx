@@ -23,6 +23,7 @@ import { MAX_BRAND_COLORS, readLogo, useBrand } from '../kreasi/brand';
 import { FONT_CATEGORIES, FONTS } from '../kreasi/engine/font-catalog';
 import { fontFamilies } from '../kreasi/kit';
 import { TitleBar, isMac } from '../components/title-bar';
+import { Select } from '../components/select';
 import { Button, Chip, IconButton, Kbd, Segmented, Switch, cx } from '../components/ui';
 import { api, type CacheInfo, type Options, type ShootType, type Strictness } from '../lib/api';
 import { bytes } from '../lib/format';
@@ -290,29 +291,22 @@ function BrandSettings() {
           </div>
           <span className="text-xs text-faint">{t('Muncul paling depan di setiap pilihan warna.')}</span>
         </div>
-        <label className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2">
           <span className="text-[13px] font-medium">{t('Huruf andalan')}</span>
-          <select
+          <Select
             value={brand.font ?? ''}
-            onChange={(e) => brand.set({ font: e.target.value || null })}
-            className="h-[34px] rounded-[10px] border border-line bg-bg px-3 text-[13px] outline-none focus:border-gold"
-            style={brand.font ? { fontFamily: fam[brand.font] } : undefined}
-          >
-            <option value="">{t('Tidak ada')}</option>
-            {FONT_CATEGORIES.map((c) => (
-              <optgroup key={c.id} label={t(c.label)}>
-                {Object.entries(FONTS)
+            onChange={(v) => brand.set({ font: v || null })}
+            options={[
+              { value: '', label: t('Tidak ada') },
+              ...FONT_CATEGORIES.flatMap((c) =>
+                Object.entries(FONTS)
                   .filter(([, f]) => f.category === c.id)
-                  .map(([id, f]) => (
-                    <option key={id} value={id}>
-                      {f.label}
-                    </option>
-                  ))}
-              </optgroup>
-            ))}
-          </select>
+                  .map(([id, f]) => ({ value: id, label: f.label, group: t(c.label), style: { fontFamily: fam[id] } })),
+              ),
+            ]}
+          />
           <span className="text-xs text-faint">{t('Muncul paling atas di daftar huruf, dan dipakai untuk nama studio.')}</span>
-        </label>
+        </div>
       </div>
     </div>
   );
@@ -353,19 +347,12 @@ function AnalysisDefaults() {
         </div>
         <div className="flex flex-col gap-2">
           <span className="text-[13px] font-medium">{t('Jenis pemotretan')}</span>
-          <select
+          <Select<ShootType | 'auto'>
             aria-label={t('Jenis pemotretan')}
             value={options.shootType}
-            onChange={(e) => setOptions(withShootType(options, e.target.value as ShootType))}
-            className="h-[34px] rounded-[10px] border border-line bg-bg px-3 text-[13px] outline-none focus:border-gold"
-          >
-            <option value="auto">{GENERAL.label}</option>
-            {SHOOT_TYPES.map((type) => (
-              <option key={type.id} value={type.id}>
-                {type.label} — {type.sub}
-              </option>
-            ))}
-          </select>
+            onChange={(v) => setOptions(withShootType(options, v as ShootType))}
+            options={[{ value: 'auto', label: GENERAL.label }, ...SHOOT_TYPES.map((type) => ({ value: type.id, label: type.label, note: type.sub }))]}
+          />
           <p className="text-xs text-faint">{shootRule(options.shootType)}</p>
         </div>
       </div>

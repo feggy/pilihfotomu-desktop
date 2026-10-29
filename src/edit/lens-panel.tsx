@@ -8,6 +8,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 
+import { Select } from '../components/select';
 import { cx } from '../components/ui';
 import { t } from '../lib/i18n';
 import { NO_GEOMETRY, type EditSettings } from './geometry';
@@ -98,7 +99,6 @@ export function LensPanel({
     () => (all ?? []).filter((l) => l.maker === maker).sort((x, y) => lensName(x).localeCompare(lensName(y))),
     [all, maker],
   );
-  const select = 'h-7 min-w-0 flex-1 rounded-md border border-line bg-bg px-1.5 text-xs text-fg outline-none disabled:opacity-50';
   const row = (label: string, el: React.ReactNode) => (
     <label className="flex items-center gap-2 text-xs text-muted">
       <span className="w-14 shrink-0 text-right">{label}</span>
@@ -136,71 +136,71 @@ export function LensPanel({
           <>
           {row(
             t('Setup'),
-            <select
+            <Select
               value={lens && auto === lens.name ? 'auto' : lens ? 'custom' : 'default'}
-              onChange={(e) => {
-                if (e.target.value !== 'auto') return;
+              onChange={(v) => {
+                if (v !== 'auto') return;
                 setBusy(true);
                 lensCorrectionFor(root, photoId)
                   .then((r) => r.found && put({ ...r.found, profile: true, ca: lens?.ca ?? false, distortion: lens?.distortion ?? 100, vignetting: lens?.vignetting ?? 100 }))
                   .finally(() => (setBusy(false), onDone()));
               }}
-              className={select}
-            >
-              <option value="default">{t('Default')}</option>
-              <option value="auto">{t('Auto')}</option>
-              <option value="custom" disabled={!lens || auto === lens.name}>
-                {t('Custom')}
-              </option>
-            </select>,
+              size="xs"
+              className="flex-1"
+              options={[
+                { value: 'default', label: t('Default') },
+                { value: 'auto', label: t('Auto') },
+                { value: 'custom', label: t('Custom'), disabled: !lens || auto === lens.name },
+              ]}
+            />,
           )}
           <div className="flex flex-col gap-2 border-t border-line-soft pt-3">
             <span className="text-center text-xs text-muted">{t('Profil lensa')}</span>
             {row(
               t('Merek'),
-              <select
+              <Select
                 value={maker}
                 disabled={!all}
-                onChange={(e) => {
-                  const first = (all ?? []).filter((l) => l.maker === e.target.value).sort((x, y) => lensName(x).localeCompare(lensName(y)))[0];
+                onChange={(m) => {
+                  const first = (all ?? []).filter((l) => l.maker === m).sort((x, y) => lensName(x).localeCompare(lensName(y)))[0];
                   if (first) choose(first);
                 }}
-                className={select}
-              >
-                {!maker && <option value="">{t('Tidak ada')}</option>}
-                {makers.map((m) => (
-                  <option key={m} value={m}>
-                    {m}
-                  </option>
-                ))}
-              </select>,
+                size="xs"
+                className="flex-1"
+                options={[...(!maker ? [{ value: '', label: t('Tidak ada') }] : []), ...makers.map((m) => ({ value: m, label: m }))]}
+              />,
             )}
             {row(
               t('Model'),
-              <select
+              <Select
                 value={lens?.name ?? ''}
                 disabled={!maker}
-                onChange={(e) => {
-                  const picked = models.find((l) => lensName(l) === e.target.value);
+                onChange={(name) => {
+                  const picked = models.find((l) => lensName(l) === name);
                   if (picked) choose(picked);
                 }}
-                className={select}
-              >
-                {!lens && <option value="">{t('Tidak ada')}</option>}
-                {lens && !models.some((l) => lensName(l) === lens.name) && <option value={lens.name}>{lens.name}</option>}
-                {models.map((l) => (
-                  <option key={lensName(l)} value={lensName(l)}>
-                    {lensName(l)}
-                  </option>
-                ))}
-              </select>,
+                size="xs"
+                className="flex-1"
+                options={[
+                  ...(!lens ? [{ value: '', label: t('Tidak ada') }] : []),
+                  ...(lens && !models.some((l) => lensName(l) === lens.name) ? [{ value: lens.name, label: lens.name }] : []),
+                  ...models.map((l) => ({ value: lensName(l), label: lensName(l) })),
+                ]}
+              />,
             )}
             {row(
               t('Profil'),
-              <select value={lens ? 'lensfun' : ''} disabled className={select}>
-                <option value="">{t('Tidak ada')}</option>
-                <option value="lensfun">lensfun ({lens?.name ?? ''})</option>
-              </select>,
+              <Select
+                value={lens ? 'lensfun' : ''}
+                disabled
+                onChange={() => {}}
+                size="xs"
+                className="flex-1"
+                options={[
+                  { value: '', label: t('Tidak ada') },
+                  { value: 'lensfun', label: `lensfun (${lens?.name ?? ''})` },
+                ]}
+              />,
             )}
           </div>
           {lens?.profile && (

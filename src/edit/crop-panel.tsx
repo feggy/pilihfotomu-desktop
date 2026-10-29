@@ -8,6 +8,7 @@
 
 import { Check, FlipHorizontal2, FlipVertical2, Lock, LockOpen, RotateCcw, RotateCw, Ruler, Wand2 } from 'lucide-react';
 
+import { Select } from '../components/select';
 import { Button, cx } from '../components/ui';
 import { num } from '../lib/format';
 import { t } from '../lib/i18n';
@@ -91,17 +92,7 @@ export function CropPanel({
             {locked ? <Lock size={14} /> : <LockOpen size={14} />}
           </button>
         </span>
-        <select
-          value={ratioId}
-          onChange={(e) => onRatio(e.target.value)}
-          className="h-8 rounded-md border border-line bg-bg px-2 text-[13px] text-fg outline-none"
-        >
-          {RATIOS.map((r) => (
-            <option key={r.id} value={r.id}>
-              {t(r.label)}
-            </option>
-          ))}
-        </select>
+        <Select value={ratioId} onChange={onRatio} size="sm" options={RATIOS.map((r) => ({ value: r.id, label: t(r.label) }))} />
         <button type="button" onClick={onSwap} disabled={!locked || ratioId === '1:1'} className="self-start text-[11px] text-faint hover:text-fg disabled:opacity-40">
           {portrait ? t('Tegak') : t('Datar')} · {t('tekan X untuk tukar tegak/datar')}
         </button>

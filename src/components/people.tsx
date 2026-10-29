@@ -12,6 +12,7 @@ import { api, thumbUrl, type Face, type PhotoEntry } from '../lib/api';
 import { everyoneOf, facesOf, num, PERSON_MIN, personName, type Person } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useApp } from '../store';
+import { Select } from './select';
 import { Button, Switch, cx } from './ui';
 
 /** A person's face cut from a photo. */
@@ -262,11 +263,7 @@ function PersonDetail({
     setPicked(new Set());
     setMoveTo('');
   };
-  const options = others.map((x) => (
-    <option key={x.id} value={x.id}>
-      {label(x.id)} · {t('{count} foto', { n: x.photos, count: num(x.photos) })}
-    </option>
-  ));
+  const options = others.map((x) => ({ value: String(x.id), label: label(x.id), note: t('{count} foto', { n: x.photos, count: num(x.photos) }) }));
 
   return (
     <div className="flex min-w-0 flex-1 flex-col">
@@ -288,15 +285,14 @@ function PersonDetail({
           <div className="flex flex-col gap-1 text-xs font-medium text-muted">
             {t('Orang yang sama dengan')}
             <div className="flex gap-2">
-              <select
-                value={mergeInto}
-                onChange={(e) => setMergeInto(e.target.value === '' ? '' : Number(e.target.value))}
+              <Select
+                value={String(mergeInto)}
+                onChange={(v) => setMergeInto(v === '' ? '' : Number(v))}
                 disabled={busy}
-                className="h-9 w-48 rounded-[10px] border border-line bg-bg px-2 text-[13px] font-normal text-fg outline-none"
-              >
-                <option value="">{t('Pilih orang…')}</option>
-                {options}
-              </select>
+                placeholder={t('Pilih orang…')}
+                className="!w-48 font-normal"
+                options={options}
+              />
               <Button icon={Merge} onClick={() => mergeInto !== '' && onMerge(mergeInto)} disabled={busy || mergeInto === ''}>
                 {t('Gabungkan')}
               </Button>
@@ -365,15 +361,14 @@ function PersonDetail({
           </Button>
           {others.length > 0 && (
             <>
-              <select
-                value={moveTo}
-                onChange={(e) => setMoveTo(e.target.value === '' ? '' : Number(e.target.value))}
+              <Select
+                value={String(moveTo)}
+                onChange={(v) => setMoveTo(v === '' ? '' : Number(v))}
                 disabled={busy}
-                className="h-9 w-40 rounded-[10px] border border-line bg-bg px-2 text-[13px] text-fg outline-none"
-              >
-                <option value="">{t('Pindahkan ke…')}</option>
-                {options}
-              </select>
+                placeholder={t('Pindahkan ke…')}
+                className="!w-40"
+                options={options}
+              />
               <Button onClick={() => moveTo !== '' && move(moveTo)} disabled={busy || moveTo === ''}>
                 {t('Pindahkan')}
               </Button>

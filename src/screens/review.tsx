@@ -41,6 +41,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { EyesNote } from '../components/eyes-note';
 import { FaceAvatar, PeopleDialog, PeoplePicker } from '../components/people';
 import { TitleBar, isMac } from '../components/title-bar';
+import { Select } from '../components/select';
 import { Button, Chip, Dot, IconButton, Kbd, StatusBadge, Stars, STATUS_ICON, Switch, cx } from '../components/ui';
 import { api, faceSharp, isManual, thumbUrl, type PhotoEntry, type ShootType, type Status, type Strictness } from '../lib/api';
 import { clock, CROWD, crowdOf, duration, eyeSummary, faceSharpness, oldFaces, peopleOf, personName, type CrowdKind,
@@ -801,19 +802,15 @@ function Retune() {
         </div>
         <label className="flex items-center gap-2 rounded-lg border border-line-soft bg-bg px-2">
           <SlidersHorizontal size={13} className="shrink-0 text-faint" />
-          <select
+          <Select<ShootType | 'auto'>
             aria-label={t('Jenis pemotretan')}
             value={shootType}
-            onChange={(e) => change({ shootType: e.target.value as ShootType })}
-            className="h-7 min-w-0 flex-1 bg-transparent text-xs text-fg outline-none"
-          >
-            <option value="auto">{GENERAL.label}</option>
-            {SHOOT_TYPES.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.label}
-              </option>
-            ))}
-          </select>
+            onChange={(v) => change({ shootType: v as ShootType })}
+            size="xs"
+            bare
+            className="flex-1"
+            options={[{ value: 'auto', label: GENERAL.label }, ...SHOOT_TYPES.map((s) => ({ value: s.id, label: s.label }))]}
+          />
         </label>
         <div className="flex flex-col gap-1.5 rounded-lg border border-line-soft bg-bg p-2">
           <div className="flex items-center justify-between gap-2 text-xs text-muted">

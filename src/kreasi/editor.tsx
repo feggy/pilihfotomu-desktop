@@ -46,6 +46,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { Select } from '../components/select';
 import { Switch, cx } from '../components/ui';
 import { fixed } from '../lib/format';
 import { t, tRust } from '../lib/i18n';
@@ -1356,16 +1357,10 @@ function SaveTemplateDialog({ onClose }: { onClose: () => void }) {
                 className="h-9 rounded-lg border border-line bg-bg px-3 text-[13px] text-fg outline-none focus:border-gold"
               />
             </label>
-            <label className="flex flex-col gap-1.5 text-xs font-medium text-muted">
+            <div className="flex flex-col gap-1.5 text-xs font-medium text-muted">
               {t('Kategori')}
-              <select value={category} onChange={(e) => setCategory(e.target.value as TemplateCategory)} className="h-9 rounded-lg border border-line bg-bg px-2.5 text-[13px] text-fg outline-none focus:border-gold">
-                {CATEGORIES.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {t(c.label)}
-                  </option>
-                ))}
-              </select>
-            </label>
+              <Select<TemplateCategory> value={category} onChange={setCategory} options={CATEGORIES.map((c) => ({ value: c.id, label: t(c.label) }))} />
+            </div>
             <div className="flex justify-end gap-2">
               <button type="button" onClick={onClose} className="h-10 rounded-[10px] px-4 text-[13px] font-medium text-muted hover:text-fg">
                 {t('Batal')}

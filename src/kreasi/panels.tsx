@@ -4,9 +4,10 @@
  * exactly what lands on the canvas.
  */
 
-import { ArrowDown, ArrowUp, ChevronDown, Eye, EyeOff, Image as ImageIcon, ImagePlus, Lock, Search, Shapes, Trash2, Type, Unlock } from 'lucide-react';
+import { ArrowDown, ArrowUp, Eye, EyeOff, Image as ImageIcon, ImagePlus, Lock, Search, Shapes, Trash2, Type, Unlock } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { Select } from '../components/select';
 import { cx } from '../components/ui';
 import { api } from '../lib/api';
 import { useApp } from '../store';
@@ -277,21 +278,16 @@ export function TextPanel({ onAdd }: { onAdd: (a: { edit: Edit; id: string }) =>
       ))}
       <Title>{t('Gaya siap pakai')}</Title>
       {/* One line however many kinds there are. */}
-      <label className="relative flex items-center">
-        <select
+      <div className="relative flex items-center">
+        <Select
           value={cat}
-          onChange={(e) => setCat(e.target.value)}
+          onChange={setCat}
           aria-label={t('Gaya siap pakai')}
-          className="h-8 w-full appearance-none rounded-lg border border-line bg-panel-2 pr-8 pl-2.5 text-xs font-medium text-fg outline-none focus:border-gold"
-        >
-          {PRESET_CATEGORIES.map((c) => (
-            <option key={c.id} value={c.id}>
-              {t(c.label)} ({ALL_PRESETS.filter((p) => p.category === c.id).length})
-            </option>
-          ))}
-        </select>
-        <ChevronDown size={14} className="pointer-events-none absolute right-2.5 text-faint" />
-      </label>
+          size="sm"
+          className="!bg-panel-2 font-medium"
+          options={PRESET_CATEGORIES.map((c) => ({ value: c.id, label: t(c.label), note: String(ALL_PRESETS.filter((p) => p.category === c.id).length) }))}
+        />
+      </div>
       <div className="grid grid-cols-2 gap-2">
         {presets.map((p) => (
           <button key={p.id} type="button" title={p.name} onClick={() => onAdd(addPreset(p, useBrand.getState().studio))} className="rounded-md ring-1 ring-line-soft hover:ring-gold">
