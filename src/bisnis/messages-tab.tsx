@@ -148,9 +148,10 @@ export function MessagesTab() {
                   </div>
                   {dirty && <SaveBar onSave={() => setTpl({ name: name.trim() || tpl.name, body, columnId: stage || undefined, attach: attach || undefined })} onCancel={reset} />}
                 </div>
-                <div className="flex flex-col gap-2">
+                {/* As tall as the message, not the list beside it; it stays in view while the page scrolls. */}
+                <div className="sticky top-0 flex flex-col gap-2 self-start">
                   <span className="text-[11px] font-medium text-muted">{sample ? t('Pratinjau dengan booking terakhir') : t('Pratinjau')}</span>
-                  <div className="min-h-0 flex-1 overflow-y-auto rounded-2xl bg-[#0b1f17] p-4">
+                  <div className="max-h-[560px] overflow-y-auto rounded-2xl bg-[#0b1f17] p-4">
                     <p className="ml-auto max-w-[92%] rounded-xl rounded-tr-sm bg-[#1f5c45] px-3 py-2 text-[13px] leading-relaxed whitespace-pre-wrap text-white">{fillTemplate(body, data, studio, sample)}</p>
                   </div>
                 </div>
