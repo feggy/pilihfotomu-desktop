@@ -154,6 +154,8 @@ export interface BisnisSettings {
   /** Reminders: the day before a shoot; payment due within this many days; delivery due. */
   remindShoot: boolean;
   remindDueDays: number;
+  /** "Hasil dikirim paling lambat" of a new booking: this many days after its last session (0: left empty). */
+  deliveryDays: number;
   remindDelivery: boolean;
   /** A copy of everything written here as it changes (an iCloud or Google Drive folder, say). */
   backupDir: string | null;

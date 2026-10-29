@@ -444,4 +444,6 @@ export default {
   'Cari klien, paket, lokasi, nomor invoice…': 'Search clients, packages, places, invoice numbers…',
   'Baru dibuka atau diubah': 'Recently changed',
   'Tidak ada yang cocok dengan "{q}".': 'Nothing matches "{q}".',
+  'Hasil dikirim, berapa hari setelah sesi foto': 'Photos delivered, days after the shoot',
+  'Mengisi "Hasil dikirim paling lambat" di booking baru dari sesi terakhirnya; tetap bisa diubah per booking. 0: dikosongkan.': 'Fills “Deliver photos by” on new bookings from their last session; still changeable per booking. 0: left empty.',
 } as Record<string, string | [string, string]>;

@@ -137,6 +137,9 @@ export function Settings({ sections }: { sections?: ReactNode }) {
           <Field label={t('Jeda antar jadwal')} hint={t('Waktu perjalanan dan persiapan. Dua jadwal yang lebih dekat dari ini ditandai bentrok.')} className="max-w-60">
             <NumberInput live value={draft.settings.bufferMin} onCommit={(bufferMin) => setSettings({ bufferMin })} max={600} unit={t('menit')} />
           </Field>
+          <Field label={t('Hasil dikirim, berapa hari setelah sesi foto')} hint={t('Mengisi "Hasil dikirim paling lambat" di booking baru dari sesi terakhirnya; tetap bisa diubah per booking. 0: dikosongkan.')} className="max-w-60">
+            <NumberInput live value={draft.settings.deliveryDays} onCommit={(deliveryDays) => setSettings({ deliveryDays })} max={365} unit={t('hari')} />
+          </Field>
         </section>
 
         <section className="flex flex-col gap-3">

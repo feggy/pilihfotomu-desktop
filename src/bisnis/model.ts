@@ -154,6 +154,7 @@ export function emptyData(): BisnisData {
       minDpPercent: 30,
       remindShoot: true,
       remindDueDays: 3,
+      deliveryDays: 14,
       remindDelivery: true,
       backupDir: null,
       lastBackup: null,
@@ -242,6 +243,15 @@ export const PAY_COLOR: Record<PayState, string> = { belum: 'var(--color-reject)
 
 const pad = (n: number) => String(n).padStart(2, '0');
 /** A Date as "YYYY-MM-DD", local. */
+/** When the photos are due: `days` after the day of the last session ('' without sessions, or with 0 days). */
+export function deliveryDue(sessions: Session[], days: number): string {
+  const last = sessions.reduce<string>((m, s) => (s.end > m ? s.end : m), '');
+  if (!last || days <= 0) return '';
+  const d = parseLocal(last);
+  d.setDate(d.getDate() + days);
+  return dayKey(d);
+}
+
 export const dayKey = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 /** "YYYY-MM-DDTHH:mm" as a local Date. */
 export const parseLocal = (s: string) => {

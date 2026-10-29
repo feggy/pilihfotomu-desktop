@@ -11,7 +11,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { Select } from '../components/select';
 import { cx } from '../components/ui';
 import { t } from '../lib/i18n';
-import { PAY_COLOR, PAY_LABEL, balanceOf, clashesOf, localString, newId, paidOf, parseLocal, payState, rupiah, shortDate, timeOf, titleOf, today, totalOf } from './model';
+import { PAY_COLOR, PAY_LABEL, balanceOf, clashesOf, deliveryDue, localString, newId, paidOf, parseLocal, payState, rupiah, shortDate, timeOf, titleOf, today, totalOf } from './model';
 import { nextColumn } from './overview';
 import { googleCalendarLink } from './reminders';
 import { useBisnis } from './store';
@@ -37,7 +37,7 @@ export function newBooking(data: BisnisData, columnId: string, day?: string): Bo
     order: Math.max(0, ...data.bookings.filter((b) => b.columnId === columnId).map((b) => b.order + 1)),
     payments: [],
     dueDate: '',
-    deliveryDate: '',
+    deliveryDate: day ? deliveryDue([sessionOn(day, 120)], data.settings.deliveryDays) : '',
     notes: '',
     invoiceNo: '',
     createdAt: now,
@@ -80,7 +80,14 @@ export function BookingEditor({ initial, onClose, actions = [] }: { initial: Boo
   const known = data.clients.find((c) => c.id === initial.clientId);
   const [client, setClient] = useState<Pick<Client, 'id' | 'name' | 'phone' | 'email'>>(known ?? { id: '', name: '', phone: '', email: '' });
   const [asking, setAsking] = useState(false);
-  const set = (patch: Partial<Booking>) => setB((x) => ({ ...x, ...patch }));
+  const set = (patch: Partial<Booking>) =>
+    setB((x) => {
+      // The delivery date follows the sessions while it is the one worked out from them (or empty): one set by hand stays.
+      const days = data.settings.deliveryDays;
+      const follows = !x.deliveryDate || x.deliveryDate === deliveryDue(x.sessions, days);
+      const deliveryDate = patch.sessions && !('deliveryDate' in patch) && follows ? deliveryDue(patch.sessions, days) : undefined;
+      return { ...x, ...patch, ...(deliveryDate !== undefined && { deliveryDate }) };
+    });
   const pkg = data.packages.find((p) => p.id === b.packageId);
   const duration = pkg?.durationMin ?? 120;
 
