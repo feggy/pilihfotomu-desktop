@@ -148,7 +148,7 @@ describe('deliveryDue', () => {
 });
 
 describe('money', () => {
-  const b = booking('m', { packagePrice: 1_000_000, addons: [{ id: 'x', name: 'Drone', price: 500_000 }], discount: 100_000 });
+  const b = booking('m', { packagePrice: 1_000_000, addons: [{ name: 'Drone', price: 500_000 }], discount: 100_000 });
   it('adds up the total, paid and balance', () => {
     expect(totalOf(b)).toBe(1_400_000);
     const paid = { ...b, payments: [{ id: 'p', date: '2026-10-01', amount: 400_000, method: 'Transfer', note: 'DP' }] };
