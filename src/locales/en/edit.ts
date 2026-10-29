@@ -325,4 +325,5 @@ export default {
   'Kurangi': 'Subtract',
   'Batal': 'Cancel',
   'Hapus##heal': 'Remove',
+  'Tahan Alt sambil menyapu untuk sebaliknya': 'Hold Alt while brushing for the opposite',
 } as Record<string, string | [string, string]>;

@@ -460,8 +460,33 @@ export function EditView({
   // Drag moves round a zoomed photo; a click zooms in there, or back out.
   /** Dragging a zoomed photo: the hand closes. */
   const [panning, setPanning] = useState(false);
+  /** Space held while masking or removing: the brush steps aside, a drag moves the photo and a click zooms (Lightroom's hand). */
+  const [hand, setHand] = useState(false);
+  useEffect(() => {
+    if (!masking) return setHand(false);
+    const typing = (e: KeyboardEvent) => (e.target as HTMLElement | null)?.closest('input, textarea, [contenteditable="true"]');
+    const down = (e: KeyboardEvent) => {
+      if (e.code !== 'Space' || typing(e)) return;
+      e.preventDefault();
+      setHand(true);
+    };
+    const up = (e: KeyboardEvent) => {
+      if (e.code !== 'Space' || typing(e)) return;
+      e.preventDefault();
+      setHand(false);
+    };
+    const blur = () => setHand(false);
+    window.addEventListener('keydown', down);
+    window.addEventListener('keyup', up);
+    window.addEventListener('blur', blur);
+    return () => {
+      window.removeEventListener('keydown', down);
+      window.removeEventListener('keyup', up);
+      window.removeEventListener('blur', blur);
+    };
+  }, [masking]);
   const press = (e: React.PointerEvent) => {
-    if (picking || !zoomable || masking || e.button !== 0) return;
+    if (picking || !zoomable || (masking && !hand) || e.button !== 0) return;
     const el = scroller.current!;
     if (zoomed) setPanning(true);
     const start = { x: e.clientX, y: e.clientY, l: el.scrollLeft, t: el.scrollTop };
@@ -546,6 +571,8 @@ export function EditView({
             }
           />
           {masking && layer}
+          {/* Over the brush while Space is held: the press reaches the scroller and drags the photo. */}
+          {hand && <div className={cx('absolute inset-0 z-20', !zoomed ? 'cursor-zoom-in' : panning ? 'cursor-grabbing' : 'cursor-grab')} />}
           {cropping && leveling && <LevelLine onLevel={onLevel} />}
           {cropping && !leveling && (
             <CropBox

@@ -129,6 +129,7 @@ export function HealPanel({
     <button
       type="button"
       onClick={() => onSel({ ...sel, erase })}
+      title={t('Tahan Alt sambil menyapu untuk sebaliknya')}
       aria-pressed={sel.erase === erase}
       className={cx('flex h-7 flex-1 items-center justify-center gap-1.5 rounded-md border text-xs', sel.erase === erase ? 'border-fg/70 font-semibold text-fg' : 'border-line text-muted hover:text-fg')}
     >
@@ -139,11 +140,6 @@ export function HealPanel({
     <ToolBox title={t('Hapus objek')} onClose={onClose}>
       <ToolRow>
         <span className="text-xs font-semibold">{painted ? t('Dipilih##heal') : t('Sapukan di foto')}</span>
-        <p className="text-[11px] leading-relaxed text-faint">
-          {painted
-            ? t('Tambah atau kurangi bagian yang ditandai merah, lalu Hapus. Tahan Alt sambil menyapu untuk sebaliknya.')
-            : t('Tandai yang mau dihapus: orang di latar, papan, kabel, noda. Bagian itu diisi dari sekitarnya, di komputer ini.')}
-        </p>
         <div className="flex items-center gap-2">
           <span className="w-11 shrink-0 text-xs text-muted">{t('Mask:')}</span>
           {mode(false, Plus, t('Tambah'))}
@@ -160,7 +156,6 @@ export function HealPanel({
             </Button>
           </div>
         )}
-        {!painted && <p className="text-[11px] text-faint">{t('[ dan ] mengubah ukuran kuas. Cocok untuk benda kecil; area besar di atas detail hasilnya bisa kurang rapi.')}</p>}
       </ToolRow>
       {spots.length > 0 && (
         <ToolRow className="gap-1">
