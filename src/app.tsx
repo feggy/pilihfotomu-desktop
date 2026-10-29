@@ -20,6 +20,7 @@ import { Review } from './screens/review';
 import { Settings } from './screens/settings';
 import { Setup } from './screens/setup';
 import { TermsGate } from './components/legal';
+import { Welcome } from './components/welcome';
 import { isMac } from './components/title-bar';
 import { api } from './lib/api';
 import { lang, syncNativeLang, t, tRust, useLang } from './lib/i18n';
@@ -195,6 +196,7 @@ export function App() {
       )}
       {view}
       <ErrorToast />
+      <Welcome />
       <TermsGate />
     </>
   );

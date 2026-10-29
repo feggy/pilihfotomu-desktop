@@ -91,4 +91,19 @@ export default {
   'Akad nikah': 'Wedding ceremony',
   'Lanjutkan sesi terakhir': 'Continue last session',
   'Lanjutkan: {name}': 'Continue: {name}',
+
+  // Welcome
+  'Nanti saja, ke Beranda': 'Later, take me Home',
+  'Lewati semua': 'Skip all',
+  'Selamat datang di pilihfotomu': 'Welcome to pilihfotomu',
+  'Pilih foto, edit, buat konten, dan kelola klien, semuanya di komputer ini. Mulai dengan bahasa yang kamu pakai.': 'Cull, edit, make content and manage clients, all on this computer. Start with your language.',
+  'Studio kamu': 'Your studio',
+  'Nama dan logo dipakai di invoice, kuitansi, pesan WhatsApp, dan desain Buat konten. Bisa diubah kapan saja di Pengaturan.': 'Your name and logo go on invoices, receipts, WhatsApp messages and Buat konten designs. Change them any time in Settings.',
+  'Logo: PNG dengan latar transparan paling rapi. Boleh dilewati.': 'Logo: a PNG with a transparent background looks best. Optional.',
+  'Catat booking, jadwal, dan pembayaran klien': 'Record bookings, schedules and client payments',
+  'Pilah foto sesi pertamamu': 'Cull your first session',
+  'Atur cahaya dan warna, pakai preset': 'Adjust light and colour, use presets',
+  'Story dan feed dari template': 'Stories and feed posts from templates',
+  'Mau mulai dari mana?': 'Where do you want to start?',
+  'Semua menu tetap ada di Beranda.': 'Everything stays on Home.',
 } as Record<string, string | [string, string]>;
