@@ -9,7 +9,7 @@
 import { FlipHorizontal2, FlipVertical2, Lock, LockOpen, RotateCcw, RotateCw, Wand2 } from 'lucide-react';
 
 import { Select } from '../components/select';
-import { Button, Kbd, cx } from '../components/ui';
+import { Button, cx } from '../components/ui';
 import { num } from '../lib/format';
 import { t } from '../lib/i18n';
 import { Slider } from './panels';
@@ -33,10 +33,8 @@ export const RATIOS: { id: string; label: string; value: number | 'asli' | null 
 export function CropPanel({
   g,
   ratioId,
-  portrait,
   leveling,
   onRatio,
-  onSwap,
   onChange,
   onDone,
   onLevel,
@@ -50,12 +48,9 @@ export function CropPanel({
 }: {
   g: Geometry;
   ratioId: string;
-  /** The chosen shape is turned to stand (portrait) rather than lie. */
-  portrait: boolean;
   /** The level tool is on: a line drawn on the photo levels it. */
   leveling: boolean;
   onRatio: (id: string) => void;
-  onSwap: () => void;
   onChange: (g: Geometry) => void;
   onDone: () => void;
   onLevel: () => void;
@@ -93,27 +88,6 @@ export function CropPanel({
           >
             {locked ? <Lock size={14} /> : <LockOpen size={14} />}
           </button>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="w-14 shrink-0 text-xs text-muted">{t('Arah##crop')}</span>
-          <div role="radiogroup" aria-label={t('Arah##crop')} className="flex flex-1 rounded-md border border-line p-0.5">
-            {([false, true] as const).map((stand) => (
-              <button
-                key={String(stand)}
-                type="button"
-                role="radio"
-                aria-checked={portrait === stand}
-                onClick={() => portrait !== stand && onSwap()}
-                disabled={!locked || ratioId === '1:1'}
-                className={cx('h-6 flex-1 rounded text-xs disabled:opacity-40', portrait === stand ? 'bg-raised font-semibold text-fg' : 'text-muted hover:text-fg')}
-              >
-                {stand ? t('Tegak') : t('Datar')}
-              </button>
-            ))}
-          </div>
-          <span title={t('tekan X untuk tukar tegak/datar')}>
-            <Kbd>X</Kbd>
-          </span>
         </div>
       </ToolRow>
 

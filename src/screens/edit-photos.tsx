@@ -673,10 +673,8 @@ function Editor({ back, ids, start }: { back: Screen; ids?: number[]; start?: nu
             <CropPanel
               g={g}
               ratioId={ratioId}
-              portrait={portrait}
               leveling={leveling}
               onRatio={(id) => chooseRatio(id)}
-              onSwap={() => chooseRatio(ratioId, !portrait)}
               onChange={setGeometry}
               onDone={done}
               onLevel={() => setLeveling((v) => !v)}
