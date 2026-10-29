@@ -327,4 +327,9 @@ export default {
   'Hapus##heal': 'Remove',
   'Tahan Alt sambil menyapu untuk sebaliknya': 'Hold Alt while brushing for the opposite',
   'Menghapus…': 'Removing…',
+  'Saring preset': 'Filter presets',
+  'Buat atau impor preset': 'Create or import a preset',
+  'Salin…': 'Copy…',
+  'Buat preset…': 'Create preset…',
+  'Impor preset Lightroom…': 'Import Lightroom presets…',
 } as Record<string, string | [string, string]>;

@@ -8,23 +8,21 @@
 import {
   ArrowLeft,
   Camera,
-  ClipboardPaste,
-  Copy,
   Crop,
   SlidersHorizontal,
   Download,
   Eraser,
-  FileUp,
   Image as ImageIcon,
   Columns2,
   Redo2,
   RefreshCw,
-  Save,
   Search,
   MoreHorizontal,
   Undo2,
   CircleDashed,
   ChevronDown,
+  Plus,
+  Table2,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
@@ -529,12 +527,6 @@ function Editor({ back, ids, start }: { back: Screen; ids?: number[]; start?: nu
           <button type="button" onClick={redo} disabled={!can(future.current.get(photo?.id ?? -1))} title={`${t('Ulangi')} (⇧⌘Z)`} className="flex size-8 items-center justify-center rounded-lg text-muted hover:text-fg disabled:opacity-30">
             <Redo2 size={16} />
           </button>
-          <Button icon={Copy} onClick={copy} disabled={!isEdited(a)} title="⌘⇧C">
-            {t('Salin')}
-          </Button>
-          <Button icon={ClipboardPaste} onClick={paste} disabled={!copied} title="⌘⇧V">
-            {t('Tempel')}
-          </Button>
           <Button variant="primary" icon={Download} onClick={() => (flush(), setExporting(true))} disabled={!toExport.length}>
             {t('Ekspor')}
           </Button>
@@ -549,6 +541,9 @@ function Editor({ back, ids, start }: { back: Screen; ids?: number[]; start?: nu
           onHover={setTrying}
           viewport={viewport}
           onPan={(x, y) => panRef.current?.(x, y)}
+          onCopy={copy}
+          onPaste={paste}
+          canPaste={!!copied}
         />
 
         <main className="relative flex min-w-0 flex-1 flex-col">
@@ -776,9 +771,16 @@ function Presets({
   onHover,
   viewport,
   onPan,
+  onCopy,
+  onPaste,
+  canPaste,
 }: {
   photo: PhotoEntry | undefined;
   a: EditSettings;
+  /** Salin… / Tempel at the foot, as Lightroom's (⌘⇧C / ⌘⇧V too). */
+  onCopy: () => void;
+  onPaste: () => void;
+  canPaste: boolean;
   onApply: (l: Look) => void;
   /** Pointed at: shown on the photo (and in the Navigator) until the pointer leaves. */
   onHover: (l: Look | null) => void;
@@ -845,8 +847,12 @@ function Presets({
       </form>
     );
   const [query, setQuery] = useState('');
-  // Groups folded shut, by name (all open at first).
-  const [shut, setShut] = useState<Set<string>>(new Set());
+  // Groups turned from how they start: Preset saya and pilihfotomu open, the imported ones shut (Lightroom's).
+  const [turned, setTurned] = useState<Set<string>>(new Set());
+  const openAtFirst = (key: string) => key === 'mine' || key === 'built';
+  const isOpen = (key: string) => openAtFirst(key) !== turned.has(key) || !!q;
+  const [panelOpen, setPanelOpen] = useState(true);
+  const [plus, setPlus] = useState<{ x: number; y: number } | null>(null);
   const [importing, setImporting] = useState(false);
   const q = query.trim().toLowerCase();
   const match = (l: Look) => !q || l.name.toLowerCase().includes(q);
@@ -855,15 +861,15 @@ function Presets({
       {renameField(key) || (
         <button
           type="button"
-          onClick={() => setShut((g) => (g.has(key) ? new Set([...g].filter((x) => x !== key)) : new Set([...g, key])))}
+          onClick={() => setTurned((g) => (g.has(key) ? new Set([...g].filter((x) => x !== key)) : new Set([...g, key])))}
           onContextMenu={(e) => own && (e.preventDefault(), groupMenu(own, { x: e.clientX, y: e.clientY }))}
-          className="flex items-center gap-1.5 px-1 py-1.5 text-left text-xs font-semibold"
+          className="flex items-center gap-1.5 px-1 py-1 text-left text-[13px]"
         >
-          <ChevronDown size={13} className={cx('text-faint transition-transform', shut.has(key) && '-rotate-90')} />
-          <span className="truncate">{title}</span> <span className="font-normal text-faint">{num(list.length)}</span>
+          <ChevronDown size={13} className={cx('shrink-0 text-faint transition-transform', !isOpen(key) && '-rotate-90')} />
+          <span className="truncate">{title}</span>
         </button>
       )}
-      {!shut.has(key) &&
+      {isOpen(key) &&
         list.filter(match).map((l) => (
           <div key={l.id} className="group relative pl-5">
             {renameField(l.id) || (
@@ -874,8 +880,9 @@ function Presets({
                   onMouseEnter={() => point(l)}
                   onMouseLeave={() => point(null)}
                   onContextMenu={(e) => removable && (e.preventDefault(), lookMenu(l, { x: e.clientX, y: e.clientY }))}
-                  className="flex w-full items-center rounded-md py-1 pr-7 pl-1 text-left text-[13px] text-muted hover:bg-panel-2 hover:text-fg"
+                  className="flex w-full items-center gap-2 rounded-md py-1 pr-7 pl-1 text-left text-[13px] text-muted hover:bg-panel-2 hover:text-fg"
                 >
+                  <Table2 size={13} className="shrink-0 text-faint" />
                   <span className="truncate">{t(l.name)}</span>
                 </button>
                 {removable && (
@@ -912,32 +919,72 @@ function Presets({
           </Navigator>
         )}
       </div>
-      <div className="flex flex-col gap-2 p-3">
-        <span className="text-[11px] font-semibold tracking-wide text-faint uppercase">{t('Preset')}</span>
-        <label className="flex h-8 items-center gap-2 rounded-lg border border-line bg-bg px-2.5">
-          <Search size={13} className="text-faint" />
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={t('Cari preset…')}
-            className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-faint"
-          />
-        </label>
+      {/* Presets, as Lightroom's: the header folds it, + makes or imports one; yours first, then the imported groups, then the app's. */}
+      <div className="flex items-center gap-1.5 px-3 pt-3 pb-2">
+        <button type="button" onClick={() => setPanelOpen((v) => !v)} className="flex flex-1 items-center gap-1.5 text-left text-[11px] font-semibold tracking-wide text-faint uppercase hover:text-fg">
+          <ChevronDown size={13} className={cx('transition-transform', !panelOpen && '-rotate-90')} />
+          {t('Preset')}
+        </button>
+        <button
+          type="button"
+          onClick={(e) => {
+            const r = e.currentTarget.getBoundingClientRect();
+            setPlus({ x: r.right - 180, y: r.bottom + 4 });
+          }}
+          title={t('Buat atau impor preset')}
+          aria-label={t('Buat atau impor preset')}
+          className="flex h-6 items-center gap-0.5 rounded-md px-1 text-muted hover:bg-raised hover:text-fg"
+        >
+          <Plus size={14} />
+          <ChevronDown size={10} />
+        </button>
       </div>
-      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-2">
-        {group('built', 'pilihfotomu', BUILT_IN, false)}
-        {groups.map((g) => group(`g:${g}`, g, mine.filter((l) => l.group === g), true, g))}
-        {group('mine', t('Preset saya'), mine.filter((l) => !l.group), true)}
-      </div>
-      <div className="flex flex-col gap-2 border-t border-line-soft p-3">
-        <Button icon={Save} onClick={() => setSaving(true)} disabled={!isEdited(a)}>
-          {t('Simpan sebagai preset')}
+      {panelOpen && (
+        <>
+          <div className="px-3 pb-2">
+            <label className="flex h-7 items-center gap-2 rounded-full border border-line bg-bg px-2.5">
+              <Search size={12} className="text-faint" />
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={t('Saring preset')}
+                className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-faint"
+              />
+            </label>
+          </div>
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pb-2">
+            {group('mine', t('Preset saya'), mine.filter((l) => !l.group), true)}
+            {groups.length > 0 && (
+              <>
+                <span className="mx-6 my-2 h-px shrink-0 bg-line" />
+                {groups.map((g) => group(`g:${g}`, g, mine.filter((l) => l.group === g), true, g))}
+              </>
+            )}
+            <span className="mx-6 my-2 h-px shrink-0 bg-line" />
+            {group('built', 'pilihfotomu', BUILT_IN, false)}
+          </div>
+        </>
+      )}
+      {!panelOpen && <div className="flex-1" />}
+      <div className="grid grid-cols-2 gap-2 border-t border-line-soft p-3">
+        <Button onClick={onCopy} disabled={!isEdited(a)} title="⌘⇧C">
+          {t('Salin…')}
         </Button>
-        <Button icon={FileUp} onClick={() => setImporting(true)}>
-          {t('Impor preset Lightroom')}
+        <Button onClick={onPaste} disabled={!canPaste} title="⌘⇧V">
+          {t('Tempel')}
         </Button>
       </div>
+      {plus && (
+        <PopMenu
+          at={plus}
+          items={[
+            { label: t('Buat preset…'), onClick: () => setSaving(true), disabled: !isEdited(a) },
+            { label: t('Impor preset Lightroom…'), onClick: () => setImporting(true) },
+          ]}
+          onClose={() => setPlus(null)}
+        />
+      )}
       {importing && <ImportPresetsDialog photo={photo} onClose={() => setImporting(false)} />}
       {saving && (
         <SavePresetDialog
