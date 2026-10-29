@@ -187,10 +187,10 @@ export function BrandPanel({ doc, edit, onAdd }: { doc: CollageDoc; edit: (fn: E
             className="h-8 rounded-md border border-line bg-panel px-2 text-xs text-fg outline-none placeholder:text-faint focus:border-gold"
           />
         </label>
-        <label className="flex flex-col gap-1 text-[11px] text-muted">
+        <div className="flex flex-col gap-1 text-[11px] text-muted">
           {t('Tanggal acara')}
           <DateInput value={dateValue} onChange={(v) => setClient({ date: v ? Date.parse(`${v}T00:00:00Z`) / 1000 : null })} className="h-8 rounded-md bg-panel text-xs" />
-        </label>
+        </div>
         {examples ? (
           <>
             <button type="button" onClick={apply} className="h-8 rounded-md bg-raised text-xs font-medium hover:bg-line">

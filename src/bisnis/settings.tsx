@@ -75,14 +75,14 @@ export function Settings({ sections }: { sections?: ReactNode }) {
                 ))}
               </span>
               <LazyInput value={c.name} onCommit={(name) => name.trim() && setCol(c.id, { name: name.trim() })} className={cx(inputCls, 'h-8 flex-1')} />
-              <label className="flex shrink-0 items-center gap-1.5 text-[11px] text-muted" title={t('Booking di kolom ini dianggap sudah dikirim: tidak ada pengingat kirim hasil.')}>
+              <div className="flex shrink-0 items-center gap-1.5 text-[11px] text-muted" title={t('Booking di kolom ini dianggap sudah dikirim: tidak ada pengingat kirim hasil.')}>
                 {t('Selesai')}
                 <Switch label={t('Selesai')} checked={!!c.done} onChange={(done) => setCol(c.id, { done })} />
-              </label>
-              <label className="flex shrink-0 items-center gap-1.5 text-[11px] text-muted">
+              </div>
+              <div className="flex shrink-0 items-center gap-1.5 text-[11px] text-muted">
                 {t('Tidak aktif')}
                 <Switch label={t('Tidak aktif')} checked={!!c.inactive} onChange={(inactive) => setCol(c.id, { inactive })} />
-              </label>
+              </div>
               <button
                 type="button"
                 disabled={data.columns.length <= 1}
@@ -162,18 +162,18 @@ export function Settings({ sections }: { sections?: ReactNode }) {
         <section className="flex flex-col gap-3">
           <SectionTitle>{t('Pengingat')}</SectionTitle>
           <p className="-mt-1 text-xs text-faint">{t('Muncul di lonceng Kelola Bisnis dan sebagai notifikasi sistem, selama aplikasi terbuka. Saat aplikasi ditutup tidak ada pengingat: tambahkan jadwal ke Google Calendar agar diingatkan di HP.')}</p>
-          <label className="flex items-center justify-between gap-3 rounded-xl bg-panel px-3 py-2.5 text-[13px]">
+          <div className="flex items-center justify-between gap-3 rounded-xl bg-panel px-3 py-2.5 text-[13px]">
             {t('Jadwal foto hari ini dan besok')}
             <Switch label={t('Jadwal foto hari ini dan besok')} checked={data.settings.remindShoot} onChange={(remindShoot) => setSettings({ remindShoot })} />
-          </label>
-          <label className="flex items-center justify-between gap-3 rounded-xl bg-panel px-3 py-2.5 text-[13px]">
+          </div>
+          <div className="flex items-center justify-between gap-3 rounded-xl bg-panel px-3 py-2.5 text-[13px]">
             {t('Hasil yang harus dikirim (2 hari sebelum tenggat)')}
             <Switch label={t('Hasil yang harus dikirim')} checked={data.settings.remindDelivery} onChange={(remindDelivery) => setSettings({ remindDelivery })} />
-          </label>
-          <label className="flex items-center justify-between gap-3 rounded-xl bg-panel px-3 py-2.5 text-[13px]">
+          </div>
+          <div className="flex items-center justify-between gap-3 rounded-xl bg-panel px-3 py-2.5 text-[13px]">
             {t('Pelunasan, mulai berapa hari sebelum jatuh tempo')}
             <input type="number" min={0} max={60} value={data.settings.remindDueDays} onChange={(e) => setSettings({ remindDueDays: Math.min(60, Math.max(0, Number(e.target.value) || 0)) })} className={cx(inputCls, 'h-8 w-20')} />
-          </label>
+          </div>
         </section>
         <BackupSection />
         {sections}

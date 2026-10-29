@@ -12,13 +12,14 @@ export const PLAIN = { autoCapitalize: 'off', autoCorrect: 'off', spellCheck: fa
 
 export const inputCls = 'h-9 w-full rounded-lg border border-line bg-bg px-2.5 text-[13px] text-fg outline-none placeholder:text-faint focus:border-gold';
 
+/** A field with its name over it. Not a <label>: a click on the name would open a date picker or a list. */
 export function Field({ label, children, className, hint }: { label: string; children: ReactNode; className?: string; hint?: ReactNode }) {
   return (
-    <label className={cx('flex min-w-0 flex-col gap-1 text-[11px] font-medium text-muted', className)}>
-      {label}
+    <div className={cx('flex min-w-0 flex-col gap-1 text-[11px] font-medium text-muted', className)}>
+      <span className="cursor-default select-none">{label}</span>
       {children}
       {hint && <span className="text-[11px] font-normal text-faint">{hint}</span>}
-    </label>
+    </div>
   );
 }
 
