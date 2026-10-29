@@ -63,6 +63,12 @@ export const DEFAULT_TEMPLATES: MessageTemplate[] = [
     body: 'Halo {nama}, mengingatkan sisa pembayaran {paket} sebesar {sisa}, paling lambat {jatuh_tempo}.\n\nPembayaran ke:\n{rekening}\n\nInvoice terlampir. Terima kasih!',
   },
   {
+    id: 'lunas',
+    name: 'Pelunasan diterima',
+    attach: 'kuitansi',
+    body: 'Halo {nama}, pelunasan {paket} sudah kami terima, terima kasih! Pembayaran sudah lunas, total {terbayar}.\n\nKuitansi terlampir sebagai bukti pembayaran.',
+  },
+  {
     id: 'terima-kasih',
     name: 'Terima kasih',
     columnId: 'selesai',
@@ -117,7 +123,7 @@ export function withStageTemplates(data: BisnisData): BisnisData {
   );
   return { ...data, templates: [...data.templates, ...added] };
 }
-const TEMPLATES_VERSION = 5;
+const TEMPLATES_VERSION = 6;
 
 export const DEFAULT_EXPENSE_CATEGORIES = ['Transport', 'Sewa alat', 'Freelancer', 'Cetak & album', 'Makan', 'Iklan', 'Lainnya'];
 
@@ -192,6 +198,12 @@ export function fromJson(json: string): BisnisData {
   if ((data.templatesVersion ?? 1) < 5) {
     const was: Record<string, string> = { konfirmasi: 'Halo {nama}, DP untuk {paket} sudah kami terima, terima kasih! Booking kamu sudah terkonfirmasi untuk {jadwal}.\n\nSudah dibayar: {terbayar}\nSisa: {sisa}, paling lambat {jatuh_tempo}.\n\nPembayaran ke:\n{rekening}\n\nKuitansi terlampir.', pengingat: 'Halo {nama}, mengingatkan jadwal foto {jadwal}. Sampai jumpa!' };
     data.templates = data.templates.map((x) => (was[x.id] === x.body ? { ...x, body: DEFAULT_TEMPLATES.find((y) => y.id === x.id)!.body } : x));
+  }
+  // Pelunasan diterima came with 6: put after Tagihan pelunasan.
+  if ((data.templatesVersion ?? 1) < 6 && !data.templates.some((x) => x.id === 'lunas')) {
+    const lunas = DEFAULT_TEMPLATES.find((x) => x.id === 'lunas')!;
+    const at = data.templates.findIndex((x) => x.id === 'tagihan');
+    data.templates = at < 0 ? [...data.templates, lunas] : [...data.templates.slice(0, at + 1), lunas, ...data.templates.slice(at + 1)];
   }
   data.templatesVersion = TEMPLATES_VERSION;
   return withStageTemplates(data);
