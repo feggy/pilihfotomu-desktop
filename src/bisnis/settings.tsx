@@ -10,7 +10,7 @@ import { useState, type ReactNode } from 'react';
 
 import { Switch, cx } from '../components/ui';
 import { t } from '../lib/i18n';
-import { newId, shortDate, today } from './model';
+import { newId, shortDate, today, withStageTemplates } from './model';
 import { useBisnis } from './store';
 import { DateInput } from '../components/date-picker';
 import { applyBackup, autoBackupError, backupName, exportBackup, lastBackupAt, readBackup } from './backup';
@@ -39,13 +39,14 @@ export function Settings({ sections }: { sections?: ReactNode }) {
       const columns = draft.columns;
       // Bookings of a column taken away go to the first column left.
       const ids = new Set(columns.map((c) => c.id));
-      return {
+      // A stage added here gets a message template to start from.
+      return withStageTemplates({
         ...d,
         columns,
         blocked: draft.blocked,
         settings: { ...d.settings, ...changed },
         bookings: d.bookings.map((b) => (ids.has(b.columnId) ? b : { ...b, columnId: columns[0]!.id })),
-      };
+      });
     });
     const now = useBisnis.getState().data!;
     const next = { columns: now.columns, blocked: now.blocked, settings: now.settings };

@@ -81,18 +81,29 @@ export function MessagesTab() {
             {t('Template pesan WhatsApp')}
           </SectionTitle>
           <div className="grid min-h-[420px] grid-cols-[220px_1fr_1fr] gap-4">
+            {/* By stage, in the board's order; the rest (pricelist, reminders) after. */}
             <nav className="flex flex-col gap-1">
-              {data.templates.map((x) => (
-                <button key={x.id} type="button" onClick={() => x.id !== tpl?.id && guard(() => setPicked(x.id))} className={cx('flex flex-col rounded-lg px-3 py-2 text-left text-[13px]', x.id === tpl?.id ? 'bg-raised font-semibold text-fg ring-1 ring-gold' : 'text-muted hover:bg-panel hover:text-fg')}>
-                  <span className="truncate">{x.name}</span>
-                  {x.columnId && (
-                    <span className="flex items-center gap-1.5 truncate text-[11px] font-normal text-faint">
-                      <span className="size-1.5 shrink-0 rounded-full" style={{ background: data.columns.find((c) => c.id === x.columnId)?.color }} />
-                      {data.columns.find((c) => c.id === x.columnId)?.name}
-                    </span>
-                  )}
-                </button>
-              ))}
+              {[
+                [t('Per tahap'), data.columns.flatMap((c) => data.templates.filter((x) => x.columnId === c.id))],
+                [t('Lainnya'), data.templates.filter((x) => !x.columnId || !data.columns.some((c) => c.id === x.columnId))],
+              ].map(([title, list]) =>
+                (list as MessageTemplate[]).length ? (
+                  <div key={title as string} className="flex flex-col gap-1">
+                    <span className="px-3 pt-2 pb-0.5 text-[10px] font-semibold tracking-wide text-faint uppercase">{title as string}</span>
+                    {(list as MessageTemplate[]).map((x) => (
+                      <button key={x.id} type="button" onClick={() => x.id !== tpl?.id && guard(() => setPicked(x.id))} className={cx('flex flex-col rounded-lg px-3 py-2 text-left text-[13px]', x.id === tpl?.id ? 'bg-raised font-semibold text-fg ring-1 ring-gold' : 'text-muted hover:bg-panel hover:text-fg')}>
+                        <span className="truncate">{x.name}</span>
+                        {x.columnId && (
+                          <span className="flex items-center gap-1.5 truncate text-[11px] font-normal text-faint">
+                            <span className="size-1.5 shrink-0 rounded-full" style={{ background: data.columns.find((c) => c.id === x.columnId)?.color }} />
+                            {data.columns.find((c) => c.id === x.columnId)?.name}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                ) : null,
+              )}
             </nav>
             {tpl ? (
               <>

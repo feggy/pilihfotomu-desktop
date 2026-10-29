@@ -74,7 +74,33 @@ export const DEFAULT_TEMPLATES: MessageTemplate[] = [
     columnId: 'selesai',
     body: 'Halo {nama}, terima kasih sudah mempercayakan momennya ke {studio}. Semoga suka dengan hasilnya!',
   },
+  {
+    id: 'batal',
+    name: 'Konfirmasi pembatalan',
+    columnId: 'batal',
+    body: 'Halo {nama}, pembatalan {paket} untuk {tanggal} sudah kami catat. Terima kasih sudah mengabari, semoga lain waktu bisa bekerja sama ya.',
+  },
 ];
+
+/**
+ * `data` with a template for every stage of its board: a built-in one for a
+ * default stage, a starting one to edit for a stage the studio added —
+ * every stage has a message to send, and something to start from.
+ */
+export function withStageTemplates(data: BisnisData): BisnisData {
+  const missing = data.columns.filter((c) => !data.templates.some((x) => x.columnId === c.id));
+  if (!missing.length) return data;
+  const added = missing.map(
+    (c): MessageTemplate =>
+      DEFAULT_TEMPLATES.find((x) => x.columnId === c.id && !data.templates.some((y) => y.id === x.id)) ?? {
+        id: newId(),
+        name: c.name,
+        columnId: c.id,
+        body: `Halo {nama}, kabar terbaru untuk {paket}: booking kamu sekarang di tahap ${c.name}.\n\nKalau ada yang ingin ditanyakan, kabari kami ya. Terima kasih!`,
+      },
+  );
+  return { ...data, templates: [...data.templates, ...added] };
+}
 const TEMPLATES_VERSION = 2;
 
 export const DEFAULT_EXPENSE_CATEGORIES = ['Transport', 'Sewa alat', 'Freelancer', 'Cetak & album', 'Makan', 'Iklan', 'Lainnya'];
@@ -132,7 +158,7 @@ export function fromJson(json: string): BisnisData {
     data.templates = [...kept, ...added];
     data.templatesVersion = TEMPLATES_VERSION;
   }
-  return data;
+  return withStageTemplates(data);
 }
 
 // ── Money ────────────────────────────────────────────────────────
