@@ -56,6 +56,8 @@ export interface Payment {
   /** Transfer, tunai, QRIS… */
   method: string;
   note: string;
+  /** Given on its first receipt (kuitansi), then kept. */
+  receiptNo?: string;
 }
 
 export interface LineItem {
@@ -130,6 +132,9 @@ export interface BisnisSettings {
   bufferMin: number;
   invoicePrefix: string;
   nextInvoice: number;
+  /** Receipts (kuitansi), one per payment: "KWT-202611-004". */
+  receiptPrefix: string;
+  nextReceipt: number;
   /** Printed under every invoice. */
   terms: string;
   /** Bank account(s) and the like, for invoices and messages ({rekening}). */

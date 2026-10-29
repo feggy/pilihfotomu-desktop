@@ -24,6 +24,7 @@ import { InvoiceDialog } from './invoice-dialog';
 import { MessagesTab } from './messages-tab';
 import { Overview } from './overview';
 import { Packages } from './packages';
+import { ReceiptDialog } from './receipt-dialog';
 import { ReminderBell } from './reminder-bell';
 import { SendDialog } from './send-dialog';
 import { Settings } from './settings';
@@ -56,6 +57,7 @@ export function BisnisScreen({ open }: { open?: string }) {
   const [viewing, setViewing] = useState<string | null>(null);
   const view_ = (b: Booking) => setViewing(b.id);
   const [invoice, setInvoice] = useState<string | null>(null);
+  const [receipt, setReceipt] = useState<{ bookingId: string; paymentId: string } | null>(null);
   // Buat konten for this booking: its client's name and first shoot day fill the templates.
   const openKreasi = (bookingId: string) => {
     const d = useBisnis.getState().data;
@@ -152,7 +154,16 @@ export function BisnisScreen({ open }: { open?: string }) {
       )}
       {data && tab !== 'pengaturan' && <BackupNotice onSetUp={() => setTab('pengaturan')} />}
       {body}
-      {viewing && <BookingDetail bookingId={viewing} onClose={() => setViewing(null)} onEdit={() => setEditing(data?.bookings.find((b) => b.id === viewing) ?? null)} actions={actions} />}
+      {viewing && (
+        <BookingDetail
+          bookingId={viewing}
+          onClose={() => setViewing(null)}
+          onEdit={() => setEditing(data?.bookings.find((b) => b.id === viewing) ?? null)}
+          onReceipt={(paymentId) => setReceipt({ bookingId: viewing, paymentId })}
+          actions={actions}
+        />
+      )}
+      {receipt && <ReceiptDialog {...receipt} onClose={() => setReceipt(null)} />}
       {editing && <BookingEditor key={editing.id} initial={editing} onClose={() => setEditing(null)} actions={actions} />}
       {invoice && <InvoiceDialog bookingId={invoice} onClose={() => setInvoice(null)} />}
       {message && <SendDialog {...message} onClose={() => setMessage(null)} />}

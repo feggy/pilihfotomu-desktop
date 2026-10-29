@@ -145,6 +145,12 @@ export function Settings({ sections }: { sections?: ReactNode }) {
             <Field label={t('Urutan berikutnya')}>
               <input type="number" min={1} value={data.settings.nextInvoice} onChange={(e) => setSettings({ nextInvoice: Math.max(1, Number(e.target.value) || 1) })} className={inputCls} />
             </Field>
+            <Field label={t('Awalan nomor kuitansi')} hint={t('Nomor berikutnya: {no}', { no: `${data.settings.receiptPrefix || 'KWT'}-${today().slice(0, 4)}${today().slice(5, 7)}-${String(data.settings.nextReceipt).padStart(3, '0')}` })}>
+              <LazyInput value={data.settings.receiptPrefix} onCommit={(receiptPrefix) => setSettings({ receiptPrefix: receiptPrefix.trim().toUpperCase() })} />
+            </Field>
+            <Field label={t('Urutan kuitansi berikutnya')}>
+              <input type="number" min={1} value={data.settings.nextReceipt} onChange={(e) => setSettings({ nextReceipt: Math.max(1, Number(e.target.value) || 1) })} className={inputCls} />
+            </Field>
             <Field label={t('DP minimal (% dari total)')} hint={t('Untuk isian {dp_minimal} di pesan konfirmasi.')}>
               <input type="number" min={0} max={100} step={5} value={data.settings.minDpPercent} onChange={(e) => setSettings({ minDpPercent: Math.min(100, Math.max(0, Number(e.target.value) || 0)) })} className={inputCls} />
             </Field>

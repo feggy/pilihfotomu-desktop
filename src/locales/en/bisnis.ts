@@ -332,4 +332,12 @@ export default {
   'Semua pembayaran': 'All payments',
   'Tahap': 'Stage',
   'Tidak ada booking yang cocok.': 'No matching bookings.',
+
+  // Receipts
+  'Kuitansi': 'Receipt',
+  'Kuitansi {no}': 'Receipt {no}',
+  'Buat kuitansi untuk pembayaran ini': 'Make a receipt for this payment',
+  'Simpan kuitansi': 'Save receipt',
+  'Awalan nomor kuitansi': 'Receipt number prefix',
+  'Urutan kuitansi berikutnya': 'Next receipt sequence',
 } as Record<string, string | [string, string]>;

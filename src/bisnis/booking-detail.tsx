@@ -6,7 +6,7 @@
  */
 
 import { openUrl } from '@tauri-apps/plugin-opener';
-import { AlertTriangle, ArrowRight, CalendarPlus, MapPin, Pencil, Phone, Plus, X } from 'lucide-react';
+import { AlertTriangle, ArrowRight, CalendarPlus, MapPin, Pencil, Phone, Plus, ReceiptText, X } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 
 import { DateInput } from '../components/date-picker';
@@ -22,7 +22,20 @@ import { MoneyInput, btnPrimary, inputCls } from './ui';
 
 const METHODS = ['Transfer', 'Tunai', 'QRIS', 'E-wallet'];
 
-export function BookingDetail({ bookingId, onClose, onEdit, actions }: { bookingId: string; onClose: () => void; onEdit: () => void; actions: BookingAction[] }) {
+export function BookingDetail({
+  bookingId,
+  onClose,
+  onEdit,
+  onReceipt,
+  actions,
+}: {
+  bookingId: string;
+  onClose: () => void;
+  onEdit: () => void;
+  /** The kuitansi for one of its payments. */
+  onReceipt: (paymentId: string) => void;
+  actions: BookingAction[];
+}) {
   const data = useBisnis((s) => s.data)!;
   const update = useBisnis((s) => s.update);
   const b = data.bookings.find((x) => x.id === bookingId);
@@ -129,12 +142,20 @@ export function BookingDetail({ bookingId, onClose, onEdit, actions }: { booking
             {[...b.payments]
               .sort((x, y) => x.date.localeCompare(y.date))
               .map((p) => (
-                <div key={p.id} className="flex items-center justify-between gap-3 text-xs text-muted">
-                  <span>
+                <div key={p.id} className="group flex items-center gap-3 text-xs text-muted">
+                  <span className="min-w-0 flex-1 truncate">
                     {shortDate(p.date)} · {p.method}
                     {p.note ? ` · ${p.note}` : ''}
                   </span>
-                  <span className="text-fg tabular-nums">{rupiah(p.amount)}</span>
+                  <button
+                    type="button"
+                    onClick={() => onReceipt(p.id)}
+                    title={p.receiptNo ? t('Kuitansi {no}', { no: p.receiptNo }) : t('Buat kuitansi untuk pembayaran ini')}
+                    className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-gold-text hover:bg-raised"
+                  >
+                    <ReceiptText size={12} /> {t('Kuitansi')}
+                  </button>
+                  <span className="w-28 shrink-0 text-right text-fg tabular-nums">{rupiah(p.amount)}</span>
                 </div>
               ))}
             {paying ? (

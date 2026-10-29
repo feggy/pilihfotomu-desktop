@@ -32,6 +32,8 @@ export function InvoiceDialog({ bookingId, onClose }: { bookingId: string; onClo
   useEffect(() => {
     if (!booking || booking.invoiceNo) return;
     update((d) => {
+      // Read from the data as it is now: an effect run twice must not use up two numbers.
+      if (d.bookings.find((b) => b.id === bookingId)?.invoiceNo) return d;
       const { no, next } = nextInvoiceNo(d);
       return { ...d, settings: { ...d.settings, nextInvoice: next }, bookings: d.bookings.map((b) => (b.id === bookingId ? { ...b, invoiceNo: no } : b)) };
     });

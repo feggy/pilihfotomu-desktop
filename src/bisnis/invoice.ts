@@ -14,11 +14,11 @@ import type { BisnisData, Booking, Client } from './types';
 const W = 1240;
 const H = 1754;
 const M = 96;
-const FONT = "'Inter Variable', Inter, system-ui, sans-serif";
-const INK = '#1d2421';
-const SOFT = '#6b7672';
-const LINE = '#e3e6e4';
-const GOLD = '#a8834a';
+export const FONT = "'Inter Variable', Inter, system-ui, sans-serif";
+export const INK = '#1d2421';
+export const SOFT = '#6b7672';
+export const LINE = '#e3e6e4';
+export const GOLD = '#a8834a';
 
 export interface InvoiceInput {
   data: BisnisData;
@@ -31,7 +31,7 @@ export interface InvoiceInput {
 }
 
 /** `text` broken into lines no wider than `width` at the current font (and at its own line breaks). */
-function wrap(ctx: CanvasRenderingContext2D, text: string, width: number): string[] {
+export function wrap(ctx: CanvasRenderingContext2D, text: string, width: number): string[] {
   const out: string[] = [];
   for (const para of text.split('\n')) {
     let line = '';
