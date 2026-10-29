@@ -5,7 +5,6 @@
  */
 
 import { balanceOf, clientOf, localString, nextSession, paidOf, rupiah, sessionWhen, shortDate, timeOf, totalOf, longDate } from './model';
-import { googleCalendarLink } from './reminders';
 import type { BisnisData, Booking, Session } from './types';
 
 /** What can go in a template, with what it says, for the help under the editor. */
@@ -47,6 +46,19 @@ export function pricelistText(data: BisnisData): string {
 }
 
 /**
+ * A Google Calendar "add" link as short as it goes, for a chat: the short
+ * path, no description, the slash left as it is. The time zone stays —
+ * Indonesia has three.
+ */
+function shortCalendarLink(title: string, start: string, end: string, location: string): string {
+  const stamp = (s: string) => `${s.replace(/[-:]/g, '')}00`;
+  const q = new URLSearchParams({ text: title });
+  if (location.trim()) q.set('location', location.trim());
+  q.set('ctz', Intl.DateTimeFormat().resolvedOptions().timeZone);
+  return `https://calendar.google.com/calendar/r/eventedit?${q}&dates=${stamp(start)}/${stamp(end)}`;
+}
+
+/**
  * The sessions still to come as Google Calendar links the client opens to
  * put the shoot in their own calendar ("Akad: …" a line each when more than one).
  */
@@ -56,7 +68,7 @@ function calendarLinks(sessions: Session[], booking: Booking, studio: string): s
   return ahead
     .map((s) => {
       const title = [`Foto ${s.label || booking.packageName}`.trim(), studio].filter(Boolean).join(' — ');
-      const link = googleCalendarLink(title, s.start, s.end, s.location, [booking.packageName, studio].filter(Boolean).join(' · '));
+      const link = shortCalendarLink(title, s.start, s.end, s.location);
       return ahead.length > 1 ? `${s.label || sessionWhen(s)}: ${link}` : link;
     })
     .join('\n');
