@@ -3,7 +3,7 @@
  * calendar, packages and the rest — tabs over one set of data, kept offline.
  */
 
-import { ArrowLeft, CalendarDays, FileText, KanbanSquare, Package as PackageIcon, Plus, Settings2, TriangleAlert } from 'lucide-react';
+import { ArrowLeft, CalendarDays, FileText, KanbanSquare, MessageCircle, Package as PackageIcon, Plus, Settings2, TriangleAlert, Users } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 
 import { TitleBar } from '../components/title-bar';
@@ -13,19 +13,24 @@ import { useApp } from '../store';
 import { Board } from './board';
 import { BookingEditor, newBooking, type BookingAction } from './booking-editor';
 import { Calendar } from './calendar';
+import { Clients } from './clients';
 import { InvoiceDialog } from './invoice-dialog';
+import { MessagesTab } from './messages-tab';
 import { Packages } from './packages';
+import { SendDialog } from './send-dialog';
 import { Settings } from './settings';
 import { useBisnis } from './store';
 import type { Booking } from './types';
 import { btnPrimary } from './ui';
 
-export type BisnisTab = 'board' | 'kalender' | 'paket' | 'pengaturan';
+export type BisnisTab = 'board' | 'kalender' | 'klien' | 'paket' | 'pesan' | 'pengaturan';
 
 const TABS: { id: BisnisTab; label: string; icon: typeof KanbanSquare }[] = [
   { id: 'board', label: 'Board', icon: KanbanSquare },
   { id: 'kalender', label: 'Kalender', icon: CalendarDays },
+  { id: 'klien', label: 'Klien', icon: Users },
   { id: 'paket', label: 'Paket', icon: PackageIcon },
+  { id: 'pesan', label: 'Pesan', icon: MessageCircle },
   { id: 'pengaturan', label: 'Pengaturan', icon: Settings2 },
 ];
 
@@ -35,7 +40,11 @@ export function BisnisScreen() {
   const [tab, setTab] = useState<BisnisTab>('board');
   const [editing, setEditing] = useState<Booking | null>(null);
   const [invoice, setInvoice] = useState<string | null>(null);
-  const actions: BookingAction[] = [{ key: 'invoice', label: t('Invoice'), icon: <FileText size={13} />, run: setInvoice }];
+  const [message, setMessage] = useState<{ bookingId: string | null; phone?: string; name?: string } | null>(null);
+  const actions: BookingAction[] = [
+    { key: 'invoice', label: t('Invoice'), icon: <FileText size={13} />, run: setInvoice },
+    { key: 'wa', label: t('WhatsApp'), icon: <MessageCircle size={13} />, run: (bookingId) => setMessage({ bookingId }) },
+  ];
   useEffect(() => {
     load();
   }, [load]);
@@ -44,7 +53,16 @@ export function BisnisScreen() {
   if (data) {
     if (tab === 'board') body = <Board onOpen={setEditing} onNew={(col) => setEditing(newBooking(data, col))} />;
     else if (tab === 'kalender') body = <Calendar onOpen={setEditing} onNewOn={(day) => setEditing(newBooking(data, data.columns[0]?.id ?? '', day))} />;
+    else if (tab === 'klien')
+      body = (
+        <Clients
+          onOpen={setEditing}
+          onNew={(clientId) => setEditing({ ...newBooking(data, data.columns[0]?.id ?? ''), clientId })}
+          onMessage={(c, bookingId) => setMessage({ bookingId, phone: c.phone, name: c.name })}
+        />
+      );
     else if (tab === 'paket') body = <Packages />;
+    else if (tab === 'pesan') body = <MessagesTab />;
     else body = <Settings />;
   }
 
@@ -84,6 +102,7 @@ export function BisnisScreen() {
       {body}
       {editing && <BookingEditor key={editing.id} initial={editing} onClose={() => setEditing(null)} actions={actions} />}
       {invoice && <InvoiceDialog bookingId={invoice} onClose={() => setInvoice(null)} />}
+      {message && <SendDialog {...message} onClose={() => setMessage(null)} />}
     </div>
   );
 }

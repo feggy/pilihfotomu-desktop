@@ -134,6 +134,8 @@ export interface BisnisSettings {
   paymentInfo: string;
   /** Address, phone, Instagram: under the studio's name on invoices. */
   studioContact: string;
+  /** The deposit that locks a date, as a share of the total ({dp_minimal}). */
+  minDpPercent: number;
   /** Reminders: the day before a shoot; payment due within this many days; delivery due. */
   remindShoot: boolean;
   remindDueDays: number;

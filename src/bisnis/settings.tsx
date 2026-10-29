@@ -139,6 +139,9 @@ export function Settings({ sections }: { sections?: ReactNode }) {
             <Field label={t('Urutan berikutnya')}>
               <input type="number" min={1} value={data.settings.nextInvoice} onChange={(e) => setSettings({ nextInvoice: Math.max(1, Number(e.target.value) || 1) })} className={inputCls} />
             </Field>
+            <Field label={t('DP minimal (% dari total)')} hint={t('Untuk isian {dp_minimal} di pesan konfirmasi.')}>
+              <input type="number" min={0} max={100} step={5} value={data.settings.minDpPercent} onChange={(e) => setSettings({ minDpPercent: Math.min(100, Math.max(0, Number(e.target.value) || 0)) })} className={inputCls} />
+            </Field>
           </div>
           <Field label={t('Kontak studio (di bawah nama studio pada invoice)')}>
             <TextArea value={data.settings.studioContact} onCommit={(studioContact) => setSettings({ studioContact })} rows={3} placeholder={t('Alamat\n0812-xxxx-xxxx · @namastudio')} />
