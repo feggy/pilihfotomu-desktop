@@ -69,4 +69,14 @@ export default {
   'Pilih tanggal': 'Pick a date',
   'Bulan sebelumnya': 'Previous month',
   'Bulan berikutnya': 'Next month',
+
+  // Beranda tiles
+  'Terakhir: {name} · {picks} dipilih dari {total}': 'Last: {name} · {picks} of {total} picked',
+  'Pilah folder baru': 'Cull a new folder',
+  'Terakhir: {name}': 'Last: {name}',
+  'Cahaya dan warna ala Lightroom, AI denoise, masking, preset.': 'Lightroom-style light and colour, AI denoise, masking, presets.',
+  'Story dan feed Instagram dari template.': 'Instagram stories and feed posts from templates.',
+  'Booking klien, jadwal, invoice, dan pesan WhatsApp di satu tempat.': 'Client bookings, schedule, invoices and WhatsApp messages in one place.',
+  'Tidak ada jadwal atau tagihan hari ini dan besok.': 'No shoots or payments due today or tomorrow.',
+  '{picks} dipilih': '{picks} picked',
 } as Record<string, string | [string, string]>;
