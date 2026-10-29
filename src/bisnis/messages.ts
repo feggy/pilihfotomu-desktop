@@ -4,8 +4,9 @@
  * that opens WhatsApp with it — sent from the photographer's own number.
  */
 
-import { balanceOf, clientOf, nextSession, paidOf, rupiah, sessionWhen, shortDate, timeOf, totalOf, longDate } from './model';
-import type { BisnisData, Booking } from './types';
+import { balanceOf, clientOf, localString, nextSession, paidOf, rupiah, sessionWhen, shortDate, timeOf, totalOf, longDate } from './model';
+import { googleCalendarLink } from './reminders';
+import type { BisnisData, Booking, Session } from './types';
 
 /** What can go in a template, with what it says, for the help under the editor. */
 export const VARIABLES: { key: string; label: string }[] = [
@@ -24,6 +25,7 @@ export const VARIABLES: { key: string; label: string }[] = [
   { key: 'invoice', label: 'Nomor invoice' },
   { key: 'link_pilih', label: 'Link foto untuk dipilih' },
   { key: 'link_hasil', label: 'Link hasil edit' },
+  { key: 'link_kalender', label: 'Link Google Calendar jadwal' },
   { key: 'rekening', label: 'Rekening' },
   { key: 'pricelist', label: 'Daftar paket' },
 ];
@@ -42,6 +44,22 @@ export function pricelistText(data: BisnisData): string {
     for (const a of extras) lines.push(`• ${a.name} — ${rupiah(a.price)}`);
   }
   return lines.join('\n').trim();
+}
+
+/**
+ * The sessions still to come as Google Calendar links the client opens to
+ * put the shoot in their own calendar ("Akad: …" a line each when more than one).
+ */
+function calendarLinks(sessions: Session[], booking: Booking, studio: string): string {
+  const now = localString(new Date());
+  const ahead = sessions.filter((s) => s.end >= now);
+  return ahead
+    .map((s) => {
+      const title = [`Foto ${s.label || booking.packageName}`.trim(), studio].filter(Boolean).join(' — ');
+      const link = googleCalendarLink(title, s.start, s.end, s.location, [booking.packageName, studio].filter(Boolean).join(' · '));
+      return ahead.length > 1 ? `${s.label || sessionWhen(s)}: ${link}` : link;
+    })
+    .join('\n');
 }
 
 /** `body` with its {variables} filled from `booking` (or left as they are without one); unknown ones stay. */
@@ -70,6 +88,7 @@ export function fillTemplate(body: string, data: BisnisData, studio: string, boo
       invoice: booking.invoiceNo || undefined,
       link_pilih: booking.pickLink?.trim() || undefined,
       link_hasil: booking.resultLink?.trim() || undefined,
+      link_kalender: calendarLinks(sessions, booking, studio) || undefined,
     });
   }
   return body.replace(/\{(\w+)\}/g, (m, key: string) => values[key] ?? m);

@@ -425,4 +425,5 @@ export default {
   'Simpan link': 'Save link',
   'Tambah {label}': 'Add {label}',
   'Ubah link': 'Change link',
+  'Link Google Calendar jadwal': 'Google Calendar link for the session',
 } as Record<string, string | [string, string]>;

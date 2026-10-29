@@ -36,13 +36,13 @@ export const DEFAULT_TEMPLATES: MessageTemplate[] = [
     name: 'Konfirmasi booking',
     columnId: 'dp',
     attach: 'kuitansi',
-    body: 'Halo {nama}, DP untuk {paket} sudah kami terima, terima kasih! Booking kamu sudah terkonfirmasi untuk {jadwal}.\n\nSudah dibayar: {terbayar}\nSisa: {sisa}, paling lambat {jatuh_tempo}.\n\nPembayaran ke:\n{rekening}\n\nKuitansi terlampir.',
+    body: 'Halo {nama}, DP untuk {paket} sudah kami terima, terima kasih! Booking kamu sudah terkonfirmasi untuk {jadwal}.\n\nSimpan jadwalnya di Google Calendar:\n{link_kalender}\n\nSudah dibayar: {terbayar}\nSisa: {sisa}, paling lambat {jatuh_tempo}.\n\nPembayaran ke:\n{rekening}\n\nKuitansi terlampir.',
   },
   {
     id: 'pengingat',
     name: 'Pengingat jadwal',
     columnId: 'jadwal',
-    body: 'Halo {nama}, mengingatkan jadwal foto {jadwal}. Sampai jumpa!',
+    body: 'Halo {nama}, mengingatkan jadwal foto {jadwal}.\n\nBelum masuk kalender? Simpan di sini:\n{link_kalender}\n\nSampai jumpa!',
   },
   {
     id: 'sedang-diedit',
@@ -117,7 +117,7 @@ export function withStageTemplates(data: BisnisData): BisnisData {
   );
   return { ...data, templates: [...data.templates, ...added] };
 }
-const TEMPLATES_VERSION = 4;
+const TEMPLATES_VERSION = 5;
 
 export const DEFAULT_EXPENSE_CATEGORIES = ['Transport', 'Sewa alat', 'Freelancer', 'Cetak & album', 'Makan', 'Iklan', 'Lainnya'];
 
@@ -187,6 +187,11 @@ export function fromJson(json: string): BisnisData {
       const d = DEFAULT_TEMPLATES.find((y) => y.id === x.id);
       return d && was[x.id] === x.body ? { ...x, name: x.name === 'Foto sedang diedit' ? d.name : x.name, body: d.body } : x;
     });
+  }
+  // Konfirmasi booking and Pengingat jadwal carry the Google Calendar link: replaced where still as they came.
+  if ((data.templatesVersion ?? 1) < 5) {
+    const was: Record<string, string> = { konfirmasi: 'Halo {nama}, DP untuk {paket} sudah kami terima, terima kasih! Booking kamu sudah terkonfirmasi untuk {jadwal}.\n\nSudah dibayar: {terbayar}\nSisa: {sisa}, paling lambat {jatuh_tempo}.\n\nPembayaran ke:\n{rekening}\n\nKuitansi terlampir.', pengingat: 'Halo {nama}, mengingatkan jadwal foto {jadwal}. Sampai jumpa!' };
+    data.templates = data.templates.map((x) => (was[x.id] === x.body ? { ...x, body: DEFAULT_TEMPLATES.find((y) => y.id === x.id)!.body } : x));
   }
   data.templatesVersion = TEMPLATES_VERSION;
   return withStageTemplates(data);
