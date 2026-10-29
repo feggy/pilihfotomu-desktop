@@ -72,13 +72,13 @@ function ModeCard({ art, icon: Icon, title, sub, onClick, highlight, extra }: { 
       onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget && (e.preventDefault(), onClick())}
       className={cx(
         'cursor-pointer',
-        'group flex flex-col rounded-[22px] border bg-panel p-2.5 pb-5 text-left transition-colors outline-none',
+        'group flex min-h-0 flex-col rounded-[22px] border bg-panel p-2.5 pb-4 text-left transition-colors outline-none',
         // Gold only while pointed at (or a folder is dragged over): a click opens the mode, nothing stays selected.
         highlight ? 'border-gold bg-raised' : 'border-line-soft hover:border-gold/70 focus-visible:border-gold/70',
       )}
     >
-      <span className="block h-[246px] overflow-hidden rounded-2xl bg-panel-2">{art}</span>
-      <span className="flex flex-col gap-1.5 px-3 pt-4">
+      <span className="block h-[246px] overflow-hidden rounded-2xl bg-panel-2 md:h-auto md:min-h-0 md:flex-1">{art}</span>
+      <span className="flex flex-col gap-1 px-3 pt-3">
         <span className="flex items-center gap-2.5">
           <span className="flex size-8 items-center justify-center rounded-[9px] bg-raised text-gold-text">
             <Icon size={16} />
@@ -358,10 +358,10 @@ export function Home({ dragging }: { dragging: boolean }) {
     <div className="flex h-full flex-col">
       <TitleBar />
       <main className="flex-1 overflow-y-auto">
-        {/* The four modes, each shown at work; the block sits in the middle of the window. */}
-        <div className="mx-auto flex min-h-full w-full max-w-[1116px] flex-col justify-center gap-5 px-6 py-8 lg:px-0">
-          <h1 className="text-[26px] font-semibold">{t('Mau mengerjakan apa?')}</h1>
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+        {/* The four modes, each shown at work; two columns fill the window without scrolling (until it gets very short). */}
+        <div className="mx-auto flex min-h-full w-full max-w-[1116px] flex-col justify-center gap-5 px-6 py-8 md:h-full md:min-h-[520px] md:py-6 lg:px-0 [@media(max-height:700px)]:gap-4 [@media(max-height:700px)]:py-4">
+          <h1 className="text-[26px] font-semibold [@media(max-height:700px)]:text-[22px]">{t('Mau mengerjakan apa?')}</h1>
+          <div className="grid grid-cols-1 gap-5 md:max-h-[820px] md:min-h-0 md:flex-1 md:grid-cols-2 md:grid-rows-2">
             <ModeCard art={<BoardArt />} icon={Briefcase} title={t('Kelola Bisnis')} sub={t('Booking klien, jadwal, invoice, dan pesan WhatsApp di satu tempat.')} onClick={() => go({ name: 'bisnis' })} />
             <ModeCard
               highlight={dragging}

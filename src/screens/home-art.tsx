@@ -2,7 +2,9 @@
  * The pictures on Beranda's four cards: each mode shown at work, drawn from
  * sample photos (made for the app, no real clients) rather than a screenshot
  * — a small board with its reminder, a culled set with its marks, one photo
- * before and after, three stories made from photos.
+ * before and after, three stories made from photos. In a short window the
+ * pictures get small, so what would crowd them (the reminder, the sliders,
+ * the captions) steps out.
  */
 
 import { CalendarClock, Check, ChevronsLeftRight, CircleHelp, Sparkles, X } from 'lucide-react';
@@ -33,7 +35,7 @@ export function BoardArt() {
   return (
     <span className="relative flex size-full gap-2 p-4">
       {cols.map((c) => (
-        <span key={c.name} className="flex min-w-0 flex-1 flex-col gap-1.5 rounded-xl bg-bg p-2">
+        <span key={c.name} className="flex min-w-0 flex-1 flex-col gap-1.5 overflow-hidden rounded-xl bg-bg p-2">
           <span className="flex items-center gap-1.5 px-0.5 pb-0.5 text-[10px] font-semibold text-muted">
             <span className="size-1.5 shrink-0 rounded-full" style={{ background: c.color }} />
             <span className="truncate">{c.name}</span>
@@ -41,7 +43,7 @@ export function BoardArt() {
           {c.cards}
         </span>
       ))}
-      <span className="absolute right-4 bottom-4 flex items-center gap-2 rounded-xl border border-gold bg-panel px-3 py-2 shadow-[0_8px_24px_rgb(0_0_0/0.45)]">
+      <span className="absolute right-4 bottom-4 flex items-center gap-2 rounded-xl border border-gold bg-panel px-3 py-2 shadow-[0_8px_24px_rgb(0_0_0/0.45)] [@media(max-height:700px)]:hidden">
         <CalendarClock size={15} className="text-maybe" />
         <span className="flex flex-col">
           <span className="text-[11px] font-semibold text-fg">{t('Besok 08:00 · Akad')}</span>
@@ -120,7 +122,7 @@ export function EditArt() {
       </span>
       <span className="absolute top-3 left-3 rounded-md bg-bg/90 px-2 py-0.5 text-[10px] text-muted">{t('Sebelum')}</span>
       <span className="absolute top-3 left-[calc(45%+12px)] rounded-md bg-bg/90 px-2 py-0.5 text-[10px] text-muted">{t('Sesudah')}</span>
-      <span className="absolute top-1/2 right-4 flex w-36 -translate-y-1/2 flex-col gap-2.5 rounded-xl border border-line bg-panel p-3 shadow-[0_8px_24px_rgb(0_0_0/0.45)]">
+      <span className="absolute top-1/2 right-4 flex w-36 -translate-y-1/2 flex-col gap-2.5 rounded-xl border border-line bg-panel p-3 shadow-[0_8px_24px_rgb(0_0_0/0.45)] [@media(max-height:700px)]:hidden">
         {slider(t('Eksposur'), '+0,45', 82)}
         {slider(t('Kontras'), '+12', 64)}
         {slider(t('Kehangatan'), '+8', 58)}
@@ -143,8 +145,8 @@ export function StoryArt() {
     <span className="flex size-full items-center justify-center gap-4">
       {stories.map((s) => (
         <span key={s.title} className={cx('flex h-[82%] aspect-[118/210] flex-col overflow-hidden rounded-xl bg-[#f4efe6] shadow-[0_10px_30px_rgb(0_0_0/0.5)]', s.tilt)}>
-          <img src={PHOTO(s.photo)} alt="" draggable={false} className="h-[71%] w-full object-cover" />
-          <span className="flex flex-1 flex-col items-center justify-center gap-0.5 px-1">
+          <img src={PHOTO(s.photo)} alt="" draggable={false} className="h-[71%] w-full object-cover [@media(max-height:700px)]:h-full" />
+          <span className="flex flex-1 flex-col items-center justify-center gap-0.5 px-1 [@media(max-height:700px)]:hidden">
             <span className="truncate font-serif text-[13px] text-[#3b2f22]" style={{ fontFamily: '"Playfair Display", Georgia, serif' }}>
               {s.title}
             </span>
