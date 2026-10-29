@@ -21,7 +21,7 @@
   --color-fg: #f4f7f5;
   --color-muted: #9eaea6;
   --color-faint: #86978f;
-  /* Text on gold, red or white chips: dark in both themes. */
+  /* Text and icons on a filled gold, green, yellow or red surface. */
   --color-ink: #0b1310;
 
   --color-gold: #c9a96e;
@@ -47,7 +47,8 @@
   color-scheme: dark;
 }
 
-/* Warm paper and white panels; gold and the marks darkened enough to read on them. */
+/* Warm paper and white panels. Gold and the marks are deep enough to read as
+   text on white, and carry white text when filled (ink turns white). */
 :root[data-theme='light'] {
   color-scheme: light;
   --color-bg: #f3f1ec;
@@ -60,12 +61,13 @@
   --color-muted: #4f5d56;
   --color-faint: #66746d;
 
-  --color-gold: #b48d48;
+  --color-gold: #a17a35;
   --color-gold-text: #84601f;
+  --color-ink: #ffffff;
 
-  --color-pick: #23935a;
-  --color-maybe: #c2920f;
-  --color-reject: #cf4a40;
+  --color-pick: #1f8a53;
+  --color-maybe: #a87a0c;
+  --color-reject: #c4433a;
 }
 
 html,
