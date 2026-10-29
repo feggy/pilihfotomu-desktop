@@ -11,7 +11,7 @@ import { t } from '../lib/i18n';
 import { newId } from './model';
 import { useBisnis } from './store';
 import type { Addon, Package } from './types';
-import { Empty, Field, LazyInput, MoneyInput, SectionTitle, btnGhost, btnPrimary, inputCls } from './ui';
+import { Empty, Field, LazyInput, MinutesInput, MoneyInput, SectionTitle, btnGhost, btnPrimary, inputCls } from './ui';
 
 export function Packages({ extra }: { extra?: React.ReactNode }) {
   const data = useBisnis((s) => s.data)!;
@@ -53,15 +53,8 @@ export function Packages({ extra }: { extra?: React.ReactNode }) {
                 <Field label={t('Harga')}>
                   <MoneyInput value={p.price} onChange={(price) => setPkg(p.id, { price })} />
                 </Field>
-                <Field label={t('Durasi (jam)')}>
-                  <input
-                    type="number"
-                    min={0.5}
-                    step={0.5}
-                    value={p.durationMin / 60}
-                    onChange={(e) => setPkg(p.id, { durationMin: Math.max(30, Math.round(Number(e.target.value) * 60)) })}
-                    className={inputCls}
-                  />
+                <Field label={t('Durasi')}>
+                  <MinutesInput value={p.durationMin} onCommit={(durationMin) => setPkg(p.id, { durationMin })} />
                 </Field>
                 <span className="mb-1 flex gap-1">
                   <button

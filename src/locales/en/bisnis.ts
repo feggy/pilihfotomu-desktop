@@ -340,4 +340,6 @@ export default {
   'Simpan kuitansi': 'Save receipt',
   'Awalan nomor kuitansi': 'Receipt number prefix',
   'Urutan kuitansi berikutnya': 'Next receipt sequence',
+  'Durasi': 'Duration',
+  'menit': 'min',
 } as Record<string, string | [string, string]>;
