@@ -639,7 +639,15 @@ export function EditView({
       )}
       </div>
       {needFull && !full && <span className={cx(label, 'left-3 animate-pulse')}>{t('Membaca foto ukuran penuh…')}</span>}
-      {healing > 0 && !(needFull && !full) && <span className={cx(label, 'left-3 animate-pulse')}>{t('Mengisi dengan AI…')}</span>}
+      {healing > 0 && (
+        // Over the photo while Hapus objek fills: it takes a moment, and should not look stuck.
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
+          <span className="flex items-center gap-2.5 rounded-full bg-black/70 px-4 py-2 text-[13px] text-white shadow-2xl backdrop-blur">
+            <span className="size-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+            {t('Menghapus…')}
+          </span>
+        </div>
+      )}
       {zoomed && pic === full && fit && <span className={cx(label, 'right-3')}>{Math.round((fit.w * dpr * 100) / shown.w)}%</span>}
     </div>
   );

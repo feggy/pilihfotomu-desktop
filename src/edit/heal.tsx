@@ -5,8 +5,8 @@
  *
  * The fill is MI-GAN's (Rust, `inpaint_ai.rs`, on this computer): the part
  * round the marks is cut to 512 × 512, filled, and blended back. It takes a
- * moment a part, so until it is there the photo shows PatchMatch's quick fill
- * (kreasi/engine/inpaint.ts) — also what stays if the model cannot run.
+ * moment a part (the view shows a spinner); PatchMatch
+ * (kreasi/engine/inpaint.ts) fills instead if the model cannot run.
  */
 
 import { Eraser, Minus, Plus, Trash2 } from 'lucide-react';
@@ -242,12 +242,23 @@ export function healReady(src: CanvasImageSource, w: number, h: number, spots: H
   return p;
 }
 
-/** For drawing now: the model's fill when it is done, else PatchMatch's while the model works. */
-export function healed(src: CanvasImageSource, w: number, h: number, spots: HealSpot[]): HTMLCanvasElement {
-  const done = ai.get(keyOf(src as object, w, h, spots));
+/**
+ * For drawing now: the model's fill when it is done. While it works, the
+ * parts it has already filled (the newest still as it was, under the
+ * spinner the view shows) — not PatchMatch's quick fill, which would hold
+ * the page still for a moment and then change again. PatchMatch only when
+ * the model cannot run.
+ */
+export function healed(src: HTMLImageElement | HTMLCanvasElement, w: number, h: number, spots: HealSpot[]): HTMLImageElement | HTMLCanvasElement {
+  const done = ai.get(keyOf(src, w, h, spots));
   if (done) return done;
+  if (failed.has(`${idOf(src)}|${w}x${h}`)) return patched(src, w, h, spots);
   void healReady(src, w, h, spots);
-  return patched(src, w, h, spots);
+  for (let i = spots.length - 1; i > 0; i--) {
+    const part = ai.get(keyOf(src, w, h, spots.slice(0, i)));
+    if (part) return part;
+  }
+  return src;
 }
 
 // ── The panel ──
