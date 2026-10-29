@@ -9,7 +9,7 @@ import { openUrl } from '@tauri-apps/plugin-opener';
 import { AlertTriangle, ArrowRight, CalendarPlus, Link2, MapPin, Pencil, Phone, Plus, ReceiptText, X, Check, ChevronDown } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 
-import { DateInput } from '../components/date-picker';
+import { DateInput, popoverJustClosed } from '../components/date-picker';
 import { Select } from '../components/select';
 import { cx } from '../components/ui';
 import { t } from '../lib/i18n';
@@ -56,7 +56,7 @@ export function BookingDetail({
   };
 
   return (
-    <div className="fixed inset-x-0 top-10 bottom-0 z-30 flex justify-end bg-black/50" onMouseDown={onClose}>
+    <div className="fixed inset-x-0 top-10 bottom-0 z-30 flex justify-end bg-black/50" onMouseDown={() => !popoverJustClosed() && onClose()}>
       <aside onMouseDown={(e) => e.stopPropagation()} className="flex h-full w-[520px] max-w-full flex-col border-l border-line bg-panel shadow-2xl">
         <header className="flex shrink-0 items-start gap-3 border-b border-line-soft px-6 py-4">
           <div className="flex min-w-0 flex-1 flex-col gap-1.5">

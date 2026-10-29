@@ -21,6 +21,10 @@ const parse = (s: string) => {
   return y && m && d ? new Date(y, m - 1, d) : null;
 };
 
+let closedAt = -1e9;
+/** A pop-up was just closed by this press: a dialog's backdrop under it leaves the press at that, not closing too. */
+export const popoverJustClosed = () => performance.now() - closedAt < 400;
+
 /** A pop-up under (or, without room, over) `anchor`; closed by a click elsewhere or Escape. */
 export function Popover({ anchor, onClose, width, children, className = 'p-3' }: { anchor: RefObject<HTMLElement | null>; onClose: () => void; width: number; children: ReactNode; className?: string }) {
   const box = useRef<HTMLDivElement>(null);
@@ -41,16 +45,27 @@ export function Popover({ anchor, onClose, width, children, className = 'p-3' }:
       window.removeEventListener('scroll', place, true);
     };
   }, [anchor, width]);
+  // Closed by a press anywhere else: pointerdown, since a canvas or slider that
+  // prevents it there means no mousedown ever comes. And when the window loses focus.
+  const close = useRef(onClose);
+  close.current = onClose;
   useEffect(() => {
-    const down = (e: MouseEvent) => !box.current?.contains(e.target as Node) && !anchor.current?.contains(e.target as Node) && onClose();
-    const key = (e: KeyboardEvent) => e.key === 'Escape' && (e.stopPropagation(), onClose());
-    window.addEventListener('mousedown', down, true);
-    window.addEventListener('keydown', key, true);
-    return () => {
-      window.removeEventListener('mousedown', down, true);
-      window.removeEventListener('keydown', key, true);
+    const down = (e: PointerEvent) => {
+      if (box.current?.contains(e.target as Node) || anchor.current?.contains(e.target as Node)) return;
+      closedAt = performance.now();
+      close.current();
     };
-  }, [anchor, onClose]);
+    const key = (e: KeyboardEvent) => e.key === 'Escape' && (e.stopPropagation(), close.current());
+    const blur = () => close.current();
+    window.addEventListener('pointerdown', down, true);
+    window.addEventListener('keydown', key, true);
+    window.addEventListener('blur', blur);
+    return () => {
+      window.removeEventListener('pointerdown', down, true);
+      window.removeEventListener('keydown', key, true);
+      window.removeEventListener('blur', blur);
+    };
+  }, [anchor]);
   return createPortal(
     <div
       ref={box}

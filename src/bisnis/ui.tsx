@@ -3,6 +3,7 @@
 import { X } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 
+import { popoverJustClosed } from '../components/date-picker';
 import { cx } from '../components/ui';
 import { t } from '../lib/i18n';
 import { parseMoney } from './model';
@@ -118,7 +119,7 @@ export function useEscape(onEscape: () => void, active = true) {
 export function Dialog({ title, onClose, children, footer, width = 560 }: { title: ReactNode; onClose: () => void; children: ReactNode; footer?: ReactNode; width?: number }) {
   useEscape(onClose);
   return (
-    <div className="fixed inset-x-0 top-10 bottom-0 z-40 flex items-center justify-center bg-black/70 p-4" onMouseDown={onClose}>
+    <div className="fixed inset-x-0 top-10 bottom-0 z-40 flex items-center justify-center bg-black/70 p-4" onMouseDown={() => !popoverJustClosed() && onClose()}>
       <div
         role="dialog"
         onMouseDown={(e) => e.stopPropagation()}
