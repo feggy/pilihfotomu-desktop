@@ -91,38 +91,59 @@ function patched(src: CanvasImageSource, w: number, h: number, spots: HealSpot[]
 
 // ── Filled by AI ──
 
-/** The AI's fills, by photo, size and the parts so far (each part builds on the ones before). */
-const ai = new Map<string, HTMLCanvasElement>();
-/** Fills under way, by the same key as the finished one. */
-const working = new Map<string, Promise<HTMLCanvasElement>>();
-/** Photos the model could not fill: PatchMatch's stays. */
+/**
+ * One part filled by the model: where (shares of the photo) and the 512 px
+ * picture that goes there. Kept by photo and the parts up to it, not by the
+ * picture it came from, so the preview and the full size (zoomed in, export)
+ * place the same fill without asking the model again.
+ */
+interface Piece {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  patch: HTMLCanvasElement;
+}
+/** By photo and parts so far; null when a part marks nothing. */
+const pieces = new Map<string, Piece | null>();
+/** Finished pictures, by the picture they start from, its size, the photo and its parts. */
+const composed = new Map<string, HTMLCanvasElement>();
+/** Fills under way, by photo and parts. */
+const working = new Map<string, Promise<void>>();
+/** Photos the model could not fill: PatchMatch's is drawn instead. */
 const failed = new Set<string>();
 const listeners = new Set<() => void>();
-const keyOf = (src: object, w: number, h: number, spots: HealSpot[]) => `${idOf(src)}|${w}x${h}|${JSON.stringify(spots)}`;
+const pieceKey = (photo: string, spots: HealSpot[], i: number) => `${photo}|${JSON.stringify(spots.slice(0, i + 1))}`;
 
-/** Told when a fill is done or starts, to draw again (and show that it works). */
+/** Told when a fill starts or is done, to draw again (and show that it works). */
 export function onHealing(f: () => void) {
   listeners.add(f);
   return () => void listeners.delete(f);
 }
 /** Fills under way. */
 export const healingNow = () => working.size;
+const tell = () => listeners.forEach((f) => f());
 
-/** The part of the photo the model gets for `hole` (`w` × `h`): its marks with room round them, as square as fits. */
-function regionOf(hole: Uint8ClampedArray, w: number, h: number) {
-  let x0 = w;
-  let y0 = h;
-  let x1 = -1;
-  let y1 = -1;
-  for (let y = 0; y < h; y++)
-    for (let x = 0; x < w; x++)
-      if (hole[(y * w + x) * 4 + 3]! > 32) {
-        if (x < x0) x0 = x;
-        if (x > x1) x1 = x;
-        if (y < y0) y0 = y;
-        if (y > y1) y1 = y;
-      }
-  if (x1 < 0) return null;
+const SIDE = 512;
+const strokesOf = (spot: HealSpot) => [spot, ...(spot.more ?? [])];
+
+/** The part of the photo the model gets for `spot` at `w` × `h` (px): its marks with room round them, as square as fits. */
+function regionOf(spot: HealSpot, w: number, h: number) {
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  for (const s of strokesOf(spot)) {
+    if (s.erase) continue;
+    const r = Math.max(1, (s.size * w) / 2);
+    for (const [px, py] of s.points) {
+      x0 = Math.min(x0, px * w - r);
+      x1 = Math.max(x1, px * w + r);
+      y0 = Math.min(y0, py * h - r);
+      y1 = Math.max(y1, py * h + r);
+    }
+  }
+  if (!Number.isFinite(x0)) return null;
   // The marks about two fifths of the side: enough round them to fill from.
   const side = Math.min(Math.max(w, h), Math.max(96, Math.round(Math.max(x1 - x0, y1 - y0) * 2.4)));
   const rw = Math.min(w, side);
@@ -132,30 +153,33 @@ function regionOf(hole: Uint8ClampedArray, w: number, h: number) {
   return { x: rx, y: ry, w: rw, h: rh };
 }
 
-const SIDE = 512;
+/** The marks of `spot` inside region `r` of a `w` × `h` picture. */
+function holeIn(spot: HealSpot, r: { x: number; y: number; w: number; h: number }, w: number, h: number) {
+  const c = document.createElement('canvas');
+  c.width = r.w;
+  c.height = r.h;
+  const x = c.getContext('2d', { willReadFrequently: true })!;
+  x.translate(-r.x, -r.y);
+  drawStrokes(x, strokesOf(spot), w, h);
+  return c;
+}
 
-/** `base` with one part (its sweeps) filled by the model, in place. */
-async function fillPart(base: HTMLCanvasElement, spot: HealSpot) {
+/** One part filled by the model, from `base` as it is (the parts before it already filled). */
+async function makePiece(base: HTMLCanvasElement, spot: HealSpot): Promise<Piece | null> {
   const { width: w, height: h } = base;
-  const m = document.createElement('canvas');
-  m.width = w;
-  m.height = h;
-  const mc = m.getContext('2d', { willReadFrequently: true })!;
-  drawStrokes(mc, [spot, ...(spot.more ?? [])], w, h);
-  const r = regionOf(mc.getImageData(0, 0, w, h).data, w, h);
-  if (!r) return;
-  // The part, and its marks a little wider (a fill reaching past the edge hides it), at 512.
-  const grow = Math.max(2, Math.round((3 * r.w) / SIDE));
-  const at512 = (src: CanvasImageSource, spread = 0) => {
+  const r = regionOf(spot, w, h);
+  if (!r) return null;
+  const at512 = (src: CanvasImageSource, sx: number, sy: number, spread = 0) => {
     const c = document.createElement('canvas');
     c.width = c.height = SIDE;
     const x = c.getContext('2d', { willReadFrequently: true })!;
     if (spread) x.filter = `blur(${spread}px)`;
-    x.drawImage(src, r.x, r.y, r.w, r.h, 0, 0, SIDE, SIDE);
+    x.drawImage(src, sx, sy, r.w, r.h, 0, 0, SIDE, SIDE);
     return x.getImageData(0, 0, SIDE, SIDE).data;
   };
-  const px = at512(base);
-  const mk = at512(m, 2);
+  const px = at512(base, r.x, r.y);
+  // The marks a little wider: a fill reaching past their edge hides it.
+  const mk = at512(holeIn(spot, r, w, h), 0, 0, 2);
   const body = new Uint8Array(SIDE * SIDE * 4);
   for (let i = 0; i < SIDE * SIDE; i++) {
     body[i * 3] = px[i * 4]!;
@@ -175,87 +199,107 @@ async function fillPart(base: HTMLCanvasElement, spot: HealSpot) {
     pd.data[i * 4 + 3] = 255;
   }
   patch.getContext('2d')!.putImageData(pd, 0, 0);
-  // Back at the part's size, kept only where the marks were (widened, then softened at the edge).
-  const piece = document.createElement('canvas');
-  piece.width = r.w;
-  piece.height = r.h;
-  const pc = piece.getContext('2d')!;
-  pc.imageSmoothingQuality = 'high';
-  pc.drawImage(patch, 0, 0, r.w, r.h);
+  return { x: r.x / w, y: r.y / h, w: r.w / w, h: r.h / h, patch };
+}
+
+/** `piece` drawn onto `base` at its size, only where `spot` marks (widened, then softened at the edge). */
+function place(base: HTMLCanvasElement, spot: HealSpot, piece: Piece) {
+  const { width: w, height: h } = base;
+  const r = { x: Math.round(piece.x * w), y: Math.round(piece.y * h), w: Math.max(1, Math.round(piece.w * w)), h: Math.max(1, Math.round(piece.h * h)) };
+  const grow = Math.max(2, Math.round((3 * r.w) / SIDE));
+  const hole = holeIn(spot, r, w, h);
   const soft = document.createElement('canvas');
   soft.width = r.w;
   soft.height = r.h;
   const sc = soft.getContext('2d')!;
   sc.filter = `blur(${grow}px)`;
-  for (const [dx, dy] of [[0, 0], [grow, 0], [-grow, 0], [0, grow], [0, -grow]]) sc.drawImage(m, r.x + dx!, r.y + dy!, r.w, r.h, 0, 0, r.w, r.h);
-  pc.globalCompositeOperation = 'destination-in';
-  pc.drawImage(soft, 0, 0);
-  base.getContext('2d')!.drawImage(piece, r.x, r.y);
+  for (const [dx, dy] of [[0, 0], [grow, 0], [-grow, 0], [0, grow], [0, -grow]]) sc.drawImage(hole, dx!, dy!);
+  const fill = document.createElement('canvas');
+  fill.width = r.w;
+  fill.height = r.h;
+  const fc = fill.getContext('2d')!;
+  fc.imageSmoothingQuality = 'high';
+  fc.drawImage(piece.patch, 0, 0, r.w, r.h);
+  fc.globalCompositeOperation = 'destination-in';
+  fc.drawImage(soft, 0, 0);
+  base.getContext('2d')!.drawImage(fill, r.x, r.y);
 }
 
-/** The photo with every part filled by the model: built on the longest run of parts already filled. */
-async function filledByAi(src: CanvasImageSource, w: number, h: number, spots: HealSpot[]): Promise<HTMLCanvasElement> {
-  let from = 0;
-  let start: HTMLCanvasElement | null = null;
-  for (let i = spots.length; i > 0; i--) {
-    const hit = ai.get(keyOf(src as object, w, h, spots.slice(0, i)));
-    if (hit) [from, start] = [i, hit];
-    if (hit) break;
-  }
+/** `src` with its first `n` parts placed, when the model has filled them all; else null. Kept once made. */
+function composeReady(src: HTMLImageElement | HTMLCanvasElement, w: number, h: number, spots: HealSpot[], n: number, photo: string): HTMLCanvasElement | null {
+  for (let i = 0; i < n; i++) if (!pieces.has(pieceKey(photo, spots, i))) return null;
+  const key = `${idOf(src)}|${w}x${h}|${pieceKey(photo, spots, n - 1)}`;
+  const hit = composed.get(key);
+  if (hit) return hit;
   const c = document.createElement('canvas');
   c.width = w;
   c.height = h;
-  c.getContext('2d', { willReadFrequently: true })!.drawImage(start ?? src, 0, 0, w, h);
-  for (let i = from; i < spots.length; i++) {
-    await fillPart(c, spots[i]!);
-    const done = document.createElement('canvas');
-    done.width = w;
-    done.height = h;
-    done.getContext('2d')!.drawImage(c, 0, 0);
-    ai.set(keyOf(src as object, w, h, spots.slice(0, i + 1)), done);
-    // The photos shown lately, a few parts each.
-    while (ai.size > 12) ai.delete(ai.keys().next().value!);
+  c.getContext('2d')!.drawImage(src, 0, 0, w, h);
+  for (let i = 0; i < n; i++) {
+    const piece = pieces.get(pieceKey(photo, spots, i));
+    if (piece) place(c, spots[i]!, piece);
   }
+  composed.set(key, c);
+  // The photos shown lately, at a size or two each.
+  while (composed.size > 8) composed.delete(composed.keys().next().value!);
   return c;
 }
 
-/** The photo with its parts filled by the model, once (the same promise while it works); PatchMatch's if it cannot. */
-export function healReady(src: CanvasImageSource, w: number, h: number, spots: HealSpot[]): Promise<HTMLCanvasElement> {
-  const key = keyOf(src as object, w, h, spots);
-  const done = ai.get(key);
-  if (done) return Promise.resolve(done);
-  if (failed.has(`${idOf(src as object)}|${w}x${h}`)) return Promise.resolve(patched(src, w, h, spots));
-  let p = working.get(key);
-  if (!p) {
-    p = filledByAi(src, w, h, spots)
-      .catch(() => {
-        failed.add(`${idOf(src as object)}|${w}x${h}`);
-        return patched(src, w, h, spots);
-      })
-      .finally(() => {
-        working.delete(key);
-        listeners.forEach((f) => f());
-      });
-    working.set(key, p);
-    listeners.forEach((f) => f());
+/** The model asked for every part not filled yet, in order, each from the picture with the ones before placed. */
+async function fillMissing(src: HTMLImageElement | HTMLCanvasElement, w: number, h: number, spots: HealSpot[], photo: string) {
+  const base = document.createElement('canvas');
+  base.width = w;
+  base.height = h;
+  base.getContext('2d', { willReadFrequently: true })!.drawImage(src, 0, 0, w, h);
+  for (let i = 0; i < spots.length; i++) {
+    const key = pieceKey(photo, spots, i);
+    if (!pieces.has(key)) pieces.set(key, await makePiece(base, spots[i]!));
+    const piece = pieces.get(key);
+    if (piece) place(base, spots[i]!, piece);
   }
-  return p;
+  // Parts of photos long left: the latest few hundred kept.
+  while (pieces.size > 300) pieces.delete(pieces.keys().next().value!);
 }
 
 /**
- * For drawing now: the model's fill when it is done. While it works, the
+ * The photo with its parts filled by the model (asked once, the same promise
+ * while it works); PatchMatch's when it cannot run. `photo` names the photo
+ * and how it was lit (denoise, lens), so a fill is reused at any size.
+ */
+export async function healReady(src: HTMLImageElement | HTMLCanvasElement, w: number, h: number, spots: HealSpot[], photo: string): Promise<HTMLImageElement | HTMLCanvasElement> {
+  const ready = composeReady(src, w, h, spots, spots.length, photo);
+  if (ready) return ready;
+  if (failed.has(photo)) return patched(src, w, h, spots);
+  const key = pieceKey(photo, spots, spots.length - 1);
+  let p = working.get(key);
+  if (!p) {
+    p = fillMissing(src, w, h, spots, photo)
+      .catch(() => void failed.add(photo))
+      .finally(() => {
+        working.delete(key);
+        tell();
+      });
+    working.set(key, p);
+    tell();
+  }
+  await p;
+  return composeReady(src, w, h, spots, spots.length, photo) ?? patched(src, w, h, spots);
+}
+
+/**
+ * For drawing now: the model's fill when it is there. While it works, the
  * parts it has already filled (the newest still as it was, under the
  * spinner the view shows) — not PatchMatch's quick fill, which would hold
  * the page still for a moment and then change again. PatchMatch only when
  * the model cannot run.
  */
-export function healed(src: HTMLImageElement | HTMLCanvasElement, w: number, h: number, spots: HealSpot[]): HTMLImageElement | HTMLCanvasElement {
-  const done = ai.get(keyOf(src, w, h, spots));
-  if (done) return done;
-  if (failed.has(`${idOf(src)}|${w}x${h}`)) return patched(src, w, h, spots);
-  void healReady(src, w, h, spots);
-  for (let i = spots.length - 1; i > 0; i--) {
-    const part = ai.get(keyOf(src, w, h, spots.slice(0, i)));
+export function healed(src: HTMLImageElement | HTMLCanvasElement, w: number, h: number, spots: HealSpot[], photo: string): HTMLImageElement | HTMLCanvasElement {
+  const ready = composeReady(src, w, h, spots, spots.length, photo);
+  if (ready) return ready;
+  if (failed.has(photo)) return patched(src, w, h, spots);
+  void healReady(src, w, h, spots, photo);
+  for (let n = spots.length - 1; n > 0; n--) {
+    const part = composeReady(src, w, h, spots, n, photo);
     if (part) return part;
   }
   return src;

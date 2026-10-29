@@ -264,7 +264,7 @@ export function EditView({
     if (mode === 'before') draw(img);
     else {
       // What was removed is filled in first, then the whole is developed.
-      const base = prepared(img, iw, ih, settings, denoising ? clean : null, blurring ? depth : null);
+      const base = prepared(img, iw, ih, settings, denoising ? clean : null, blurring ? depth : null, `${root}#${id}`);
       const dev = developed(base, a, moving ? MOVING_SIDE : undefined);
       draw(dev ?? base);
       drawAdjustOverlays(ctx, { x: 0, y: 0, w, h }, a, !!dev);

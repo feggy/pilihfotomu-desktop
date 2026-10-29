@@ -69,6 +69,22 @@ function lit(img: HTMLImageElement | HTMLCanvasElement, w: number, h: number, s:
   return lens || manual ? withoutFringes(undistorted(devignetted(base, w, h, lens, manual), w, h, lens, manual), w, h, lens) : base;
 }
 
+/**
+ * What names a photo's removals: the photo (`root#id`) and how it was lit
+ * before them (AI Denoise, the lens), so the model's fills carry over from
+ * the preview to the full size. Without a name, the picture itself.
+ */
+const pictures = new WeakMap<object, number>();
+let nextPicture = 1;
+function healKey(photo: string, base: object, s: EditSettings | undefined) {
+  if (!photo) {
+    let n = pictures.get(base);
+    if (!n) pictures.set(base, (n = nextPicture++));
+    return `picture-${n}`;
+  }
+  return `${photo}|${s?.aiDenoise?.amount ?? 0}|${JSON.stringify(s?.geometry?.lens ?? null)}|${JSON.stringify(s?.lensManual ?? null)}`;
+}
+
 /** Then Lens Blur, with the photo's `depth` once read. */
 function blurred(filled: HTMLImageElement | HTMLCanvasElement, w: number, h: number, s: EditSettings | undefined, depth: DepthMap | null) {
   const lb = s?.lensBlur;
@@ -87,9 +103,10 @@ export function prepared(
   s: EditSettings | undefined,
   clean: CanvasImageSource | null,
   depth: DepthMap | null = null,
+  photo = '',
 ): HTMLImageElement | HTMLCanvasElement {
   const base = lit(img, w, h, s, clean);
-  return blurred(s?.heal?.length ? healed(base, w, h, s.heal) : base, w, h, s, depth);
+  return blurred(s?.heal?.length ? healed(base, w, h, s.heal, healKey(photo, base, s)) : base, w, h, s, depth);
 }
 
 /** The same, waiting for the removals' AI fill: for export, never the quick fill. */
@@ -100,7 +117,8 @@ export async function preparedReady(
   s: EditSettings | undefined,
   clean: CanvasImageSource | null,
   depth: DepthMap | null = null,
+  photo = '',
 ): Promise<HTMLImageElement | HTMLCanvasElement> {
   const base = lit(img, w, h, s, clean);
-  return blurred(s?.heal?.length ? await healReady(base, w, h, s.heal) : base, w, h, s, depth);
+  return blurred(s?.heal?.length ? await healReady(base, w, h, s.heal, healKey(photo, base, s)) : base, w, h, s, depth);
 }

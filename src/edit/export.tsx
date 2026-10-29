@@ -103,7 +103,7 @@ export function EditExportDialog({
         const s = edits[p.id];
         const clean = (s?.aiDenoise?.amount ?? 0) > 0 ? await cleanedImage(root, p.id, true) : null;
         const depth = (s?.lensBlur?.amount ?? 0) > 0 ? await depthOf(root, p.id).catch(() => null) : null;
-        const base = await preparedReady(img, full.width, full.height, s, clean, depth);
+        const base = await preparedReady(img, full.width, full.height, s, clean, depth, `${root}#${p.id}`);
         const dev = developed(base, a);
         // Turned and cropped as in the editor; then the size asked.
         const g = edits[p.id]?.geometry ?? NO_GEOMETRY;
