@@ -2,6 +2,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 import {
   ArrowLeft,
   ArrowRight,
+  Briefcase,
   Check,
   ChevronRight,
   Clock,
@@ -50,8 +51,33 @@ function greeting() {
 }
 
 /** One of the three things the app does, as a big card with a picture of it. */
+/** Kelola Bisnis's card picture: a small board, drawn rather than photographed. */
+function BoardArt() {
+  const cols = [
+    { color: '#c9a96e', cards: [0.7, 0.5] },
+    { color: '#5b9bd5', cards: [0.8, 0.6, 0.45] },
+    { color: '#5fb87a', cards: [0.55] },
+  ];
+  return (
+    <span className="flex aspect-[296/196] w-full gap-2 rounded-xl bg-panel-2 p-3">
+      {cols.map((c, i) => (
+        <span key={i} className="flex flex-1 flex-col gap-1.5 rounded-lg bg-bg/60 p-1.5">
+          <span className="h-1.5 w-1/2 rounded-full" style={{ background: c.color }} />
+          {c.cards.map((w, j) => (
+            <span key={j} className="flex flex-col gap-1 rounded-md bg-raised p-1.5">
+              <span className="h-1.5 rounded-full bg-fg/70" style={{ width: `${w * 100}%` }} />
+              <span className="h-1 w-2/5 rounded-full bg-faint/60" />
+            </span>
+          ))}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 function ModeCard({
   preview,
+  art,
   icon: Icon,
   title,
   sub,
@@ -60,7 +86,9 @@ function ModeCard({
   highlight,
   soon,
 }: {
-  preview: string;
+  /** A photo of the mode; or `art`, a picture drawn in place of one. */
+  preview?: string;
+  art?: React.ReactNode;
   icon: LucideIcon;
   title: string;
   sub: string;
@@ -80,7 +108,7 @@ function ModeCard({
         highlight ? 'border-2 border-gold bg-raised' : 'border-line-soft hover:border-gold/70 focus-visible:border-gold/70',
       )}
     >
-      <img src={preview} alt="" className="aspect-[296/196] w-full rounded-xl object-cover" draggable={false} />
+      {art ?? <img src={preview} alt="" className="aspect-[296/196] w-full rounded-xl object-cover" draggable={false} />}
       <span className="flex flex-col gap-1.5 px-1.5">
         <span className="flex items-center justify-between gap-2">
           <span className="flex items-center gap-2.5">
@@ -383,7 +411,7 @@ export function Home({ dragging }: { dragging: boolean }) {
             </span>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3 lg:gap-5">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:gap-5 xl:grid-cols-4">
             <ModeCard
               highlight={dragging}
               preview="/home/pilih.jpg"
@@ -408,6 +436,14 @@ export function Home({ dragging }: { dragging: boolean }) {
               sub={t('Story dan feed Instagram dari template. Pilih template, isi fotonya, selesai.')}
               tags={['Story 9:16', 'Feed 4:5', '1:1']}
               onClick={() => go({ name: 'kreasi', back: { name: 'home' } })}
+            />
+            <ModeCard
+              art={<BoardArt />}
+              icon={Briefcase}
+              title={t('Kelola Bisnis')}
+              sub={t('Booking klien di board dan kalender, paket, invoice, pesan WhatsApp, dan laporan keuangan.')}
+              tags={[t('Board'), t('Kalender'), t('Invoice')]}
+              onClick={() => go({ name: 'bisnis' })}
             />
           </div>
 

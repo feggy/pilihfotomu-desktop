@@ -4,6 +4,8 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { TriangleAlert, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
+import { BisnisScreen } from './bisnis/screen';
+import { flushBisnis } from './bisnis/store';
 import { saveNow } from './kreasi/autosave';
 import { KreasiScreen } from './kreasi/screen';
 import { ClientPicks } from './screens/client-picks';
@@ -97,7 +99,7 @@ export function App() {
 
   // Closing the window (its button, ⌘W): a design being made is saved first, then the window goes.
   useEffect(() => {
-    const off = getCurrentWindow().onCloseRequested(() => saveNow());
+    const off = getCurrentWindow().onCloseRequested(async () => void (await Promise.allSettled([saveNow(), flushBisnis()])));
     return () => {
       off.then((f) => f());
     };
@@ -106,9 +108,9 @@ export function App() {
   // Native menu bar items (src-tauri/src/menu.rs).
   useEffect(() => {
     const off = listen<string>('menu', ({ payload }) => {
-      // Quit: a Buat konten design being made is kept under Lanjutkan desain first, without asking.
+      // Quit: a Buat konten design being made is kept under Lanjutkan desain first, without asking; Kelola Bisnis's last change written.
       if (payload === 'quit') {
-        saveNow().finally(() => api.quitApp());
+        Promise.allSettled([saveNow(), flushBisnis()]).finally(() => api.quitApp());
         return;
       }
       const { screen: current, session: open, go: goTo } = useApp.getState();
@@ -163,6 +165,8 @@ export function App() {
       <KreasiScreen back={screen.back} />
     ) : screen.name === 'edit' ? (
       <EditPhotos key={screen.ids ? 'editor' : 'library'} back={screen.back} ids={screen.ids} start={screen.start} />
+    ) : screen.name === 'bisnis' ? (
+      <BisnisScreen />
     ) : screen.name === 'pilih' ? (
       <PilihStart dragging={dragging} />
     ) : screen.name === 'settings' ? (

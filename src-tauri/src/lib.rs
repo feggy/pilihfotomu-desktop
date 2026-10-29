@@ -906,6 +906,68 @@ fn load_asset(app: AppHandle, id: String) -> CmdResult<tauri::ipc::Response> {
     Ok(tauri::ipc::Response::new(bytes))
 }
 
+// ── Kelola Bisnis ────────────────────────────────────────────────
+
+/// Kelola Bisnis keeps everything (bookings, clients, packages, money) in one
+/// JSON file the UI writes, `<app data>/bisnis/data.json`; offline only.
+fn bisnis_path(app: &AppHandle) -> CmdResult<PathBuf> {
+    app.path().app_data_dir().map(|d| d.join("bisnis").join("data.json")).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn load_bisnis(app: AppHandle) -> CmdResult<Option<String>> {
+    let path = bisnis_path(&app)?;
+    match std::fs::read_to_string(&path) {
+        Ok(s) => Ok(Some(s)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+/// Written whole and swapped in, so a crash mid-write never leaves half a file;
+/// the one before is kept as `data.prev.json`, one step back.
+#[tauri::command]
+fn save_bisnis(app: AppHandle, json: String) -> CmdResult<()> {
+    let path = bisnis_path(&app)?;
+    std::fs::create_dir_all(path.parent().unwrap()).map_err(|e| e.to_string())?;
+    let tmp = path.with_extension("json.tmp");
+    std::fs::write(&tmp, json).map_err(|e| e.to_string())?;
+    if path.exists() {
+        let _ = std::fs::copy(&path, path.with_file_name("data.prev.json"));
+    }
+    std::fs::rename(&tmp, &path).map_err(|e| e.to_string())
+}
+
+/// Kinds of file the UI may write where the person chose (a save dialog, a backup folder).
+const USER_FILE_KINDS: &[&str] = &["pdf", "csv", "json", "ics"];
+
+fn user_file(path: &str) -> CmdResult<PathBuf> {
+    let p = PathBuf::from(path);
+    let ok = p.is_absolute() && p.extension().and_then(|e| e.to_str()).is_some_and(|e| USER_FILE_KINDS.contains(&e.to_ascii_lowercase().as_str()));
+    if ok { Ok(p) } else { Err("Jenis file ini tidak bisa disimpan.".into()) }
+}
+
+/// An invoice, report, export or backup: the bytes as the raw body, the path as a header.
+#[tauri::command]
+fn write_user_file(request: tauri::ipc::Request<'_>) -> CmdResult<String> {
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+        return Err("Data file tidak terbaca.".into());
+    };
+    let path = request.headers().get("path").and_then(|v| v.to_str().ok()).ok_or("Lokasi file tidak valid.")?;
+    let path = user_file(&percent_decode(path)?)?;
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
+/// A backup the person picked, to restore from.
+#[tauri::command]
+fn read_user_file(path: String) -> CmdResult<String> {
+    std::fs::read_to_string(user_file(&path)?).map_err(|e| e.to_string())
+}
+
 /// Quits, once the UI has saved what it had open (the menu's Quit).
 #[tauri::command]
 fn quit_app(app: AppHandle) {
@@ -1115,6 +1177,10 @@ pub fn run() {
             load_asset,
             list_uploads,
             quit_app,
+            load_bisnis,
+            save_bisnis,
+            write_user_file,
+            read_user_file,
             delete_upload,
             thumbnails,
             resolve_client_picks,

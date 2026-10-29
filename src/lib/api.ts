@@ -343,6 +343,12 @@ export const api = {
   /** "Gambar saya": uploaded pictures' asset ids, newest first. */
   listUploads: () => invoke<string[]>('list_uploads'),
   quitApp: () => invoke<void>('quit_app'),
+  /** Kelola Bisnis: all its data as one JSON file (null before the first save). */
+  loadBisnis: () => invoke<string | null>('load_bisnis'),
+  saveBisnis: (json: string) => invoke<void>('save_bisnis', { json }),
+  /** A PDF, CSV, ICS or JSON where the person chose; returns the path written. */
+  writeUserFile: (path: string, bytes: Uint8Array) => invoke<string>('write_user_file', bytes, { headers: { path: encodeURIComponent(path) } }),
+  readUserFile: (path: string) => invoke<string>('read_user_file', { path }),
   deleteUpload: (id: string) => invoke<void>('delete_upload', { id }),
   /** Files dragged in from Finder, added to `root`'s photos with new ids. */
   addFiles: (root: string, paths: string[]) => invoke<Photo[]>('add_files', { root, paths }),
