@@ -35,11 +35,17 @@ export interface Geometry {
 }
 
 /** Hapus objek: one sweep painted over something, filled from around it (heal.tsx). */
-export interface HealSpot {
-  id: string;
-  /** Brush width, a share of the photo's width. */
+/** One sweep of the brush: its width (a share of the photo's width) and path; `erase` takes it out of the selection. */
+export interface HealStroke {
   size: number;
   points: [number, number][];
+  erase?: boolean;
+}
+
+/** One part removed: its first sweep, and the sweeps added or taken away before Hapus (Lightroom's Add / Subtract). */
+export interface HealSpot extends HealStroke {
+  id: string;
+  more?: HealStroke[];
 }
 
 /** Edit foto's settings for one photo: the develop settings, the crop, what was removed. */

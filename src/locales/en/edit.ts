@@ -316,4 +316,13 @@ export default {
   'Manual': 'Manual',
   'Lensa “{lens}” belum ada di database lensfun. Pilih lensanya di bawah.': 'The lens “{lens}” isn’t in the lensfun database. Choose it below.',
   'Foto ini tidak menyimpan nama lensanya. Pilih lensanya di bawah.': 'This photo doesn’t record its lens. Choose it below.',
+  'Dipilih##heal': 'Selected',
+  'Sapukan di foto': 'Brush over the photo',
+  'Tambah atau kurangi bagian yang ditandai merah, lalu Hapus. Tahan Alt sambil menyapu untuk sebaliknya.': 'Add to or subtract from the part marked in red, then Remove. Hold Alt while brushing for the opposite.',
+  'Tandai yang mau dihapus: orang di latar, papan, kabel, noda. Bagian itu diisi dari sekitarnya, di komputer ini.': 'Mark what to remove: people in the background, signs, cables, spots. It is filled in from its surroundings, on this computer.',
+  'Mask:': 'Mask:',
+  'Tambah': 'Add',
+  'Kurangi': 'Subtract',
+  'Batal': 'Cancel',
+  'Hapus##heal': 'Remove',
 } as Record<string, string | [string, string]>;

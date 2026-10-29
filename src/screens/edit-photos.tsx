@@ -57,7 +57,7 @@ import { t } from '../lib/i18n';
 import { previewUrl } from '../kreasi/canvas';
 import { NO_ADJUST, maskActive, type EditMask, type PhotoAdjust } from '../kreasi/engine/document';
 import { CropPanel, autoAngle, autoUpright, cropFor, ratioValue } from '../edit/crop-panel';
-import { HealLayer, HealPanel } from '../edit/heal';
+import { HealLayer, HealPanel, spotOf, type HealSelection } from '../edit/heal';
 import { LensBlurPanel } from '../edit/lens-blur-panel';
 import { LensPanel } from '../edit/lens-panel';
 import { Library } from '../edit/library';
@@ -294,6 +294,16 @@ function Editor({ back, ids, start }: { back: Screen; ids?: number[]; start?: nu
   // Hapus objek.
   const [healing, setHealing] = useState(false);
   const [healSize, setHealSize] = useState(0.04);
+  // Painted, not removed yet: Hapus fills it in (Lightroom's Remove), Batal or Esc lets it go.
+  const NO_SEL: HealSelection = { strokes: [], erase: false };
+  const [healSel, setHealSel] = useState<HealSelection>(NO_SEL);
+  useEffect(() => setHealSel(NO_SEL), [photo?.id, healing]);
+  const removeSel = () => {
+    const spot = spotOf(healSel.strokes);
+    if (spot) live({ heal: [...(a.heal ?? []), spot] });
+    if (spot) done();
+    setHealSel(NO_SEL);
+  };
   const openHealing = () => {
     setPicking(false);
     if (cropping) closeCrop();
@@ -456,11 +466,14 @@ function Editor({ back, ids, start }: { back: Screen; ids?: number[]; start?: nu
         chooseRatio(ratioId, !portrait);
       } else if (cropping && e.key === 'Enter') {
         closeCrop();
+      } else if (healing && healSel.strokes.length && e.key === 'Enter') {
+        removeSel();
       } else if (e.key === 'Escape') {
         if (maskTools.boxing) maskTools.setBoxing(false);
         else if (leveling) setLeveling(false);
         else if (cropping) cancelCrop();
         else if (masking) setMasking(false);
+        else if (healing && healSel.strokes.length) setHealSel(NO_SEL);
         else if (healing) setHealing(false);
         setPicking(false);
       }
@@ -581,7 +594,7 @@ function Editor({ back, ids, start }: { back: Screen; ids?: number[]; start?: nu
               panRef={panRef}
               layer={
                 healing ? (
-                  <HealLayer a={a} size={healSize} onSize={setHealSize} onLive={live} onDone={done} />
+                  <HealLayer sel={healSel} size={healSize} onSize={setHealSize} onSel={setHealSel} />
                 ) : (
                 <MaskLayer
                   root={root}
@@ -662,7 +675,7 @@ function Editor({ back, ids, start }: { back: Screen; ids?: number[]; start?: nu
             ))}
           </div>
           {healing && photo ? (
-            <HealPanel a={a} size={healSize} onSize={setHealSize} onLive={live} onDone={done} onClose={() => setHealing(false)} />
+            <HealPanel a={a} size={healSize} sel={healSel} onSel={setHealSel} onRemove={removeSel} onSize={setHealSize} onLive={live} onDone={done} onClose={() => setHealing(false)} />
           ) : masking && photo ? (
             <ToolBox title={t('Masking')}>
               <ToolRow>
