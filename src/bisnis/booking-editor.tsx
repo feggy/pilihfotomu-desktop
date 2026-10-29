@@ -43,6 +43,20 @@ export function newBooking(data: BisnisData, columnId: string, day?: string): Bo
   };
 }
 
+/**
+ * Sessions given a package's length: the only one always (it is the shoot),
+ * others only while still as long as the last package said — one whose
+ * hours were set by hand (a two-hour akad, a long resepsi) keeps them.
+ */
+function fitSessions(sessions: Session[], before: number, minutes: number): Session[] {
+  return sessions.map((s) => {
+    const start = parseLocal(s.start);
+    const len = (parseLocal(s.end).getTime() - start.getTime()) / 60_000;
+    if (sessions.length > 1 && len !== before) return s;
+    return { ...s, end: localString(new Date(start.getTime() + minutes * 60_000)) };
+  });
+}
+
 const sessionOn = (day: string, minutes: number, label = ''): Session => {
   const start = parseLocal(`${day}T09:00`);
   return { id: newId(), label, start: localString(start), end: localString(new Date(start.getTime() + minutes * 60_000)), location: '' };
@@ -192,7 +206,11 @@ export function BookingEditor({ initial, onClose, actions = [] }: { initial: Boo
               value={b.packageId ?? ''}
               onChange={(e) => {
                 const p = data.packages.find((x) => x.id === e.target.value);
-                set(p ? { packageId: p.id, packageName: p.name, packagePrice: p.price } : { packageId: null, packageName: '', packagePrice: 0 });
+                set(
+                  p
+                    ? { packageId: p.id, packageName: p.name, packagePrice: p.price, sessions: fitSessions(b.sessions, duration, p.durationMin) }
+                    : { packageId: null, packageName: '', packagePrice: 0 },
+                );
               }}
               className={inputCls}
             >
