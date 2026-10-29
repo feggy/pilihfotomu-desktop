@@ -13,17 +13,18 @@ import { openUrl } from '@tauri-apps/plugin-opener';
 import { Check, Copy, Download, ImageIcon, MessageCircle } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
+import { DateInput } from '../components/date-picker';
 import { cx } from '../components/ui';
 import { api } from '../lib/api';
 import { t } from '../lib/i18n';
 import { useBrand, useBrandLogo } from '../kreasi/brand';
 import { invoicePng } from './invoice';
 import { fillTemplate, waLink, waNumber } from './messages';
-import { clientOf } from './model';
+import { clientOf, shortDate } from './model';
 import { ensureInvoiceNo, ensureReceiptNo } from './numbering';
 import { receiptPng } from './receipt';
 import { useBisnis } from './store';
-import { Dialog, Field, LazyInput, btnGhost, btnPrimary, inputCls } from './ui';
+import { Dialog, Field, LazyInput, TextArea, btnGhost, btnPrimary, inputCls } from './ui';
 
 const LINKS = [
   { key: 'link_pilih', field: 'pickLink', label: 'Link foto untuk dipilih' },
@@ -45,15 +46,30 @@ export function SendDialog({ bookingId, phone: phoneIn = '', name = '', template
   const [copied, setCopied] = useState<'text' | 'image' | null>(null);
   const missing = [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]);
 
-  // The template's Drive links, given here if the booking has none yet: kept on the booking, put in the message.
+  // Booking details the template needs, given here: kept on the booking, put in the message.
+  // The links always show (to change one); the due date only while it was empty when the template was picked.
   const update = useBisnis((s) => s.update);
+  const [askDue, setAskDue] = useState(() => !booking?.dueDate);
+  // Bank details are the studio's, not the booking's: kept in Pengaturan, asked while empty.
+  const [askBank] = useState(() => !data.settings.paymentInfo.trim());
+  const bank = askBank && tpl?.body.includes('{rekening}');
+  const setBank = (value: string) => {
+    const v = value.trim();
+    const before = data.settings.paymentInfo.trim();
+    if (v === before) return;
+    update((d) => ({ ...d, settings: { ...d.settings, paymentInfo: v } }));
+    setText((s) => (before && s.includes(before) ? s.split(before).join(v || '{rekening}') : s.split('{rekening}').join(v || '{rekening}')));
+  };
   const links = booking ? LINKS.filter((l) => tpl?.body.includes(`{${l.key}}`)) : [];
-  const setLink = (l: (typeof LINKS)[number], value: string) => {
-    const before = booking?.[l.field]?.trim() ?? '';
+  const due = booking && askDue && tpl?.body.includes('{jatuh_tempo}');
+  const setField = (key: string, field: 'pickLink' | 'resultLink' | 'dueDate', value: string, shown: (v: string) => string) => {
+    const before = booking?.[field]?.trim() ?? '';
     const v = value.trim();
     if (!booking || v === before) return;
-    update((d) => ({ ...d, bookings: d.bookings.map((x) => (x.id === booking.id ? { ...x, [l.field]: v } : x)) }));
-    setText((s) => (before && s.includes(before) ? s.split(before).join(v || `{${l.key}}`) : s.split(`{${l.key}}`).join(v || `{${l.key}}`)));
+    update((d) => ({ ...d, bookings: d.bookings.map((x) => (x.id === booking.id ? { ...x, [field]: v } : x)) }));
+    const from = before ? shown(before) : '';
+    const to = v ? shown(v) : `{${key}}`;
+    setText((s) => (from && s.includes(from) ? s.split(from).join(to) : s.split(`{${key}}`).join(to)));
   };
 
   // The picture to go with it: the invoice, or the latest payment's receipt (numbered first, if new).
@@ -115,7 +131,7 @@ export function SendDialog({ bookingId, phone: phoneIn = '', name = '', template
     >
       <div className="grid grid-cols-2 gap-3">
         <Field label={t('Template')}>
-          <select value={templateId} onChange={(e) => (setTemplateId(e.target.value), setText(fill(e.target.value)))} className={inputCls}>
+          <select value={templateId} onChange={(e) => (setTemplateId(e.target.value), setText(fill(e.target.value)), setAskDue(!booking?.dueDate))} className={inputCls}>
             {data.templates.map((x) => {
               const stage = x.columnId ? data.columns.find((c) => c.id === x.columnId)?.name : null;
               return (
@@ -133,9 +149,19 @@ export function SendDialog({ bookingId, phone: phoneIn = '', name = '', template
       </div>
       {links.map((l) => (
         <Field key={l.key} label={t(l.label)} hint={t('Disimpan ke booking ini.')}>
-          <LazyInput value={booking?.[l.field] ?? ''} onCommit={(v) => setLink(l, v)} placeholder="https://drive.google.com/…" plain />
+          <LazyInput value={booking?.[l.field] ?? ''} onCommit={(v) => setField(l.key, l.field, v, (x) => x)} placeholder="https://drive.google.com/…" plain />
         </Field>
       ))}
+      {bank && (
+        <Field label={t('Rekening pembayaran')} hint={t('Disimpan ke Pengaturan, dipakai di semua pesan dan invoice.')}>
+          <TextArea value={data.settings.paymentInfo} onCommit={setBank} rows={2} placeholder={t('BCA 1234567890 a.n. Nama Studio')} />
+        </Field>
+      )}
+      {due && (
+        <Field label={t('Pelunasan paling lambat')} hint={t('Disimpan ke booking ini.')}>
+          <DateInput value={booking.dueDate} onChange={(v) => setField('jatuh_tempo', 'dueDate', v, shortDate)} placeholder={t('Pilih tanggal')} />
+        </Field>
+      )}
       <Field label={t('Pesan')} hint={t('Bisa diubah sebelum dikirim. Pesan terkirim dari WhatsApp kamu sendiri.')}>
         <textarea value={text} onChange={(e) => setText(e.target.value)} rows={10} className={cx(inputCls, 'h-auto resize-y py-2 leading-relaxed')} />
       </Field>
