@@ -12,7 +12,7 @@ import { t } from '../lib/i18n';
 import { useKreasi } from '../kreasi/store';
 import { useApp } from '../store';
 import { clientOf } from './model';
-import { lastBackupAt } from './backup';
+import { ensureDefaultBackupDir, lastBackupAt } from './backup';
 import { Board } from './board';
 import { BookingsList } from './bookings-list';
 import { BookingDetail } from './booking-detail';
@@ -80,8 +80,19 @@ export function BisnisScreen({ open }: { open?: string }) {
     { key: 'edit', label: t('Edit foto'), icon: <SlidersHorizontal size={13} />, run: () => go({ name: 'edit', back: { name: 'bisnis' } }) },
     { key: 'konten', label: t('Buat konten'), icon: <LayoutTemplate size={13} />, run: openKreasi },
   ];
+  // Pengaturan, scrolled to Backup data and the section lit for a moment: it sits low on the page.
+  const setUpBackup = () =>
+    guard(() => {
+      setTab('pengaturan');
+      window.setTimeout(() => {
+        const el = document.getElementById('bisnis-backup');
+        el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        el?.animate([{ boxShadow: '0 0 0 2px var(--color-gold)' }, { boxShadow: '0 0 0 2px transparent' }], { duration: 1800, delay: 300, easing: 'ease-out' });
+      }, 60);
+    });
   useEffect(() => {
     load().then(() => {
+      ensureDefaultBackupDir();
       const b = open && useBisnis.getState().data?.bookings.find((x) => x.id === open);
       if (b) setViewing(b.id);
     });
@@ -168,7 +179,7 @@ export function BisnisScreen({ open }: { open?: string }) {
         </p>
       )}
       {/* On Ringkasan, Persiapan's backup step says it already while the checklist shows. */}
-      {data && tab !== 'pengaturan' && !(tab === 'ringkasan' && !data.settings.backupDir) && <BackupNotice onSetUp={() => setTab('pengaturan')} />}
+      {data && !(tab === 'ringkasan' && !data.settings.backupDir) && <BackupNotice onSetUp={setUpBackup} />}
       {body}
       {viewing && (
         <BookingDetail

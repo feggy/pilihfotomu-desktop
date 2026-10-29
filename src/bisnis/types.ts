@@ -157,6 +157,8 @@ export interface BisnisSettings {
   remindDelivery: boolean;
   /** A copy of everything written here as it changes (an iCloud or Google Drive folder, say). */
   backupDir: string | null;
+  /** The default folder (in Documents) was given once; turned off after, it stays off. */
+  backupDefaulted?: boolean;
   lastBackup: number | null;
   /** When the notice about keeping a backup was last put away. */
   backupNoticeAt: number | null;

@@ -5,13 +5,15 @@
  * plus one a day to go back to.
  */
 
+import { documentDir, join } from '@tauri-apps/api/path';
+
 import { api } from '../lib/api';
 import { dayKey, fromJson } from './model';
 import { onBisnisSaved, useBisnis } from './store';
 import type { BisnisData } from './types';
 
 const AUTO_KEY = 'pilihfotomu-bisnis-auto-backup';
-const join = (dir: string, name: string) => `${dir}${dir.includes('\\') && !dir.includes('/') ? '\\' : '/'}${name}`;
+const joinPath = (dir: string, name: string) => `${dir}${dir.includes('\\') && !dir.includes('/') ? '\\' : '/'}${name}`;
 
 export const backupName = (day = dayKey(new Date())) => `pilihfotomu-bisnis-${day}.json`;
 
@@ -34,10 +36,10 @@ onBisnisSaved(async (json, data) => {
   if (!dir) return;
   const bytes = new TextEncoder().encode(json);
   try {
-    await api.writeUserFile(join(dir, 'pilihfotomu-bisnis.json'), bytes);
+    await api.writeUserFile(joinPath(dir, 'pilihfotomu-bisnis.json'), bytes);
     const today = dayKey(new Date());
     const last = lastAutoBackup();
-    if (!last || dayKey(new Date(last)) !== today) await api.writeUserFile(join(dir, backupName(today)), bytes);
+    if (!last || dayKey(new Date(last)) !== today) await api.writeUserFile(joinPath(dir, backupName(today)), bytes);
     failed = null;
     try {
       localStorage.setItem(AUTO_KEY, String(Date.now()));
@@ -48,6 +50,22 @@ onBisnisSaved(async (json, data) => {
     failed = String(e);
   }
 });
+
+/**
+ * A backup folder from the start, in Documents (iCloud keeps it too when
+ * Desktop & Documents sync is on): given once, so one turned off stays off.
+ */
+export async function ensureDefaultBackupDir() {
+  const { data, update } = useBisnis.getState();
+  if (!data || data.settings.backupDir || data.settings.backupDefaulted) return;
+  let dir: string;
+  try {
+    dir = await join(await documentDir(), 'pilihfotomu', 'Backup Kelola Bisnis');
+  } catch {
+    return;
+  }
+  update((d) => (d.settings.backupDir || d.settings.backupDefaulted ? d : { ...d, settings: { ...d.settings, backupDir: dir, backupDefaulted: true } }));
+}
 
 /** Everything as one file at `path`; remembered as the last backup. */
 export async function exportBackup(path: string) {

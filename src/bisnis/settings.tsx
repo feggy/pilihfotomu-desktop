@@ -254,7 +254,7 @@ function BackupSection() {
     }
   };
   return (
-    <section className="flex flex-col gap-3">
+    <section id="bisnis-backup" className="-m-2 flex scroll-mt-4 flex-col gap-3 rounded-2xl p-2">
       <SectionTitle>{t('Backup data')}</SectionTitle>
       <p className="-mt-1 flex items-start gap-2 rounded-xl border border-maybe/50 bg-maybe/[0.06] px-3 py-2.5 text-xs text-muted">
         <ShieldAlert size={15} className="mt-px shrink-0 text-maybe" />
